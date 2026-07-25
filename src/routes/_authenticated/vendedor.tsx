@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Loader2, MessageCircle, Palette, Pencil, Share2, Trash2 } from "lucide-react";
+import { Copy, Loader2, MessageCircle, Package, Palette, Pencil, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { PhoneInput, parsePhoneWithFlag } from "@/components/PhoneInput";
@@ -100,14 +100,14 @@ function SellerDashboard() {
     queryFn: async (): Promise<OrderRow[]> => {
       let { data, error } = await supabase
         .from("orders")
-        .select("*, products(brand, model, price, down_payment_amount)")
+        .select("*, products(brand, model, price, image_url, down_payment_amount)")
         .eq("store_id", store!.id)
         .order("created_at", { ascending: false });
 
       if (error) {
         const fallback = await supabase
           .from("orders")
-          .select("*, products(brand, model, price)")
+          .select("*, products(brand, model, price, image_url)")
           .eq("store_id", store!.id)
           .order("created_at", { ascending: false });
         data = fallback.data;
@@ -843,7 +843,7 @@ function EditProductDialog({
 }
 
 type OrderRow = Tables<"orders"> & {
-  products: { brand: string; model: string } | null;
+  products: { brand: string; model: string; image_url?: string | null } | null;
   profiles: { name: string | null; email: string | null; phone: string | null } | null;
 };
 
@@ -857,6 +857,31 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
   const pages = Math.max(1, Math.ceil(orders.length / PAGE_SIZE));
   const rows = orders.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
+  async function adjustStockOnCancel(productId: string, isCancelling: boolean) {
+    if (!productId) return;
+    const { data: product } = await supabase
+      .from("products")
+      .select("stock, is_open")
+      .eq("id", productId)
+      .maybeSingle();
+
+    if (!product) return;
+
+    if (isCancelling) {
+      const newStock = (product.stock ?? 0) + 1;
+      await supabase
+        .from("products")
+        .update({ stock: newStock, is_open: true })
+        .eq("id", productId);
+    } else {
+      const newStock = Math.max(0, (product.stock ?? 0) - 1);
+      await supabase
+        .from("products")
+        .update({ stock: newStock })
+        .eq("id", productId);
+    }
+  }
+
   async function update(
     id: string,
     patch: Partial<Pick<Tables<"orders">, "down_payment" | "payment_status" | "delivery_status">>,
@@ -865,7 +890,6 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
 
     if (error) return toast.error("Não foi possível atualizar a reserva.");
     queryClient.invalidateQueries();
-    toast.success("Reserva atualizada.");
   }
 
   async function handlePaymentStatusChange(o: OrderRow, newStatus: string) {
@@ -873,24 +897,54 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
     const totalPrice = Number(o.total_price);
     const customSignal = Number((o.products as any)?.down_payment_amount || 0);
 
+    const wasCancelled = o.payment_status === "cancelado" || o.delivery_status === "cancelado";
+    const isNowCancelled = newStatus === "cancelado";
+
+    if (!wasCancelled && isNowCancelled) {
+      await adjustStockOnCancel(o.product_id, true);
+    } else if (wasCancelled && !isNowCancelled) {
+      await adjustStockOnCancel(o.product_id, false);
+    }
+
     if (newStatus === "sinal_pago") {
-      // Se houver um valor de sinal configurado no cadastro do produto, usa ele!
       if (customSignal > 0) {
         downPayment = customSignal;
       } else if (downPayment === 0 && totalPrice > 0) {
-        // Senão, calcula 20% do preço total como padrão
         downPayment = Math.round(totalPrice * 0.2 * 100) / 100;
       }
     } else if (newStatus === "quitado") {
-      // Se alterar para quitado, o sinal vira 100% do valor total (saldo devedor = R$ 0)
       downPayment = totalPrice;
     } else if (newStatus === "aguardando_sinal") {
-      // Se alterar para aguardando sinal, zera o valor pago
       downPayment = 0;
     }
 
     setDrafts((prev) => ({ ...prev, [o.id]: String(downPayment) }));
     await update(o.id, { payment_status: newStatus, down_payment: downPayment });
+
+    if (!wasCancelled && isNowCancelled) {
+      toast.success("Reserva cancelada! +1 cota devolvida ao estoque.");
+    } else {
+      toast.success("Reserva atualizada.");
+    }
+  }
+
+  async function handleDeliveryStatusChange(o: OrderRow, newStatus: string) {
+    const wasCancelled = o.payment_status === "cancelado" || o.delivery_status === "cancelado";
+    const isNowCancelled = newStatus === "cancelado";
+
+    if (!wasCancelled && isNowCancelled) {
+      await adjustStockOnCancel(o.product_id, true);
+    } else if (wasCancelled && !isNowCancelled) {
+      await adjustStockOnCancel(o.product_id, false);
+    }
+
+    await update(o.id, { delivery_status: newStatus });
+
+    if (!wasCancelled && isNowCancelled) {
+      toast.success("Reserva cancelada! +1 cota devolvida ao estoque.");
+    } else {
+      toast.success("Reserva atualizada.");
+    }
   }
 
   return (
@@ -931,7 +985,28 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
                     <p className="text-xs text-muted-foreground">#{o.id.slice(0, 8)}</p>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    {o.products?.brand} {o.products?.model}
+                    <div className="flex items-center gap-3">
+                      <div className="size-11 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50">
+                        {o.products?.image_url ? (
+                          <img
+                            src={o.products.image_url}
+                            alt={o.products.model || "Miniatura"}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-muted-foreground">
+                            <Package className="size-5" />
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm">{o.products?.model || "Miniatura"}</p>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                          {o.products?.brand}
+                        </p>
+                      </div>
+                    </div>
                   </TableCell>
                   <TableCell>{brl(Number(o.total_price))}</TableCell>
                   <TableCell>
@@ -977,7 +1052,7 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
                       </Select>
                       <Select
                         value={o.delivery_status}
-                        onValueChange={(v) => update(o.id, { delivery_status: v })}
+                        onValueChange={(v) => handleDeliveryStatusChange(o, v)}
                       >
                         <SelectTrigger className="h-8 w-40">
                           <SelectValue />

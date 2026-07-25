@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Package, Store as StoreIcon } from "lucide-react";
+import { Check, Copy, Package, Store as StoreIcon } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +51,20 @@ function StorePage() {
     },
   });
 
+  const { data: isFollowing } = useQuery({
+    queryKey: ["is-following-store", user?.id, data?.store?.id],
+    enabled: !!user && !!data?.store?.id,
+    queryFn: async () => {
+      const { data: link } = await supabase
+        .from("customer_store_link")
+        .select("user_id")
+        .eq("user_id", user!.id)
+        .eq("store_id", data!.store.id)
+        .maybeSingle();
+      return !!link;
+    },
+  });
+
   useEffect(() => {
     const iconUrl = data?.store?.favicon_url || data?.store?.logo_url;
     if (iconUrl) {
@@ -58,17 +72,35 @@ function StorePage() {
     }
   }, [data?.store]);
 
-  async function follow() {
+  async function toggleFollow() {
     if (!data?.store) return;
     if (!user) {
       navigate({ to: "/auth", search: { loja: data.store.id, next: `/loja/${slug}` } });
       return;
     }
-    await supabase
-      .from("customer_store_link")
-      .insert({ user_id: user.id, store_id: data.store.id });
-    queryClient.invalidateQueries();
-    toast.success("Loja adicionada às suas lojas seguidas.");
+    if (data.store.owner_id === user.id) {
+      toast.info("Esta é a sua própria loja.");
+      return;
+    }
+
+    if (isFollowing) {
+      await supabase
+        .from("customer_store_link")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("store_id", data.store.id);
+      queryClient.invalidateQueries();
+      toast.success("Você deixou de seguir esta loja.");
+    } else {
+      await supabase
+        .from("customer_store_link")
+        .upsert(
+          { user_id: user.id, store_id: data.store.id },
+          { onConflict: "user_id,store_id" }
+        );
+      queryClient.invalidateQueries();
+      toast.success("Você agora está seguindo esta loja!");
+    }
   }
 
   function copyInvite() {
@@ -97,6 +129,7 @@ function StorePage() {
   }
 
   const { store, products } = data;
+  const isOwner = !!(user && store.owner_id === user.id);
 
   return (
     <div className="min-h-screen">
@@ -131,9 +164,27 @@ function StorePage() {
               <Button variant="secondary" onClick={copyInvite}>
                 <Copy className="size-4" /> Link de convite
               </Button>
-              <Button onClick={follow} style={{ backgroundColor: store.primary_color, color: "#fff" }}>
-                Seguir loja
-              </Button>
+              {!isOwner && (
+                <Button
+                  onClick={toggleFollow}
+                  variant={isFollowing ? "outline" : "default"}
+                  className={
+                    isFollowing
+                      ? "border-success/80 text-success hover:bg-success/10 font-semibold gap-1.5"
+                      : "gap-1.5"
+                  }
+                  style={!isFollowing ? { backgroundColor: store.primary_color, color: "#fff" } : undefined}
+                >
+                  {isFollowing ? (
+                    <>
+                      <Check className="size-4" />
+                      <span>Seguindo</span>
+                    </>
+                  ) : (
+                    <span>Seguir loja</span>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </div>
