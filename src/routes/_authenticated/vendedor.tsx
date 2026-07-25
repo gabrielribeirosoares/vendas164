@@ -1016,7 +1016,151 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
       </div>
 
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
+        {/* VISÃO PARA CELULAR (CARDS EMPILHADOS SEM ROLAGEM LATERAL) */}
+        <div className="md:hidden divide-y divide-border/60">
+          {rows.map((o) => {
+            const displayName =
+              o.profiles?.name && o.profiles.name !== "Cliente"
+                ? o.profiles.name
+                : o.profiles?.email
+                  ? o.profiles.email.split("@")[0]
+                  : "Cliente";
+
+            return (
+              <div key={o.id} className="p-4 space-y-3">
+                {/* Cliente e WhatsApp */}
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-base">{displayName}</p>
+                    {o.profiles?.email && (
+                      <p className="text-xs text-muted-foreground">{o.profiles.email}</p>
+                    )}
+                    <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{o.id.slice(0, 8)}</p>
+                  </div>
+                  {o.profiles?.phone ? (() => {
+                    const parsed = parsePhoneWithFlag(o.profiles.phone);
+                    return (
+                      <a
+                        href={whatsappLink(o.profiles.phone, `Olá ${displayName}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-1 text-xs text-success font-medium font-mono border border-success/30"
+                      >
+                        <MessageCircle className="size-3.5" />
+                        {parsed?.display || o.profiles.phone}
+                      </a>
+                    );
+                  })() : (
+                    <span className="text-xs text-muted-foreground/60 italic">Sem WhatsApp</span>
+                  )}
+                </div>
+
+                {/* Produto / Miniatura */}
+                <div className="flex items-center gap-3 rounded-xl bg-muted/30 p-2.5 border border-border/40">
+                  <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50">
+                    {o.products?.image_url ? (
+                      <img
+                        src={o.products.image_url}
+                        alt={o.products.model || "Miniatura"}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-muted-foreground">
+                        <Package className="size-5" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wide">{o.products?.brand}</p>
+                    <p className="font-semibold text-sm truncate">{o.products?.model || "Miniatura"}</p>
+                  </div>
+                </div>
+
+                {/* Valores (Total / Sinal / Saldo) */}
+                <div className="grid grid-cols-3 gap-2 rounded-xl bg-muted/20 p-2.5 text-center text-xs border border-border/30">
+                  <div>
+                    <p className="text-muted-foreground">Total</p>
+                    <p className="font-semibold text-sm">{brl(Number(o.total_price))}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Sinal (R$)</p>
+                    <div className="flex items-center justify-center gap-1 mt-0.5">
+                      <Input
+                        className="h-7 w-16 text-center text-xs px-1"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={drafts[o.id] ?? String(o.down_payment)}
+                        onChange={(e) => setDrafts({ ...drafts, [o.id]: e.target.value })}
+                      />
+                      <Button
+                        size="icon"
+                        variant="secondary"
+                        className="size-7 text-[10px]"
+                        onClick={() => update(o.id, { down_payment: Number(drafts[o.id] ?? o.down_payment) })}
+                      >
+                        OK
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Saldo</p>
+                    <p className="font-bold text-sm text-primary">{brl(Number(o.remaining_balance))}</p>
+                  </div>
+                </div>
+
+                {/* Status e Prazo */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <PaymentBadge status={o.payment_status} />
+                    <Select
+                      value={o.payment_status}
+                      onValueChange={(v) => handlePaymentStatusChange(o, v)}
+                    >
+                      <SelectTrigger className="h-8 text-xs w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
+                        <SelectItem value="sinal_pago">Sinal pago</SelectItem>
+                        <SelectItem value="quitado">Quitado</SelectItem>
+                        <SelectItem value="cancelado">Cancelado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={o.delivery_status}
+                      onValueChange={(v) => handleDeliveryStatusChange(o, v)}
+                    >
+                      <SelectTrigger className="h-8 text-xs w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pendente">Pendente</SelectItem>
+                        <SelectItem value="em_transito">Em trânsito</SelectItem>
+                        <SelectItem value="entregue">Entregue</SelectItem>
+                        <SelectItem value="cancelado">Cancelado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {o.payment_status === "aguardando_sinal" && o.reservation_expires_at && (
+                    <div className="text-xs">
+                      <Countdown expiresAt={o.reservation_expires_at} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {rows.length === 0 && (
+            <p className="p-8 text-center text-sm text-muted-foreground">Nenhuma reserva encontrada.</p>
+          )}
+        </div>
+
+        {/* VISÃO PARA DESKTOP (TABELA COMPLETA) */}
+        <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
