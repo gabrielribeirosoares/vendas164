@@ -60,17 +60,18 @@ function CustomerDashboard() {
     queryFn: async () => {
       const { data: links } = await supabase
         .from("customer_store_link")
-        .select("store_id, stores(id, name, slug, logo_url)")
+        .select("store_id, stores(id, name, slug, logo_url, owner_id)")
         .eq("user_id", user!.id);
-      const ids = (links ?? []).map((l) => l.store_id);
-      if (ids.length === 0) return { links: links ?? [], products: [] };
+      const filtered = (links ?? []).filter((l: any) => l.stores && l.stores.owner_id !== user!.id);
+      const ids = filtered.map((l: any) => l.store_id);
+      if (ids.length === 0) return { links: [], products: [] };
       const { data: products } = await supabase
         .from("products")
         .select("*, stores(name, slug)")
         .in("store_id", ids)
         .eq("is_open", true)
         .order("created_at", { ascending: false });
-      return { links: links ?? [], products: products ?? [] };
+      return { links: filtered, products: products ?? [] };
     },
   });
 
@@ -124,6 +125,39 @@ function CustomerDashboard() {
           <StatCard label="Sinal pago" value={brl(paid)} accent />
           <StatCard label="Saldo devedor" value={brl(total - paid)} />
         </div>
+
+        {feed?.links && feed.links.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-base font-semibold flex items-center gap-2">
+              <StoreIcon className="size-4 text-primary" /> Lojas onde sou cliente
+            </h2>
+            <div className="mt-3 flex flex-wrap gap-3">
+              {feed.links.map((l) => (
+                <Link key={l.store_id} to="/loja/$slug" params={{ slug: l.stores?.slug ?? "" }}>
+                  <Card className="panel border-border/60 hover:border-primary/50 transition-colors">
+                    <CardContent className="flex items-center gap-3 p-3 px-4">
+                      {l.stores?.logo_url ? (
+                        <img
+                          src={l.stores.logo_url}
+                          alt={l.stores.name}
+                          className="size-8 rounded-lg object-cover border border-border/40"
+                        />
+                      ) : (
+                        <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
+                          {l.stores?.name ? l.stores.name[0].toUpperCase() : "L"}
+                        </span>
+                      )}
+                      <div>
+                        <p className="text-sm font-semibold">{l.stores?.name}</p>
+                        <p className="text-xs text-muted-foreground">/loja/{l.stores?.slug}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         <Tabs defaultValue="reservas" className="mt-8">
           <TabsList>

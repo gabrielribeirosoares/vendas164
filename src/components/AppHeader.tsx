@@ -1,8 +1,14 @@
 import { useEffect } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Car, LogOut } from "lucide-react";
+import { Car, ChevronDown, LogOut, Store as StoreIcon } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/lib/session";
 
@@ -44,6 +50,20 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
         .eq("owner_id", user!.id)
         .maybeSingle();
       return data;
+    },
+  });
+
+  const { data: myLinkedStores } = useQuery({
+    queryKey: ["my-linked-stores-header", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("customer_store_link")
+        .select("store_id, stores(id, name, slug, logo_url, owner_id)")
+        .eq("user_id", user!.id);
+      return (data ?? [])
+        .map((l: any) => l.stores)
+        .filter((s: any) => s && s.owner_id !== user!.id);
     },
   });
 
@@ -103,9 +123,39 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
               <Button asChild variant="ghost" size="sm">
                 <Link to="/painel">Minhas reservas</Link>
               </Button>
+
+              {myLinkedStores && myLinkedStores.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="gap-1">
+                      <StoreIcon className="size-4 text-primary" />
+                      <span>Lojas</span>
+                      <ChevronDown className="size-3.5 opacity-60" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {myLinkedStores.map((s: any) => (
+                      <DropdownMenuItem
+                        key={s.id}
+                        className="cursor-pointer gap-2"
+                        onClick={() => navigate({ to: "/loja/$slug", params: { slug: s.slug } })}
+                      >
+                        {s.logo_url ? (
+                          <img src={s.logo_url} alt={s.name} className="size-5 rounded object-cover" />
+                        ) : (
+                          <StoreIcon className="size-4 text-muted-foreground" />
+                        )}
+                        <span className="truncate">{s.name}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+
               <Button asChild variant="secondary" size="sm">
                 <Link to="/vendedor">Minha loja</Link>
               </Button>
+
               <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sair">
                 <LogOut className="size-4" />
               </Button>

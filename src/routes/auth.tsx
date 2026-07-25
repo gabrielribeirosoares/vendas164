@@ -88,12 +88,20 @@ function AuthPage() {
     const user = data.user;
     const storeId = search.loja ?? window.sessionStorage.getItem("pending_store_link");
     
-    // Vincular cliente à loja (tanto no cadastro quanto no login)
+    // Vincular cliente à loja (tanto no cadastro quanto no login), desde que não seja a própria loja do usuário
     if (user && storeId) {
-      await supabase.from("customer_store_link").upsert(
-        { user_id: user.id, store_id: storeId },
-        { onConflict: "user_id,store_id" }
-      );
+      const { data: targetStore } = await supabase
+        .from("stores")
+        .select("owner_id")
+        .eq("id", storeId)
+        .maybeSingle();
+
+      if (targetStore && targetStore.owner_id !== user.id) {
+        await supabase.from("customer_store_link").upsert(
+          { user_id: user.id, store_id: storeId },
+          { onConflict: "user_id,store_id" }
+        );
+      }
       window.sessionStorage.removeItem("pending_store_link");
     }
 
