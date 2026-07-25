@@ -89,16 +89,23 @@ function SellerDashboard() {
   const { data: orders } = useQuery({
     queryKey: ["store-orders", store?.id],
     enabled: !!store,
-    queryFn: async () => {
+    queryFn: async (): Promise<OrderRow[]> => {
       const { data, error } = await supabase
         .from("orders")
-        .select("*, products(brand, model), profiles:user_id(name, email)")
+        .select("*, products(brand, model)")
         .eq("store_id", store!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      const rows = data ?? [];
+      const userIds = [...new Set(rows.map((r) => r.user_id))];
+      const { data: people } = userIds.length
+        ? await supabase.from("profiles").select("id, name, email").in("id", userIds)
+        : { data: [] };
+      const byId = new Map((people ?? []).map((p) => [p.id, p]));
+      return rows.map((r) => ({ ...r, profiles: byId.get(r.user_id) ?? null }));
     },
   });
+
 
   const totals = useMemo(() => {
     const active = (orders ?? []).filter((o) => o.payment_status !== "cancelado");
