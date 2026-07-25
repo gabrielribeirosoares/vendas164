@@ -106,7 +106,10 @@ function StorePage() {
                 className="size-16 rounded-2xl object-cover"
               />
             ) : (
-              <span className="flex size-16 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+              <span
+                className="flex size-16 items-center justify-center rounded-2xl text-white font-bold text-xl"
+                style={{ backgroundColor: store.primary_color }}
+              >
                 <StoreIcon className="size-7" />
               </span>
             )}
@@ -120,7 +123,9 @@ function StorePage() {
               <Button variant="secondary" onClick={copyInvite}>
                 <Copy className="size-4" /> Link de convite
               </Button>
-              <Button onClick={follow}>Seguir loja</Button>
+              <Button onClick={follow} style={{ backgroundColor: store.primary_color, color: "#fff" }}>
+                Seguir loja
+              </Button>
             </div>
           </div>
         </div>
@@ -150,7 +155,7 @@ function StorePage() {
                   </p>
                   <h3 className="mt-1 font-semibold">{p.model}</h3>
                   <div className="mt-3 flex items-center justify-between">
-                    <span className="font-display text-lg font-bold text-primary">
+                    <span className="font-display text-lg font-bold" style={{ color: store.primary_color }}>
                       {brl(Number(p.price))}
                     </span>
                     <Badge variant={p.is_open ? "secondary" : "outline"}>

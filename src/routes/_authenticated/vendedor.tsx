@@ -652,13 +652,24 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
   );
 }
 
+const PRESET_COLORS = [
+  { name: "Vermelho Hot Wheels", hex: "#e11d48" },
+  { name: "Azul Racing", hex: "#2563eb" },
+  { name: "Verde Esmeralda", hex: "#059669" },
+  { name: "Amarelo Gold", hex: "#d97706" },
+  { name: "Roxo Neon", hex: "#9333ea" },
+  { name: "Laranja Flame", hex: "#ea580c" },
+  { name: "Pink Cyber", hex: "#db2777" },
+  { name: "Dark Titanium", hex: "#334155" },
+];
+
 function BrandingTab({ store, userId }: { store: Store; userId: string }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
     name: store.name,
     description: store.description ?? "",
     whatsapp_number: store.whatsapp_number ?? "",
-    primary_color: store.primary_color,
+    primary_color: store.primary_color || "#e11d48",
     logo_url: store.logo_url ?? "",
     favicon_url: store.favicon_url ?? "",
   });
@@ -695,33 +706,35 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
   }
 
   return (
-    <Card className="max-w-2xl border-border/60 panel">
-      <CardHeader>
-        <CardTitle className="text-lg">Identidade da loja</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={save} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="b-name">Nome</Label>
-            <Input
-              id="b-name"
-              maxLength={60}
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="b-desc">Descrição</Label>
-            <Textarea
-              id="b-desc"
-              maxLength={280}
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <Card className="border-border/60 panel">
+        <CardHeader>
+          <CardTitle className="text-lg">Personalização e Identidade da loja</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={save} className="space-y-6">
             <div className="space-y-1.5">
-              <Label htmlFor="b-whats">WhatsApp</Label>
+              <Label htmlFor="b-name">Nome da loja</Label>
+              <Input
+                id="b-name"
+                maxLength={60}
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="b-desc">Descrição / Apresentação</Label>
+              <Textarea
+                id="b-desc"
+                maxLength={280}
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="b-whats">WhatsApp de Atendimento</Label>
               <Input
                 id="b-whats"
                 placeholder="5511999999999"
@@ -730,56 +743,152 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
                 onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="b-color">Cor principal</Label>
-              <Input
-                id="b-color"
-                type="color"
-                className="h-10 p-1"
-                value={form.primary_color}
-                onChange={(e) => setForm({ ...form, primary_color: e.target.value })}
-              />
+
+            {/* SEÇÃO DE CORES DA LOJA */}
+            <div className="space-y-3 rounded-xl border border-border/50 bg-muted/30 p-4">
+              <Label className="text-base font-semibold">Cor de Tema da Loja</Label>
+              <p className="text-xs text-muted-foreground">
+                Escolha uma das cores rápidas ou defina o código Hex da cor principal da sua marca.
+              </p>
+
+              {/* Botões de Cores Rápidas */}
+              <div className="flex flex-wrap gap-2 pt-1">
+                {PRESET_COLORS.map((color) => (
+                  <button
+                    key={color.hex}
+                    type="button"
+                    title={color.name}
+                    className={`group relative flex size-9 items-center justify-center rounded-full transition-all hover:scale-110 ${
+                      form.primary_color.toLowerCase() === color.hex.toLowerCase()
+                        ? "ring-2 ring-foreground ring-offset-2 ring-offset-background"
+                        : ""
+                    }`}
+                    style={{ backgroundColor: color.hex }}
+                    onClick={() => setForm({ ...form, primary_color: color.hex })}
+                  >
+                    {form.primary_color.toLowerCase() === color.hex.toLowerCase() && (
+                      <span className="size-2 rounded-full bg-white shadow-sm" />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Seletor de cor customizada */}
+              <div className="flex items-center gap-3 pt-2">
+                <Input
+                  id="b-color"
+                  type="color"
+                  className="h-10 w-14 cursor-pointer p-1"
+                  value={form.primary_color}
+                  onChange={(e) => setForm({ ...form, primary_color: e.target.value })}
+                />
+                <Input
+                  type="text"
+                  placeholder="#e11d48"
+                  className="font-mono text-sm uppercase"
+                  maxLength={7}
+                  value={form.primary_color}
+                  onChange={(e) => setForm({ ...form, primary_color: e.target.value })}
+                />
+              </div>
             </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="b-logo">Logo</Label>
-              <Input
-                id="b-logo"
-                type="file"
-                accept="image/*"
-                onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0], "logo_url")}
-              />
-              {form.logo_url && (
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="b-logo">Logotipo da Loja</Label>
+                <Input
+                  id="b-logo"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0], "logo_url")}
+                />
+                {form.logo_url && (
+                  <img
+                    src={form.logo_url}
+                    alt="Prévia do logo"
+                    className="mt-2 size-12 rounded-lg object-cover border border-border"
+                  />
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="b-fav">Favicon</Label>
+                <Input
+                  id="b-fav"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0], "favicon_url")}
+                />
+                {form.favicon_url && (
+                  <img
+                    src={form.favicon_url}
+                    alt="Prévia do favicon"
+                    className="mt-2 size-8 rounded object-cover border border-border"
+                  />
+                )}
+              </div>
+            </div>
+
+            <Button type="submit" disabled={saving} className="w-full sm:w-auto">
+              {saving && <Loader2 className="size-4 animate-spin" />} Salvar alterações
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* CARD DE LIVE PREVIEW DA LOJA */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-medium text-muted-foreground">Prévia em tempo real</h3>
+        <Card
+          className="border-border/60 panel overflow-hidden"
+          style={{ borderTopColor: form.primary_color, borderTopWidth: 4 }}
+        >
+          <CardContent className="p-5 space-y-4">
+            <div className="flex items-center gap-3">
+              {form.logo_url ? (
                 <img
                   src={form.logo_url}
-                  alt="Prévia do logo"
-                  className="mt-2 size-12 rounded-lg object-cover"
+                  alt="Logo"
+                  className="size-12 rounded-xl object-cover"
                 />
+              ) : (
+                <div
+                  className="flex size-12 items-center justify-center rounded-xl font-bold text-white text-lg"
+                  style={{ backgroundColor: form.primary_color }}
+                >
+                  {form.name ? form.name[0].toUpperCase() : "L"}
+                </div>
               )}
+              <div className="min-w-0 flex-1">
+                <h4 className="font-bold text-base truncate">{form.name || "Sua Loja"}</h4>
+                <p className="text-xs text-muted-foreground truncate">
+                  {form.description || "Descrição da sua loja de miniaturas"}
+                </p>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="b-fav">Favicon</Label>
-              <Input
-                id="b-fav"
-                type="file"
-                accept="image/*"
-                onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0], "favicon_url")}
-              />
-              {form.favicon_url && (
-                <img
-                  src={form.favicon_url}
-                  alt="Prévia do favicon"
-                  className="mt-2 size-8 rounded object-cover"
-                />
-              )}
+
+            <div className="pt-2 border-t border-border/40">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Amostra de Botão e Cores
+              </p>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <span
+                  className="font-bold text-lg"
+                  style={{ color: form.primary_color }}
+                >
+                  R$ 149,90
+                </span>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white shadow-sm transition-opacity"
+                  style={{ backgroundColor: form.primary_color }}
+                >
+                  Seguir loja
+                </button>
+              </div>
             </div>
-          </div>
-          <Button type="submit" disabled={saving}>
-            {saving && <Loader2 className="size-4 animate-spin" />} Salvar alterações
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }
