@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Car, ChevronDown, LogOut, Store as StoreIcon } from "lucide-react";
+import { Car, ChevronDown, LogOut, Store as StoreIcon, User } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/lib/session";
 
@@ -39,6 +40,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
   const { user, loading } = useSession();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const { data: myStore } = useQuery({
     queryKey: ["my-store-header", user?.id],
@@ -156,9 +158,25 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                 <Link to="/vendedor">Minha loja</Link>
               </Button>
 
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setProfileOpen(true)}
+                className="gap-1.5"
+              >
+                <User className="size-4 text-primary" />
+                <span>Perfil</span>
+              </Button>
+
               <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sair">
                 <LogOut className="size-4" />
               </Button>
+
+              <EditProfileDialog
+                user={user}
+                open={profileOpen}
+                onOpenChange={setProfileOpen}
+              />
             </>
           ) : (
             <Button asChild size="sm">

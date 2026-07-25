@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Loader2, MessageCircle, Palette, Pencil, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
+import { PhoneInput, parsePhoneWithFlag } from "@/components/PhoneInput";
 import { PaymentBadge } from "@/components/StatusBadge";
 import { Countdown } from "@/components/Countdown";
 import { Button } from "@/components/ui/button";
@@ -304,13 +305,12 @@ function CreateStore({ userId, onCreated }: { userId: string; onCreated: () => v
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="store-whats">WhatsApp (com DDI e DDD)</Label>
-              <Input
+              <Label htmlFor="store-whats">WhatsApp da loja</Label>
+              <PhoneInput
                 id="store-whats"
-                placeholder="5511999999999"
-                maxLength={20}
+                required
                 value={whatsapp}
-                onChange={(e) => setWhatsapp(e.target.value)}
+                onChange={setWhatsapp}
               />
             </div>
             <div className="space-y-2">
@@ -914,17 +914,20 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
                 <TableRow key={o.id}>
                   <TableCell className="whitespace-nowrap">
                     <p className="font-medium">{o.profiles?.name || "Cliente"}</p>
-                    {o.profiles?.phone && (
-                      <a
-                        href={whatsappLink(o.profiles.phone, `Olá ${o.profiles.name || ""}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-0.5 flex items-center gap-1 text-xs text-success hover:underline font-mono"
-                      >
-                        <MessageCircle className="size-3" />
-                        {o.profiles.phone}
-                      </a>
-                    )}
+                    {o.profiles?.phone && (() => {
+                      const parsed = parsePhoneWithFlag(o.profiles.phone);
+                      return (
+                        <a
+                          href={whatsappLink(o.profiles.phone, `Olá ${o.profiles.name || ""}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-0.5 flex items-center gap-1 text-xs text-success hover:underline font-mono"
+                        >
+                          <MessageCircle className="size-3" />
+                          {parsed?.display || o.profiles.phone}
+                        </a>
+                      );
+                    })()}
                     <p className="text-xs text-muted-foreground">#{o.id.slice(0, 8)}</p>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
@@ -1141,12 +1144,10 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
 
             <div className="space-y-2">
               <Label htmlFor="b-whats">WhatsApp de Atendimento</Label>
-              <Input
+              <PhoneInput
                 id="b-whats"
-                placeholder="5511999999999"
-                maxLength={20}
                 value={form.whatsapp_number}
-                onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
+                onChange={(val) => setForm({ ...form, whatsapp_number: val })}
               />
             </div>
 

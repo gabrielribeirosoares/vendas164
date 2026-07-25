@@ -1,13 +1,23 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { MessageCircle, Package, Store as StoreIcon } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, MessageCircle, Package, Store as StoreIcon, User } from "lucide-react";
+import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
+import { PhoneInput } from "@/components/PhoneInput";
 import { Countdown } from "@/components/Countdown";
 import { DeliveryBadge, PaymentBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, whatsappLink } from "@/lib/format";
@@ -30,6 +40,20 @@ export const Route = createFileRoute("/_authenticated/painel")({
 
 function CustomerDashboard() {
   const { user, loading: sessionLoading } = useSession();
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+
+  const { data: profile } = useQuery({
+    queryKey: ["my-profile", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user!.id)
+        .maybeSingle();
+      return data;
+    },
+  });
 
   const { data: orders, isLoading: ordersLoading } = useQuery({
     queryKey: ["my-orders", user?.id],
@@ -41,7 +65,7 @@ function CustomerDashboard() {
         .eq("user_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
   });
 
@@ -115,10 +139,30 @@ function CustomerDashboard() {
     <div className="min-h-screen">
       <AppHeader />
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <h1 className="text-2xl font-bold">Meu painel</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Acompanhe reservas, prazos e saldos com as lojas que você segue.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Meu painel</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Acompanhe reservas, prazos e saldos com as lojas que você segue.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEditProfileOpen(true)}
+            className="gap-2 border-border/80 hover:bg-accent"
+          >
+            <User className="size-4 text-primary" />
+            <span>Editar meu perfil</span>
+          </Button>
+        </div>
+
+        <EditProfileDialog
+          user={user}
+          profile={profile}
+          open={editProfileOpen}
+          onOpenChange={setEditProfileOpen}
+        />
 
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
           <StatCard label="Total reservado" value={brl(total)} />
@@ -298,5 +342,94 @@ function StatCard({ label, value, accent }: { label: string; value: string; acce
         <p className={`font-display text-2xl font-bold ${accent ? "text-success" : ""}`}>{value}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function EditProfileDialog({
+  user,
+  profile,
+  open,
+  onOpenChange,
+}: {
+  user: any;
+  profile: any;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (profile) {
+      setName(profile.name ?? "");
+      setPhone(profile.phone ?? "");
+    } else if (user) {
+      setName(user.user_metadata?.name ?? "");
+      setPhone(user.user_metadata?.phone ?? "");
+    }
+  }, [profile, user]);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return toast.error("Por favor, informe seu nome.");
+    setSaving(true);
+
+    const { error } = await supabase.from("profiles").upsert({
+      id: user.id,
+      name: name.trim(),
+      email: user.email,
+      phone: phone.trim() || null,
+    });
+
+    setSaving(false);
+    if (error) return toast.error("Não foi possível salvar o perfil.");
+
+    queryClient.invalidateQueries();
+    toast.success("Perfil atualizado com sucesso!");
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md panel border-border/60">
+        <DialogHeader>
+          <DialogTitle className="text-xl">Editar Perfil Pessoal</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSave} className="space-y-4 pt-2">
+          <div className="space-y-2">
+            <Label htmlFor="prof-email">E-mail</Label>
+            <Input id="prof-email" value={user?.email || ""} disabled className="bg-muted/50 font-mono text-sm" />
+            <p className="text-xs text-muted-foreground">O e-mail da sua conta não pode ser alterado.</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="prof-name">Nome completo</Label>
+            <Input
+              id="prof-name"
+              required
+              maxLength={80}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="prof-phone">WhatsApp</Label>
+            <PhoneInput id="prof-phone" value={phone} onChange={setPhone} />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving && <Loader2 className="size-4 animate-spin" />} Salvar Perfil
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

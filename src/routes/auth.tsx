@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
+import { PhoneInput } from "@/components/PhoneInput";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
+import { useSession } from "@/lib/session";
 
 type AuthSearch = { loja?: string; produto?: string; next?: string };
 
@@ -36,6 +38,7 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const search = Route.useSearch();
   const navigate = useNavigate();
+  const { user, loading: sessionLoading } = useSession();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -66,6 +69,26 @@ function AuthPage() {
       return null;
     },
   });
+
+  // Se o usuário JÁ ESTIVER LOGADO ao clicar/colar o link de convite:
+  useEffect(() => {
+    async function processAlreadyLoggedInUser() {
+      if (sessionLoading || !user) return;
+      
+      const storeId = search.loja || invitedStore?.id;
+      if (storeId && invitedStore && invitedStore.owner_id !== user.id) {
+        await supabase.from("customer_store_link").upsert(
+          { user_id: user.id, store_id: storeId },
+          { onConflict: "user_id,store_id" }
+        );
+      }
+
+      const dest = search.next ?? (search.produto ? `/produto/${search.produto}` : (invitedStore?.slug ? `/loja/${invitedStore.slug}` : "/painel"));
+      navigate({ to: dest, replace: true });
+    }
+
+    processAlreadyLoggedInUser();
+  }, [user, sessionLoading, search.loja, search.next, invitedStore]);
 
   useEffect(() => {
     if (search.loja) {
@@ -230,15 +253,12 @@ function AuthPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="signup-phone">WhatsApp (com DDD)</Label>
-                    <Input
+                    <Label htmlFor="signup-phone">WhatsApp</Label>
+                    <PhoneInput
                       id="signup-phone"
-                      type="tel"
                       required
-                      placeholder="Ex: 11999999999"
-                      maxLength={20}
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={setPhone}
                     />
                   </div>
                   <div className="space-y-2">
