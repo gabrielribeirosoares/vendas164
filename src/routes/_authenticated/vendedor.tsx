@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Loader2, MessageCircle, Package, Palette, Pencil, Share2, Trash2 } from "lucide-react";
+import { Copy, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Search, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { PhoneInput, parsePhoneWithFlag } from "@/components/PhoneInput";
@@ -852,10 +852,39 @@ const PAGE_SIZE = 8;
 function OrdersTab({ orders }: { orders: OrderRow[] }) {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("todos");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
-  const pages = Math.max(1, Math.ceil(orders.length / PAGE_SIZE));
-  const rows = orders.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o) => {
+      // Filtro por status
+      if (statusFilter !== "todos" && o.payment_status !== statusFilter) {
+        return false;
+      }
+      // Filtro por termo de busca
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      const clientName = (o.profiles?.name || "").toLowerCase();
+      const clientEmail = (o.profiles?.email || "").toLowerCase();
+      const clientPhone = (o.profiles?.phone || "").toLowerCase();
+      const prodModel = (o.products?.model || "").toLowerCase();
+      const prodBrand = (o.products?.brand || "").toLowerCase();
+      const orderId = (o.id || "").toLowerCase();
+
+      return (
+        clientName.includes(q) ||
+        clientEmail.includes(q) ||
+        clientPhone.includes(q) ||
+        prodModel.includes(q) ||
+        prodBrand.includes(q) ||
+        orderId.includes(q)
+      );
+    });
+  }, [orders, searchQuery, statusFilter]);
+
+  const pages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
+  const rows = filteredOrders.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
   async function adjustStockOnCancel(productId: string, isCancelling: boolean) {
     if (!productId) return;
@@ -949,6 +978,43 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
 
   return (
     <Card className="border-border/60 panel">
+      {/* BARRA DE PESQUISA E FILTROS DE CLIENTE / WHATSAPP / STATUS */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 p-4">
+        <div className="relative flex-1 min-w-[240px]">
+          <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por cliente, WhatsApp, e-mail ou miniatura..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setPage(0);
+            }}
+            className="pl-9 h-9 text-sm"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Filter className="size-4 text-muted-foreground" />
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => {
+              setStatusFilter(v);
+              setPage(0);
+            }}
+          >
+            <SelectTrigger className="h-9 w-44 text-xs">
+              <SelectValue placeholder="Filtrar status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os status</SelectItem>
+              <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
+              <SelectItem value="sinal_pago">Sinal pago</SelectItem>
+              <SelectItem value="quitado">Quitado</SelectItem>
+              <SelectItem value="cancelado">Cancelados</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <CardContent className="p-0">
         <div className="overflow-x-auto">
           <Table>
@@ -964,26 +1030,39 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((o) => (
-                <TableRow key={o.id}>
-                  <TableCell className="whitespace-nowrap">
-                    <p className="font-medium">{o.profiles?.name || "Cliente"}</p>
-                    {o.profiles?.phone && (() => {
-                      const parsed = parsePhoneWithFlag(o.profiles.phone);
-                      return (
-                        <a
-                          href={whatsappLink(o.profiles.phone, `Olá ${o.profiles.name || ""}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-0.5 flex items-center gap-1 text-xs text-success hover:underline font-mono"
-                        >
-                          <MessageCircle className="size-3" />
-                          {parsed?.display || o.profiles.phone}
-                        </a>
-                      );
-                    })()}
-                    <p className="text-xs text-muted-foreground">#{o.id.slice(0, 8)}</p>
-                  </TableCell>
+              {rows.map((o) => {
+                const displayName =
+                  o.profiles?.name && o.profiles.name !== "Cliente"
+                    ? o.profiles.name
+                    : o.profiles?.email
+                      ? o.profiles.email.split("@")[0]
+                      : "Cliente";
+
+                return (
+                  <TableRow key={o.id}>
+                    <TableCell className="whitespace-nowrap">
+                      <p className="font-medium">{displayName}</p>
+                      {o.profiles?.email && (
+                        <p className="text-[11px] text-muted-foreground">{o.profiles.email}</p>
+                      )}
+                      {o.profiles?.phone ? (() => {
+                        const parsed = parsePhoneWithFlag(o.profiles.phone);
+                        return (
+                          <a
+                            href={whatsappLink(o.profiles.phone, `Olá ${displayName}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-0.5 flex items-center gap-1 text-xs text-success hover:underline font-mono"
+                          >
+                            <MessageCircle className="size-3" />
+                            {parsed?.display || o.profiles.phone}
+                          </a>
+                        );
+                      })() : (
+                        <span className="text-[11px] text-muted-foreground/60 italic block">Sem WhatsApp</span>
+                      )}
+                      <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{o.id.slice(0, 8)}</p>
+                    </TableCell>
                   <TableCell className="whitespace-nowrap">
                     <div className="flex items-center gap-3">
                       <div className="size-11 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50">
@@ -1074,7 +1153,8 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
                     )}
                   </TableCell>
                 </TableRow>
-              ))}
+              );
+            })}
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
