@@ -204,10 +204,10 @@ function CustomerDashboard() {
         )}
 
         <Tabs defaultValue="reservas" className="mt-8">
-          <TabsList>
-            <TabsTrigger value="reservas">Minhas reservas</TabsTrigger>
-            <TabsTrigger value="lojas">Lojas seguidas</TabsTrigger>
-            <TabsTrigger value="fila">Fila de espera</TabsTrigger>
+          <TabsList className="w-full flex overflow-x-auto justify-start sm:justify-center whitespace-nowrap p-1 max-w-full">
+            <TabsTrigger value="reservas" className="text-xs sm:text-sm">Minhas reservas</TabsTrigger>
+            <TabsTrigger value="lojas" className="text-xs sm:text-sm">Lojas seguidas</TabsTrigger>
+            <TabsTrigger value="fila" className="text-xs sm:text-sm">Fila de espera</TabsTrigger>
           </TabsList>
 
           <TabsContent value="reservas" className="mt-4 space-y-3">

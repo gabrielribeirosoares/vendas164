@@ -85,7 +85,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content: "Plataforma de pré-vendas, estoque e financeiro para lojas de miniaturas.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:title", content: "MiniPré — Pré-vendas de miniaturas" },
+      { property: "og:description", content: "Plataforma de pré-vendas, estoque e financeiro para lojas de miniaturas." },
+      { property: "og:image", content: "https://vendas164.vercel.app/og-image.png" },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:image", content: "https://vendas164.vercel.app/og-image.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },

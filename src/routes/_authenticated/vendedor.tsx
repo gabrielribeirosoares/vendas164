@@ -209,10 +209,10 @@ function SellerDashboard() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-8">
-          <TabsList className="flex-wrap">
-            <TabsTrigger value="produtos">Estoque e pré-vendas</TabsTrigger>
-            <TabsTrigger value="reservas">Reservas</TabsTrigger>
-            <TabsTrigger value="loja" className="gap-1.5">
+          <TabsList className="w-full flex overflow-x-auto justify-start sm:justify-center whitespace-nowrap p-1 max-w-full">
+            <TabsTrigger value="produtos" className="text-xs sm:text-sm">Estoque e pré-vendas</TabsTrigger>
+            <TabsTrigger value="reservas" className="text-xs sm:text-sm">Reservas</TabsTrigger>
+            <TabsTrigger value="loja" className="gap-1.5 text-xs sm:text-sm">
               <Palette className="size-3.5" /> Personalização
             </TabsTrigger>
           </TabsList>
@@ -453,7 +453,7 @@ function ProductsTab({
                 onChange={(e) => setForm({ ...form, model: e.target.value })}
               />
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="price">Total (R$)</Label>
                 <Input

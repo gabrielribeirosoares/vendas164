@@ -25,6 +25,15 @@ export function updateAppFavicon(iconUrl: string | null | undefined) {
   link.type = iconUrl.endsWith(".ico") ? "image/x-icon" : "image/png";
   link.href = iconUrl;
   document.head.appendChild(link);
+
+  let ogMeta = document.querySelector<HTMLMetaElement>("meta[property='og:image']");
+  if (ogMeta) {
+    ogMeta.setAttribute("content", iconUrl);
+  }
+  let twMeta = document.querySelector<HTMLMetaElement>("meta[name='twitter:image']");
+  if (twMeta) {
+    twMeta.setAttribute("content", iconUrl);
+  }
 }
 
 interface AppHeaderProps {
@@ -88,51 +97,54 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-        <Link to="/" className="flex items-center gap-2.5">
+        <Link to="/" className="flex items-center gap-2 min-w-0">
           {currentStore ? (
             <>
               {currentStore.logo_url ? (
                 <img
                   src={currentStore.logo_url}
                   alt={currentStore.name}
-                  className="size-9 rounded-xl object-cover border border-border/50"
+                  className="size-8 sm:size-9 rounded-xl object-cover border border-border/50 shrink-0"
                 />
               ) : (
                 <span
-                  className="flex size-9 items-center justify-center rounded-xl font-bold text-white text-sm"
+                  className="flex size-8 sm:size-9 items-center justify-center rounded-xl font-bold text-white text-xs sm:text-sm shrink-0"
                   style={{ backgroundColor: currentStore.primary_color || "#e11d48" }}
                 >
                   {currentStore.name ? currentStore.name[0].toUpperCase() : "L"}
                 </span>
               )}
-              <span className="font-display text-lg font-bold tracking-tight">
+              <span className="font-display text-sm sm:text-lg font-bold tracking-tight truncate max-w-[90px] xs:max-w-[120px] sm:max-w-xs">
                 {currentStore.name}
               </span>
             </>
           ) : (
             <>
-              <span className="flex size-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
-                <Car className="size-5" />
+              <span className="flex size-8 sm:size-9 items-center justify-center rounded-xl bg-primary/15 text-primary shrink-0">
+                <Car className="size-4 sm:size-5" />
               </span>
-              <span className="font-display text-lg font-bold tracking-tight">MiniPré</span>
+              <span className="font-display text-base sm:text-lg font-bold tracking-tight">MiniPré</span>
             </>
           )}
         </Link>
 
-        <nav className="flex items-center gap-1.5">
+        <nav className="flex items-center gap-0.5 sm:gap-1.5">
           {!loading && user ? (
             <>
-              <Button asChild variant="ghost" size="sm">
-                <Link to="/painel">Minhas reservas</Link>
+              <Button asChild variant="ghost" size="sm" className="px-1.5 sm:px-3 text-xs sm:text-sm">
+                <Link to="/painel">
+                  <span className="hidden sm:inline">Minhas reservas</span>
+                  <span className="sm:hidden">Reservas</span>
+                </Link>
               </Button>
 
               {myLinkedStores && myLinkedStores.length > 0 && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="gap-1">
-                      <StoreIcon className="size-4 text-primary" />
+                    <Button variant="ghost" size="sm" className="gap-1 px-1.5 sm:px-3 text-xs sm:text-sm">
+                      <StoreIcon className="size-3.5 sm:size-4 text-primary" />
                       <span>Lojas</span>
-                      <ChevronDown className="size-3.5 opacity-60" />
+                      <ChevronDown className="size-3 opacity-60" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
@@ -154,21 +166,24 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                 </DropdownMenu>
               )}
 
-              <Button asChild variant="secondary" size="sm">
-                <Link to="/vendedor">Minha loja</Link>
+              <Button asChild variant="secondary" size="sm" className="px-1.5 sm:px-3 text-xs sm:text-sm">
+                <Link to="/vendedor">
+                  <span className="hidden sm:inline">Minha loja</span>
+                  <span className="sm:hidden">Loja</span>
+                </Link>
               </Button>
 
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setProfileOpen(true)}
-                className="gap-1.5"
+                className="gap-1 px-1.5 sm:px-3 text-xs sm:text-sm"
               >
-                <User className="size-4 text-primary" />
-                <span>Perfil</span>
+                <User className="size-3.5 sm:size-4 text-primary" />
+                <span className="hidden sm:inline">Perfil</span>
               </Button>
 
-              <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sair">
+              <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sair" className="size-8 sm:size-9">
                 <LogOut className="size-4" />
               </Button>
 
