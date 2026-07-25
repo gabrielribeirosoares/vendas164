@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AppHeader } from "@/components/AppHeader";
+import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,13 +21,13 @@ export const Route = createFileRoute("/auth")({
   }),
   head: () => ({
     meta: [
-      { title: "Entrar ou criar conta — MiniPré" },
+      { title: "Entrar ou criar conta" },
       {
         name: "description",
-        content: "Acesse sua conta MiniPré para reservar miniaturas ou gerenciar sua loja.",
+        content: "Acesse sua conta para reservar miniaturas ou gerenciar sua loja.",
       },
-      { property: "og:title", content: "Entrar ou criar conta — MiniPré" },
-      { property: "og:description", content: "Acesse sua conta MiniPré." },
+      { property: "og:title", content: "Entrar ou criar conta" },
+      { property: "og:description", content: "Acesse sua conta." },
     ],
   }),
   component: AuthPage,
@@ -39,6 +40,32 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+
+  const { data: invitedStore } = useQuery({
+    queryKey: ["invited-store", search.loja, search.next],
+    enabled: !!(search.loja || search.next?.startsWith("/loja/")),
+    queryFn: async () => {
+      if (search.loja) {
+        const { data } = await supabase
+          .from("stores")
+          .select("*")
+          .eq("id", search.loja)
+          .maybeSingle();
+        if (data) return data;
+      }
+      if (search.next?.startsWith("/loja/")) {
+        const slug = search.next.replace("/loja/", "").split("?")[0];
+        const { data } = await supabase
+          .from("stores")
+          .select("*")
+          .eq("slug", slug)
+          .maybeSingle();
+        if (data) return data;
+      }
+      return null;
+    },
+  });
 
   useEffect(() => {
     if (search.loja) {
@@ -46,14 +73,42 @@ function AuthPage() {
     }
   }, [search.loja]);
 
+  useEffect(() => {
+    if (invitedStore?.name) {
+      document.title = `Acesse ${invitedStore.name}`;
+      const icon = invitedStore.favicon_url || invitedStore.logo_url;
+      if (icon) {
+        updateAppFavicon(icon);
+      }
+    }
+  }, [invitedStore]);
+
   async function finish() {
     const { data } = await supabase.auth.getUser();
     const user = data.user;
     const storeId = search.loja ?? window.sessionStorage.getItem("pending_store_link");
+    
+    // Vincular cliente à loja (tanto no cadastro quanto no login)
     if (user && storeId) {
-      await supabase.from("customer_store_link").insert({ user_id: user.id, store_id: storeId });
+      await supabase.from("customer_store_link").upsert(
+        { user_id: user.id, store_id: storeId },
+        { onConflict: "user_id,store_id" }
+      );
       window.sessionStorage.removeItem("pending_store_link");
     }
+
+    // Salvar/Atualizar perfil com Nome e WhatsApp
+    if (user) {
+      const cleanPhone = phone.trim() || user.user_metadata?.phone || null;
+      const cleanName = name.trim() || user.user_metadata?.name || "Cliente";
+      await supabase.from("profiles").upsert({
+        id: user.id,
+        name: cleanName,
+        email: user.email,
+        phone: cleanPhone,
+      });
+    }
+
     const dest = search.next ?? (search.produto ? `/produto/${search.produto}` : "/painel");
     navigate({ to: dest, replace: true });
   }
@@ -70,11 +125,17 @@ function AuthPage() {
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
+    if (!phone.trim()) {
+      return toast.error("Por favor, informe seu número de WhatsApp.");
+    }
     setLoading(true);
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name }, emailRedirectTo: window.location.origin },
+      options: {
+        data: { name, phone },
+        emailRedirectTo: window.location.origin,
+      },
     });
     setLoading(false);
     if (error) return toast.error(error.message);
@@ -98,15 +159,19 @@ function AuthPage() {
 
   return (
     <div className="min-h-screen">
-      <AppHeader />
+      <AppHeader store={invitedStore} />
       <main className="hero-surface flex min-h-[calc(100vh-4rem)] items-start justify-center px-4 py-12">
         <Card className="w-full max-w-md panel border-border/60">
           <CardHeader>
-            <CardTitle className="text-2xl">Acesse a MiniPré</CardTitle>
+            <CardTitle className="text-2xl">
+              {invitedStore?.name ? `Acesse ${invitedStore.name}` : "Acesse a MiniPré"}
+            </CardTitle>
             <CardDescription>
-              {search.loja
-                ? "Você foi convidado por uma loja. Ao criar sua conta ela ficará vinculada automaticamente."
-                : "Reserve miniaturas ou gerencie sua loja."}
+              {invitedStore?.name
+                ? `Você foi convidado por ${invitedStore.name}. Ao criar sua conta ela ficará vinculada automaticamente.`
+                : search.loja
+                  ? "Você foi convidado por uma loja. Ao criar sua conta ela ficará vinculada automaticamente."
+                  : "Reserve miniaturas ou gerencie sua loja."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -147,13 +212,25 @@ function AuthPage() {
               <TabsContent value="signup">
                 <form onSubmit={handleSignup} className="space-y-4 pt-4">
                   <div className="space-y-2">
-                    <Label htmlFor="signup-name">Nome</Label>
+                    <Label htmlFor="signup-name">Nome completo</Label>
                     <Input
                       id="signup-name"
                       required
                       maxLength={80}
                       value={name}
                       onChange={(e) => setName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-phone">WhatsApp (com DDD)</Label>
+                    <Input
+                      id="signup-phone"
+                      type="tel"
+                      required
+                      placeholder="Ex: 11999999999"
+                      maxLength={20}
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">

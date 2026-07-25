@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Loader2, Palette, Pencil, Share2, Trash2 } from "lucide-react";
+import { Copy, Loader2, MessageCircle, Palette, Pencil, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { PaymentBadge } from "@/components/StatusBadge";
@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, slugify } from "@/lib/format";
+import { brl, slugify, whatsappLink } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { uploadImage } from "@/lib/upload";
 import type { Tables } from "@/integrations/supabase/types";
@@ -844,7 +844,7 @@ function EditProductDialog({
 
 type OrderRow = Tables<"orders"> & {
   products: { brand: string; model: string } | null;
-  profiles: { name: string | null; email: string | null } | null;
+  profiles: { name: string | null; email: string | null; phone: string | null } | null;
 };
 
 const PAGE_SIZE = 8;
@@ -914,6 +914,17 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
                 <TableRow key={o.id}>
                   <TableCell className="whitespace-nowrap">
                     <p className="font-medium">{o.profiles?.name || "Cliente"}</p>
+                    {o.profiles?.phone && (
+                      <a
+                        href={whatsappLink(o.profiles.phone, `Olá ${o.profiles.name || ""}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-0.5 flex items-center gap-1 text-xs text-success hover:underline font-mono"
+                      >
+                        <MessageCircle className="size-3" />
+                        {o.profiles.phone}
+                      </a>
+                    )}
                     <p className="text-xs text-muted-foreground">#{o.id.slice(0, 8)}</p>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
