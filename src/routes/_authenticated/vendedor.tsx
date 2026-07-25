@@ -500,8 +500,12 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
   const pages = Math.max(1, Math.ceil(orders.length / PAGE_SIZE));
   const rows = orders.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
-  async function update(id: string, patch: Record<string, unknown>) {
+  async function update(
+    id: string,
+    patch: Partial<Pick<Tables<"orders">, "down_payment" | "payment_status" | "delivery_status">>,
+  ) {
     const { error } = await supabase.from("orders").update(patch).eq("id", id);
+
     if (error) return toast.error("Não foi possível atualizar a reserva.");
     queryClient.invalidateQueries();
     toast.success("Reserva atualizada.");
