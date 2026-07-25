@@ -55,7 +55,7 @@ type Store = Tables<"stores">;
 type Product = Tables<"products">;
 
 function SellerDashboard() {
-  const { user } = useSession();
+  const { user, loading: sessionLoading } = useSession();
   const queryClient = useQueryClient();
 
   const { data: store, isLoading } = useQuery({
@@ -106,7 +106,6 @@ function SellerDashboard() {
     },
   });
 
-
   const totals = useMemo(() => {
     const active = (orders ?? []).filter((o) => o.payment_status !== "cancelado");
     const projected = active.reduce((s, o) => s + Number(o.total_price), 0);
@@ -114,7 +113,7 @@ function SellerDashboard() {
     return { projected, received, pending: projected - received };
   }, [orders]);
 
-  if (isLoading) {
+  if (sessionLoading || isLoading) {
     return (
       <div className="min-h-screen">
         <AppHeader />
@@ -123,11 +122,22 @@ function SellerDashboard() {
     );
   }
 
+  if (!user) {
+    return (
+      <div className="min-h-screen">
+        <AppHeader />
+        <p className="p-8 text-center text-sm text-muted-foreground">
+          Sessão não encontrada. Por favor, faça login novamente.
+        </p>
+      </div>
+    );
+  }
+
   if (!store) {
     return (
       <div className="min-h-screen">
         <AppHeader />
-        <CreateStore onCreated={() => queryClient.invalidateQueries()} userId={user!.id} />
+        <CreateStore onCreated={() => queryClient.invalidateQueries()} userId={user.id} />
       </div>
     );
   }

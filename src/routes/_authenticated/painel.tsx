@@ -28,9 +28,9 @@ export const Route = createFileRoute("/_authenticated/painel")({
 });
 
 function CustomerDashboard() {
-  const { user } = useSession();
+  const { user, loading: sessionLoading } = useSession();
 
-  const { data: orders } = useQuery({
+  const { data: orders, isLoading: ordersLoading } = useQuery({
     queryKey: ["my-orders", user?.id],
     enabled: !!user,
     queryFn: async () => {
@@ -79,6 +79,26 @@ function CustomerDashboard() {
   const active = (orders ?? []).filter((o) => o.payment_status !== "cancelado");
   const total = active.reduce((s, o) => s + Number(o.total_price), 0);
   const paid = active.reduce((s, o) => s + Number(o.down_payment), 0);
+
+  if (sessionLoading || ordersLoading) {
+    return (
+      <div className="min-h-screen">
+        <AppHeader />
+        <p className="p-8 text-center text-sm text-muted-foreground">Carregando…</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen">
+        <AppHeader />
+        <p className="p-8 text-center text-sm text-muted-foreground">
+          Sessão não encontrada. Por favor, faça login novamente.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
