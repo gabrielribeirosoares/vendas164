@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Loader2, Palette, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { AppHeader } from "@/components/AppHeader";
+import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { PaymentBadge } from "@/components/StatusBadge";
 import { Countdown } from "@/components/Countdown";
 import { Button } from "@/components/ui/button";
@@ -145,7 +145,7 @@ function SellerDashboard() {
 
   return (
     <div className="min-h-screen">
-      <AppHeader />
+      <AppHeader store={store} />
       <main className="mx-auto max-w-6xl px-4 py-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -704,6 +704,7 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
       .eq("id", store.id);
     setSaving(false);
     if (error) return toast.error("Não foi possível salvar.");
+    updateAppFavicon(logo);
     queryClient.invalidateQueries();
     toast.success("Identidade da loja atualizada!");
   }
@@ -713,6 +714,7 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
       const url = await uploadImage(userId, file);
       // Atualiza tanto o logo quanto o favicon automaticamente com a mesma imagem
       setForm((f) => ({ ...f, logo_url: url, favicon_url: url }));
+      updateAppFavicon(url);
       toast.success("Logotipo enviado! (definido como favicon)");
     } catch {
       toast.error("Falha ao enviar o logotipo.");

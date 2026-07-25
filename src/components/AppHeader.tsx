@@ -1,14 +1,60 @@
+import { useEffect } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Car, LogOut } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/lib/session";
 
-export function AppHeader() {
+export function updateAppFavicon(iconUrl: string | null | undefined) {
+  if (!iconUrl || typeof document === "undefined") return;
+  const existingLinks = document.querySelectorAll<HTMLLinkElement>(
+    "link[rel*='icon'], link[rel='shortcut icon']"
+  );
+  existingLinks.forEach((el) => el.remove());
+
+  const link = document.createElement("link");
+  link.rel = "icon";
+  link.type = iconUrl.endsWith(".ico") ? "image/x-icon" : "image/png";
+  link.href = iconUrl;
+  document.head.appendChild(link);
+}
+
+interface AppHeaderProps {
+  store?: {
+    name: string;
+    logo_url?: string | null;
+    favicon_url?: string | null;
+    primary_color?: string | null;
+  } | null;
+}
+
+export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
   const { user, loading } = useSession();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  const { data: myStore } = useQuery({
+    queryKey: ["my-store-header", user?.id],
+    enabled: !!user && propStore === undefined,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("stores")
+        .select("name, logo_url, favicon_url, primary_color")
+        .eq("owner_id", user!.id)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  const currentStore = propStore !== undefined ? propStore : myStore;
+
+  useEffect(() => {
+    const icon = currentStore?.favicon_url || currentStore?.logo_url;
+    if (icon) {
+      updateAppFavicon(icon);
+    }
+  }, [currentStore?.favicon_url, currentStore?.logo_url]);
 
   async function signOut() {
     await queryClient.cancelQueries();
@@ -20,11 +66,35 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-        <Link to="/" className="flex items-center gap-2">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
-            <Car className="size-5" />
-          </span>
-          <span className="font-display text-lg font-bold tracking-tight">MiniPré</span>
+        <Link to="/" className="flex items-center gap-2.5">
+          {currentStore ? (
+            <>
+              {currentStore.logo_url ? (
+                <img
+                  src={currentStore.logo_url}
+                  alt={currentStore.name}
+                  className="size-9 rounded-xl object-cover border border-border/50"
+                />
+              ) : (
+                <span
+                  className="flex size-9 items-center justify-center rounded-xl font-bold text-white text-sm"
+                  style={{ backgroundColor: currentStore.primary_color || "#e11d48" }}
+                >
+                  {currentStore.name ? currentStore.name[0].toUpperCase() : "L"}
+                </span>
+              )}
+              <span className="font-display text-lg font-bold tracking-tight">
+                {currentStore.name}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="flex size-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                <Car className="size-5" />
+              </span>
+              <span className="font-display text-lg font-bold tracking-tight">MiniPré</span>
+            </>
+          )}
         </Link>
 
         <nav className="flex items-center gap-1.5">

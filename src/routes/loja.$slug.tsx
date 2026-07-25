@@ -3,7 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Package, Store as StoreIcon } from "lucide-react";
 import { toast } from "sonner";
-import { AppHeader } from "@/components/AppHeader";
+import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,14 +53,9 @@ function StorePage() {
 
   useEffect(() => {
     const iconUrl = data?.store?.favicon_url || data?.store?.logo_url;
-    if (!iconUrl) return;
-    let link = document.querySelector<HTMLLinkElement>("link[rel*='icon']");
-    if (!link) {
-      link = document.createElement("link");
-      link.rel = "shortcut icon";
-      document.head.appendChild(link);
+    if (iconUrl) {
+      updateAppFavicon(iconUrl);
     }
-    link.href = iconUrl;
   }, [data?.store]);
 
   async function follow() {
@@ -105,7 +100,7 @@ function StorePage() {
 
   return (
     <div className="min-h-screen">
-      <AppHeader />
+      <AppHeader store={store} />
       <main className="mx-auto max-w-6xl px-4 py-10">
         <div
           className="rounded-3xl border border-border/60 p-6 panel"
