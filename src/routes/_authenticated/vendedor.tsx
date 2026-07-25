@@ -1016,8 +1016,8 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
       </div>
 
       <CardContent className="p-0">
-        {/* VISÃO PARA CELULAR (CARDS EMPILHADOS SEM ROLAGEM LATERAL) */}
-        <div className="md:hidden divide-y divide-border/60">
+        {/* VISÃO PARA CELULAR (CARDS INDIVIDUAIS COM ESPAÇAMENTO CLARO) */}
+        <div className="md:hidden space-y-4 p-4 bg-muted/20">
           {rows.map((o) => {
             const displayName =
               o.profiles?.name && o.profiles.name !== "Cliente"
@@ -1027,7 +1027,7 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
                   : "Cliente";
 
             return (
-              <div key={o.id} className="p-4 space-y-3">
+              <div key={o.id} className="rounded-2xl border border-border/70 bg-card p-4 space-y-3.5 shadow-sm">
                 {/* Cliente e WhatsApp */}
                 <div className="flex items-start justify-between gap-2">
                   <div>
