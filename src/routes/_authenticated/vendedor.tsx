@@ -227,11 +227,28 @@ function CreateStore({ userId, onCreated }: { userId: string; onCreated: () => v
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    const cleanName = name.trim();
+    const cleanSlug = slugify(cleanName);
+    if (!cleanSlug) return toast.error("Por favor, insira um nome válido para a loja.");
+
     setSaving(true);
+
+    // Verificar se já existe uma loja cadastrada com o mesmo slug
+    const { data: existing } = await supabase
+      .from("stores")
+      .select("id")
+      .eq("slug", cleanSlug)
+      .maybeSingle();
+
+    if (existing) {
+      setSaving(false);
+      return toast.error("Já existe uma loja cadastrada com este nome. Por favor, escolha outro nome para sua loja.");
+    }
+
     const { error } = await supabase.from("stores").insert({
       owner_id: userId,
-      name: name.trim(),
-      slug: `${slugify(name)}-${Math.random().toString(36).slice(2, 6)}`,
+      name: cleanName,
+      slug: cleanSlug,
       whatsapp_number: whatsapp.trim(),
       description: description.trim() || null,
     });
@@ -689,17 +706,36 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    const cleanName = form.name.trim();
+    const cleanSlug = slugify(cleanName);
+    if (!cleanSlug) return toast.error("Por favor, insira um nome válido para a loja.");
+
     setSaving(true);
+
+    // Verificar se já existe OUTRA loja cadastrada com o mesmo slug
+    const { data: existing } = await supabase
+      .from("stores")
+      .select("id")
+      .eq("slug", cleanSlug)
+      .neq("id", store.id)
+      .maybeSingle();
+
+    if (existing) {
+      setSaving(false);
+      return toast.error("Já existe uma loja cadastrada com este nome. Por favor, escolha outro nome para sua loja.");
+    }
+
     const logo = form.logo_url.trim() || null;
     const { error } = await supabase
       .from("stores")
       .update({
-        name: form.name.trim(),
+        name: cleanName,
+        slug: cleanSlug,
         description: form.description.trim() || null,
         whatsapp_number: form.whatsapp_number.trim() || null,
         primary_color: form.primary_color,
         logo_url: logo,
-        favicon_url: logo, // O favicon é sempre o mesmo que o logotipo
+        favicon_url: logo,
       })
       .eq("id", store.id);
     setSaving(false);
