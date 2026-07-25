@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Loader2, Share2, Trash2 } from "lucide-react";
+import { Copy, Loader2, Palette, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { PaymentBadge } from "@/components/StatusBadge";
@@ -57,6 +57,7 @@ type Product = Tables<"products">;
 function SellerDashboard() {
   const { user, loading: sessionLoading } = useSession();
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("produtos");
 
   const { data: store, isLoading } = useQuery({
     queryKey: ["my-store", user?.id],
@@ -151,17 +152,26 @@ function SellerDashboard() {
             <h1 className="text-2xl font-bold">{store.name}</h1>
             <p className="text-sm text-muted-foreground">/loja/{store.slug}</p>
           </div>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              navigator.clipboard.writeText(
-                `${window.location.origin}/auth?loja=${store.id}&next=/loja/${store.slug}`,
-              );
-              toast.success("Link de convite da loja copiado!");
-            }}
-          >
-            <Copy className="size-4" /> Link de convite
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={activeTab === "loja" ? "default" : "outline"}
+              className="gap-2"
+              onClick={() => setActiveTab("loja")}
+            >
+              <Palette className="size-4" /> Personalizar Loja
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                navigator.clipboard.writeText(
+                  `${window.location.origin}/auth?loja=${store.id}&next=/loja/${store.slug}`,
+                );
+                toast.success("Link de convite da loja copiado!");
+              }}
+            >
+              <Copy className="size-4" /> Link de convite
+            </Button>
+          </div>
         </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
@@ -170,11 +180,13 @@ function SellerDashboard() {
           <Stat label="Saldo a receber" value={brl(totals.pending)} accent="text-warning" />
         </div>
 
-        <Tabs defaultValue="produtos" className="mt-8">
-          <TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-8">
+          <TabsList className="flex-wrap">
             <TabsTrigger value="produtos">Estoque e pré-vendas</TabsTrigger>
             <TabsTrigger value="reservas">Reservas</TabsTrigger>
-            <TabsTrigger value="loja">Personalização</TabsTrigger>
+            <TabsTrigger value="loja" className="gap-1.5">
+              <Palette className="size-3.5" /> Personalização
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="produtos" className="mt-4">
@@ -671,13 +683,14 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
     whatsapp_number: store.whatsapp_number ?? "",
     primary_color: store.primary_color || "#e11d48",
     logo_url: store.logo_url ?? "",
-    favicon_url: store.favicon_url ?? "",
+    favicon_url: store.logo_url ?? store.favicon_url ?? "",
   });
   const [saving, setSaving] = useState(false);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
+    const logo = form.logo_url.trim() || null;
     const { error } = await supabase
       .from("stores")
       .update({
@@ -685,8 +698,8 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
         description: form.description.trim() || null,
         whatsapp_number: form.whatsapp_number.trim() || null,
         primary_color: form.primary_color,
-        logo_url: form.logo_url || null,
-        favicon_url: form.favicon_url || null,
+        logo_url: logo,
+        favicon_url: logo, // O favicon é sempre o mesmo que o logotipo
       })
       .eq("id", store.id);
     setSaving(false);
@@ -695,13 +708,14 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
     toast.success("Identidade da loja atualizada!");
   }
 
-  async function onFile(file: File, field: "logo_url" | "favicon_url") {
+  async function onLogoFile(file: File) {
     try {
       const url = await uploadImage(userId, file);
-      setForm((f) => ({ ...f, [field]: url }));
-      toast.success("Imagem enviada!");
+      // Atualiza tanto o logo quanto o favicon automaticamente com a mesma imagem
+      setForm((f) => ({ ...f, logo_url: url, favicon_url: url }));
+      toast.success("Logotipo enviado! (definido como favicon)");
     } catch {
-      toast.error("Falha ao enviar a imagem.");
+      toast.error("Falha ao enviar o logotipo.");
     }
   }
 
@@ -793,39 +807,31 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="b-logo">Logotipo da Loja</Label>
-                <Input
-                  id="b-logo"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0], "logo_url")}
-                />
-                {form.logo_url && (
+            {/* SEÇÃO DE LOGOTIPO E FAVICON */}
+            <div className="space-y-2">
+              <Label htmlFor="b-logo">Logotipo da Loja (também usado como Favicon)</Label>
+              <p className="text-xs text-muted-foreground">
+                A imagem enviada aqui será usada como a foto/logo da sua loja e como ícone (favicon) na aba do navegador.
+              </p>
+              <Input
+                id="b-logo"
+                type="file"
+                accept="image/*"
+                onChange={(e) => e.target.files?.[0] && onLogoFile(e.target.files[0])}
+              />
+              {form.logo_url && (
+                <div className="mt-3 flex items-center gap-3">
                   <img
                     src={form.logo_url}
-                    alt="Prévia do logo"
-                    className="mt-2 size-12 rounded-lg object-cover border border-border"
+                    alt="Prévia do logotipo"
+                    className="size-14 rounded-xl object-cover border border-border shadow-sm"
                   />
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="b-fav">Favicon</Label>
-                <Input
-                  id="b-fav"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0], "favicon_url")}
-                />
-                {form.favicon_url && (
-                  <img
-                    src={form.favicon_url}
-                    alt="Prévia do favicon"
-                    className="mt-2 size-8 rounded object-cover border border-border"
-                  />
-                )}
-              </div>
+                  <div className="text-xs text-muted-foreground">
+                    <p className="font-semibold text-foreground">Logotipo ativo</p>
+                    <p>Aplicado automaticamente à loja e como ícone do navegador (favicon).</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <Button type="submit" disabled={saving} className="w-full sm:w-auto">

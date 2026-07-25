@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Package, Store as StoreIcon } from "lucide-react";
@@ -49,6 +50,18 @@ function StorePage() {
       return { store, products: products ?? [] };
     },
   });
+
+  useEffect(() => {
+    const iconUrl = data?.store?.favicon_url || data?.store?.logo_url;
+    if (!iconUrl) return;
+    let link = document.querySelector<HTMLLinkElement>("link[rel*='icon']");
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "shortcut icon";
+      document.head.appendChild(link);
+    }
+    link.href = iconUrl;
+  }, [data?.store]);
 
   async function follow() {
     if (!data?.store) return;
