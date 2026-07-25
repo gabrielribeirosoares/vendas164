@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { MessageCircle, Package, Store as StoreIcon } from "lucide-react";
@@ -15,13 +16,13 @@ import { useSession } from "@/lib/session";
 export const Route = createFileRoute("/_authenticated/painel")({
   head: () => ({
     meta: [
-      { title: "Minhas reservas — MiniPré" },
+      { title: "Minhas reservas" },
       {
         name: "description",
         content: "Acompanhe suas reservas de miniaturas, sinais pagos, saldo devedor e prazos.",
       },
-      { property: "og:title", content: "Minhas reservas — MiniPré" },
-      { property: "og:description", content: "Painel do colecionador na MiniPré." },
+      { property: "og:title", content: "Minhas reservas" },
+      { property: "og:description", content: "Painel do colecionador." },
     ],
   }),
   component: CustomerDashboard,
@@ -43,6 +44,15 @@ function CustomerDashboard() {
       return data;
     },
   });
+
+  useEffect(() => {
+    const storeName = orders?.[0]?.stores?.name;
+    if (storeName) {
+      document.title = `${storeName} — Minhas reservas`;
+    } else {
+      document.title = "Minhas reservas";
+    }
+  }, [orders]);
 
   const { data: feed } = useQuery({
     queryKey: ["followed-feed", user?.id],

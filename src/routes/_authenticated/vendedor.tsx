@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Loader2, Palette, Share2, Trash2 } from "lucide-react";
+import { Copy, Loader2, Palette, Pencil, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { PaymentBadge } from "@/components/StatusBadge";
@@ -13,6 +13,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -38,13 +44,13 @@ import type { Tables } from "@/integrations/supabase/types";
 export const Route = createFileRoute("/_authenticated/vendedor")({
   head: () => ({
     meta: [
-      { title: "Painel do lojista — MiniPré" },
+      { title: "Painel do lojista" },
       {
         name: "description",
         content:
           "Gerencie pré-vendas, cotas, sinais recebidos, saldo a receber e a identidade da sua loja.",
       },
-      { property: "og:title", content: "Painel do lojista — MiniPré" },
+      { property: "og:title", content: "Painel do lojista" },
       { property: "og:description", content: "Gestão completa de pré-vendas de miniaturas." },
     ],
   }),
@@ -91,12 +97,21 @@ function SellerDashboard() {
     queryKey: ["store-orders", store?.id],
     enabled: !!store,
     queryFn: async (): Promise<OrderRow[]> => {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("orders")
-        .select("*, products(brand, model)")
+        .select("*, products(brand, model, price, down_payment_amount)")
         .eq("store_id", store!.id)
         .order("created_at", { ascending: false });
-      if (error) throw error;
+
+      if (error) {
+        const fallback = await supabase
+          .from("orders")
+          .select("*, products(brand, model, price)")
+          .eq("store_id", store!.id)
+          .order("created_at", { ascending: false });
+        data = fallback.data;
+        if (fallback.error) throw fallback.error;
+      }
       const rows = data ?? [];
       const userIds = [...new Set(rows.map((r) => r.user_id))];
       const { data: people } = userIds.length
@@ -113,6 +128,18 @@ function SellerDashboard() {
     const received = active.reduce((s, o) => s + Number(o.down_payment), 0);
     return { projected, received, pending: projected - received };
   }, [orders]);
+
+  useEffect(() => {
+    if (store?.name) {
+      if (activeTab === "reservas") {
+        document.title = `${store.name} — Reservas`;
+      } else if (activeTab === "loja") {
+        document.title = `${store.name} — Personalização`;
+      } else {
+        document.title = `${store.name} — Estoque e pré-vendas`;
+      }
+    }
+  }, [store?.name, activeTab]);
 
   if (sessionLoading || isLoading) {
     return (
@@ -310,6 +337,7 @@ const emptyProduct = {
   model: "",
   scale: "1:64",
   price: "",
+  down_payment_amount: "",
   release_date: "",
   stock: "1",
   payment_deadline_hours: "24",
@@ -328,11 +356,12 @@ function ProductsTab({
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ ...emptyProduct });
   const [saving, setSaving] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    const { error } = await supabase.from("products").insert({
+    const payload: any = {
       store_id: store.id,
       brand: form.brand.trim(),
       model: form.model.trim(),
@@ -342,7 +371,21 @@ function ProductsTab({
       stock: Number(form.stock || 0),
       payment_deadline_hours: Number(form.payment_deadline_hours),
       image_url: form.image_url || null,
-    });
+    };
+
+    if (form.down_payment_amount !== "") {
+      payload.down_payment_amount = Number(form.down_payment_amount || 0);
+    }
+
+    let { error } = await supabase.from("products").insert(payload);
+
+    // Se der erro por conta da coluna down_payment_amount não existir no Supabase ainda
+    if (error && (error.code === "PGRST204" || error.message?.includes("down_payment_amount"))) {
+      delete payload.down_payment_amount;
+      const retry = await supabase.from("products").insert(payload);
+      error = retry.error;
+    }
+
     setSaving(false);
     if (error) return toast.error("Não foi possível salvar a miniatura.");
     setForm({ ...emptyProduct });
@@ -410,17 +453,30 @@ function ProductsTab({
                 onChange={(e) => setForm({ ...form, model: e.target.value })}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               <div className="space-y-1.5">
-                <Label htmlFor="price">Preço total (R$)</Label>
+                <Label htmlFor="price">Total (R$)</Label>
                 <Input
                   id="price"
                   type="number"
                   min="0"
                   step="0.01"
                   required
+                  placeholder="240"
                   value={form.price}
                   onChange={(e) => setForm({ ...form, price: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="down_payment">Sinal (R$)</Label>
+                <Input
+                  id="down_payment"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Ex: 50"
+                  value={form.down_payment_amount}
+                  onChange={(e) => setForm({ ...form, down_payment_amount: e.target.value })}
                 />
               </div>
               <div className="space-y-1.5">
@@ -490,7 +546,12 @@ function ProductsTab({
                 </p>
                 <h3 className="font-semibold">{p.model}</h3>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                  <Badge variant="secondary">{brl(Number(p.price))}</Badge>
+                  <Badge variant="secondary">Total: {brl(Number(p.price))}</Badge>
+                  {Number((p as any).down_payment_amount) > 0 && (
+                    <Badge variant="outline" className="border-primary/40 text-primary">
+                      Sinal: {brl(Number((p as any).down_payment_amount))}
+                    </Badge>
+                  )}
                   <Badge variant="outline">{p.stock} cotas</Badge>
                 </div>
               </div>
@@ -500,8 +561,17 @@ function ProductsTab({
                   {p.is_open ? "Aberta" : "Fechada"}
                 </div>
                 <Button
+                  variant="outline"
+                  size="sm"
+                  title="Editar pré-venda"
+                  onClick={() => setEditingProduct(p)}
+                >
+                  <Pencil className="size-4" />
+                </Button>
+                <Button
                   variant="secondary"
                   size="sm"
+                  title="Copiar link"
                   onClick={() => {
                     navigator.clipboard.writeText(`${window.location.origin}/produto/${p.id}`);
                     toast.success("Link do produto copiado!");
@@ -520,7 +590,255 @@ function ProductsTab({
           <p className="text-sm text-muted-foreground">Nenhuma miniatura cadastrada ainda.</p>
         )}
       </div>
+
+      <EditProductDialog
+        product={editingProduct}
+        userId={userId}
+        onClose={() => setEditingProduct(null)}
+      />
     </div>
+  );
+}
+
+function EditProductDialog({
+  product,
+  userId,
+  onClose,
+}: {
+  product: Product | null;
+  userId: string;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState({
+    brand: "",
+    model: "",
+    scale: "1:64",
+    price: "",
+    down_payment_amount: "",
+    release_date: "",
+    stock: "1",
+    payment_deadline_hours: "24",
+    is_open: true,
+    image_url: "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (product) {
+      const rawVal = (product as any).down_payment_amount;
+      setForm({
+        brand: product.brand ?? "",
+        model: product.model ?? "",
+        scale: product.scale ?? "1:64",
+        price: product.price != null ? String(product.price) : "",
+        down_payment_amount: rawVal != null ? String(rawVal) : "",
+        release_date: product.release_date ?? "",
+        stock: product.stock != null ? String(product.stock) : "1",
+        payment_deadline_hours: product.payment_deadline_hours != null ? String(product.payment_deadline_hours) : "24",
+        is_open: product.is_open ?? true,
+        image_url: product.image_url ?? "",
+      });
+    }
+  }, [product]);
+
+  if (!product) return null;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    const payload: any = {
+      brand: form.brand.trim(),
+      model: form.model.trim(),
+      scale: form.scale,
+      price: Number(form.price || 0),
+      release_date: form.release_date || null,
+      stock: Number(form.stock || 0),
+      payment_deadline_hours: Number(form.payment_deadline_hours),
+      is_open: form.is_open,
+      image_url: form.image_url || null,
+    };
+
+    if (form.down_payment_amount !== "") {
+      payload.down_payment_amount = Number(form.down_payment_amount || 0);
+    }
+
+    let { error } = await supabase
+      .from("products")
+      .update(payload)
+      .eq("id", product.id);
+
+    // Se a coluna down_payment_amount não existir ainda na tabela products do Supabase
+    if (error && (error.code === "PGRST204" || error.message?.includes("down_payment_amount"))) {
+      delete payload.down_payment_amount;
+      const retry = await supabase.from("products").update(payload).eq("id", product.id);
+      error = retry.error;
+    }
+
+    setSaving(false);
+    if (error) return toast.error("Não foi possível salvar as alterações.");
+    queryClient.invalidateQueries();
+    toast.success("Miniatura atualizada com sucesso!");
+    onClose();
+  }
+
+  async function onFile(file: File) {
+    try {
+      const url = await uploadImage(userId, file);
+      setForm((f) => ({ ...f, image_url: url }));
+      toast.success("Foto da miniatura enviada!");
+    } catch {
+      toast.error("Falha ao enviar a foto.");
+    }
+  }
+
+  return (
+    <Dialog open={!!product} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md panel border-border/60">
+        <DialogHeader>
+          <DialogTitle>Editar pré-venda</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-3 pt-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-brand">Marca</Label>
+              <Input
+                id="edit-brand"
+                required
+                maxLength={40}
+                value={form.brand}
+                onChange={(e) => setForm({ ...form, brand: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-scale">Escala</Label>
+              <Input
+                id="edit-scale"
+                maxLength={12}
+                value={form.scale}
+                onChange={(e) => setForm({ ...form, scale: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-model">Modelo</Label>
+            <Input
+              id="edit-model"
+              required
+              maxLength={80}
+              value={form.model}
+              onChange={(e) => setForm({ ...form, model: e.target.value })}
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-price">Total (R$)</Label>
+              <Input
+                id="edit-price"
+                type="number"
+                min="0"
+                step="0.01"
+                required
+                value={form.price}
+                onChange={(e) => setForm({ ...form, price: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-down-payment">Sinal (R$)</Label>
+              <Input
+                id="edit-down-payment"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Ex: 50"
+                value={form.down_payment_amount}
+                onChange={(e) => setForm({ ...form, down_payment_amount: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-stock">Cotas</Label>
+              <Input
+                id="edit-stock"
+                type="number"
+                min="0"
+                required
+                value={form.stock}
+                onChange={(e) => setForm({ ...form, stock: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-release">Data estimada</Label>
+              <Input
+                id="edit-release"
+                type="date"
+                value={form.release_date}
+                onChange={(e) => setForm({ ...form, release_date: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Prazo do sinal</Label>
+              <Select
+                value={form.payment_deadline_hours}
+                onValueChange={(v) => setForm({ ...form, payment_deadline_hours: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="12">12 horas</SelectItem>
+                  <SelectItem value="24">24 horas</SelectItem>
+                  <SelectItem value="48">48 horas</SelectItem>
+                  <SelectItem value="72">72 horas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between py-1">
+            <Label htmlFor="edit-open">Status da pré-venda</Label>
+            <div className="flex items-center gap-2 text-xs">
+              <Switch
+                id="edit-open"
+                checked={form.is_open}
+                onCheckedChange={(checked) => setForm({ ...form, is_open: checked })}
+              />
+              {form.is_open ? "Aberta" : "Fechada"}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-photo">Foto da miniatura</Label>
+            <Input
+              id="edit-photo"
+              type="file"
+              accept="image/*"
+              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+            />
+            {form.image_url && (
+              <img
+                src={form.image_url}
+                alt="Foto da miniatura"
+                className="mt-2 h-16 w-full rounded-lg object-cover border border-border"
+              />
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving && <Loader2 className="size-4 animate-spin" />} Salvar alterações
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -548,6 +866,31 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
     if (error) return toast.error("Não foi possível atualizar a reserva.");
     queryClient.invalidateQueries();
     toast.success("Reserva atualizada.");
+  }
+
+  async function handlePaymentStatusChange(o: OrderRow, newStatus: string) {
+    let downPayment = Number(drafts[o.id] ?? o.down_payment);
+    const totalPrice = Number(o.total_price);
+    const customSignal = Number((o.products as any)?.down_payment_amount || 0);
+
+    if (newStatus === "sinal_pago") {
+      // Se houver um valor de sinal configurado no cadastro do produto, usa ele!
+      if (customSignal > 0) {
+        downPayment = customSignal;
+      } else if (downPayment === 0 && totalPrice > 0) {
+        // Senão, calcula 20% do preço total como padrão
+        downPayment = Math.round(totalPrice * 0.2 * 100) / 100;
+      }
+    } else if (newStatus === "quitado") {
+      // Se alterar para quitado, o sinal vira 100% do valor total (saldo devedor = R$ 0)
+      downPayment = totalPrice;
+    } else if (newStatus === "aguardando_sinal") {
+      // Se alterar para aguardando sinal, zera o valor pago
+      downPayment = 0;
+    }
+
+    setDrafts((prev) => ({ ...prev, [o.id]: String(downPayment) }));
+    await update(o.id, { payment_status: newStatus, down_payment: downPayment });
   }
 
   return (
@@ -606,7 +949,7 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
                       <PaymentBadge status={o.payment_status} />
                       <Select
                         value={o.payment_status}
-                        onValueChange={(v) => update(o.id, { payment_status: v })}
+                        onValueChange={(v) => handlePaymentStatusChange(o, v)}
                       >
                         <SelectTrigger className="h-8 w-40">
                           <SelectValue />
