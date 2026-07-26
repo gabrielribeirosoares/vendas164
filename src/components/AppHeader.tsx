@@ -186,7 +186,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                   <span className="hidden sm:inline">Perfil</span>
                 </Button>
 
-                <TourTriggerButton className="hidden md:inline-flex" />
+                <TourTriggerButton />
 
                 <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sair" className="size-8 sm:size-9">
                   <LogOut className="size-4" />

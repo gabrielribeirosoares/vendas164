@@ -100,21 +100,13 @@ function SellerDashboard() {
     queryKey: ["store-orders", store?.id],
     enabled: !!store,
     queryFn: async (): Promise<OrderRow[]> => {
-      let { data, error } = await supabase
+      const { data, error } = await supabase
         .from("orders")
-        .select("*, products(brand, model, price, image_url, down_payment_amount)")
+        .select("*, products(brand, model, price, image_url)")
         .eq("store_id", store!.id)
         .order("created_at", { ascending: false });
 
-      if (error) {
-        const fallback = await supabase
-          .from("orders")
-          .select("*, products(brand, model, price, image_url)")
-          .eq("store_id", store!.id)
-          .order("created_at", { ascending: false });
-        data = fallback.data;
-        if (fallback.error) throw fallback.error;
-      }
+      if (error) throw error;
       const rows = data ?? [];
       const userIds = [...new Set(rows.map((r) => r.user_id))];
       const { data: people } = userIds.length
@@ -699,6 +691,7 @@ function EditProductDialog({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!product) return;
     setSaving(true);
     const payload: any = {
       brand: form.brand.trim(),

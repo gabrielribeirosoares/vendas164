@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, MessageCircle, Package, Store as StoreIcon, User } from "lucide-react";
+import { BookmarkCheck, Loader2, MessageCircle, Package, Store as StoreIcon, User } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { PhoneInput } from "@/components/PhoneInput";
@@ -91,7 +91,7 @@ function CustomerDashboard() {
       if (ids.length === 0) return { links: [], products: [] };
       const { data: products } = await supabase
         .from("products")
-        .select("*, stores(name, slug)")
+        .select("*, stores(name, slug, primary_color)")
         .in("store_id", ids)
         .eq("is_open", true)
         .order("created_at", { ascending: false });
@@ -287,19 +287,58 @@ function CustomerDashboard() {
             </div>
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {(feed?.products ?? []).map((p) => (
+              {(feed?.products ?? []).map((p: any) => (
                 <Link key={p.id} to="/produto/$id" params={{ id: p.id }} className="group">
-                  <Card className="h-full border-border/60 panel transition-transform group-hover:-translate-y-1">
-                    <CardContent className="p-4">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        {p.brand} · {p.stores?.name}
-                      </p>
-                      <h3 className="mt-1 font-semibold">{p.model}</h3>
-                      <div className="mt-3 flex items-center justify-between">
-                        <span className="font-display font-bold text-primary">
-                          {brl(Number(p.price))}
-                        </span>
-                        <Badge variant="outline">{p.stock} cotas</Badge>
+                  <Card className="flex h-full flex-col overflow-hidden border-border/60 panel transition-transform group-hover:-translate-y-1">
+                    <div className="relative aspect-video w-full overflow-hidden bg-muted">
+                      {p.image_url ? (
+                        <img
+                          src={p.image_url}
+                          alt={`${p.brand} ${p.model}`}
+                          loading="lazy"
+                          className="h-full w-full object-cover transition-transform group-hover:scale-105 duration-300"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-muted-foreground">
+                          <Package className="size-8" />
+                        </div>
+                      )}
+                      <div
+                        className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur-md transition-transform group-hover:scale-105"
+                        style={{ backgroundColor: p.stores?.primary_color || "#e11d48" }}
+                      >
+                        <BookmarkCheck className="size-3.5" />
+                        <span>Reservar</span>
+                      </div>
+                    </div>
+
+                    <CardContent className="flex flex-1 flex-col justify-between p-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                          {p.brand} · {p.stores?.name}
+                        </p>
+                        <h3 className="mt-1 font-semibold">{p.model}</h3>
+                      </div>
+
+                      <div className="mt-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span
+                            className="font-display text-lg font-bold"
+                            style={{ color: p.stores?.primary_color || "#e11d48" }}
+                          >
+                            {brl(Number(p.price))}
+                          </span>
+                          <Badge variant="outline">{p.stock} cotas</Badge>
+                        </div>
+
+                        <Button
+                          size="sm"
+                          className="w-full font-semibold gap-1.5 shadow-md"
+                          style={{ backgroundColor: p.stores?.primary_color || "#e11d48", color: "#fff" }}
+                        >
+                          <BookmarkCheck className="size-4 shrink-0" />
+                          Reservar cota
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>

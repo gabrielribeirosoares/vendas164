@@ -19,7 +19,7 @@ export function useSession() {
 
       // Se já existe registro no banco, corrige se estiver sem e-mail ou com nome genérico "Cliente"
       if (existing) {
-        const updates: Record<string, any> = {};
+        const updates: { email?: string; name?: string; phone?: string } = {};
         if (!existing.email && u.email) {
           updates.email = u.email;
         }

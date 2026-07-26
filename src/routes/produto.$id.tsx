@@ -37,7 +37,7 @@ function ProductPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select("*, stores(id, name, slug, primary_color, whatsapp_number)")
+        .select("*, stores(id, owner_id, name, slug, primary_color, whatsapp_number)")
         .eq("id", id)
         .maybeSingle();
       if (error) throw error;

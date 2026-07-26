@@ -412,10 +412,12 @@ export function TourTriggerButton({ className }: { className?: string }) {
         variant="ghost"
         size="sm"
         onClick={() => setTourOpen(true)}
-        className={`gap-1.5 text-xs text-muted-foreground hover:text-primary ${className || ""}`}
+        className={`gap-1 px-1.5 sm:px-3 text-xs text-muted-foreground hover:text-primary ${className || ""}`}
+        title="Tour guiado"
       >
-        <HelpCircle className="size-3.5 text-primary" />
-        <span>Tour guiado</span>
+        <HelpCircle className="size-3.5 text-primary shrink-0" />
+        <span className="hidden sm:inline">Tour guiado</span>
+        <span className="sm:hidden">Tour</span>
       </Button>
       <OnboardingTour forceOpen={tourOpen} onClose={() => setTourOpen(false)} />
     </>

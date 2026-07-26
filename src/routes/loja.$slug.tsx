@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Package, Store as StoreIcon } from "lucide-react";
+import { BookmarkCheck, Check, Copy, Package, Store as StoreIcon } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { Badge } from "@/components/ui/badge";
@@ -218,33 +218,65 @@ function StorePage() {
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {products.map((p) => (
             <Link key={p.id} to="/produto/$id" params={{ id: p.id }} className="group">
-              <Card className="h-full overflow-hidden border-border/60 panel transition-transform group-hover:-translate-y-1">
-                <div className="aspect-video w-full overflow-hidden bg-muted">
+              <Card className="flex h-full flex-col overflow-hidden border-border/60 panel transition-transform group-hover:-translate-y-1">
+                <div className="relative aspect-video w-full overflow-hidden bg-muted">
                   {p.image_url ? (
                     <img
                       src={p.image_url}
                       alt={`${p.brand} ${p.model}`}
                       loading="lazy"
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-cover transition-transform group-hover:scale-105 duration-300"
                     />
                   ) : (
                     <div className="flex h-full items-center justify-center text-muted-foreground">
                       <Package className="size-8" />
                     </div>
                   )}
+                  {/* Badge flutuante de acionamento na foto */}
+                  <div
+                    className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur-md transition-transform group-hover:scale-105"
+                    style={{ backgroundColor: store.primary_color }}
+                  >
+                    <BookmarkCheck className="size-3.5" />
+                    <span>Reservar</span>
+                  </div>
                 </div>
-                <CardContent className="p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    {p.brand} · {p.scale}
-                  </p>
-                  <h3 className="mt-1 font-semibold">{p.model}</h3>
-                  <div className="mt-3 flex items-center justify-between">
-                    <span className="font-display text-lg font-bold" style={{ color: store.primary_color }}>
-                      {brl(Number(p.price))}
-                    </span>
-                    <Badge variant={p.is_open ? "secondary" : "outline"}>
-                      {p.is_open ? `${p.stock} cotas` : "Fechada"}
-                    </Badge>
+
+                <CardContent className="flex flex-1 flex-col justify-between p-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      {p.brand} · {p.scale}
+                    </p>
+                    <h3 className="mt-1 font-semibold">{p.model}</h3>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-display text-lg font-bold" style={{ color: store.primary_color }}>
+                        {brl(Number(p.price))}
+                      </span>
+                      <Badge variant={p.is_open ? "secondary" : "outline"}>
+                        {p.is_open ? `${p.stock} cotas` : "Fechada"}
+                      </Badge>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      className="w-full font-semibold gap-1.5 shadow-md"
+                      style={
+                        p.is_open && p.stock > 0
+                          ? { backgroundColor: store.primary_color, color: "#fff" }
+                          : undefined
+                      }
+                      variant={p.is_open && p.stock > 0 ? "default" : "outline"}
+                    >
+                      <BookmarkCheck className="size-4 shrink-0" />
+                      {!p.is_open
+                        ? "Pré-venda fechada"
+                        : p.stock > 0
+                          ? "Reservar cota"
+                          : "Entrar na fila"}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
