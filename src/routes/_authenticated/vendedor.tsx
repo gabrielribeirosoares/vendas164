@@ -902,9 +902,9 @@ function ManualReservationDialog({
   const [paymentStatus, setPaymentStatus] = useState("aguardando_sinal");
   const [saving, setSaving] = useState(false);
 
-  // Buscar lista de clientes cadastrados que seguem ou já reservaram nesta loja (excluindo o próprio lojista)
+  // Buscar lista de clientes que seguem ou reservaram NETA loja (excluindo o próprio lojista)
   const { data: storeCustomers } = useQuery({
-    queryKey: ["store-registered-customers", storeId, currentUser?.id],
+    queryKey: ["store-followers-customers", storeId, currentUser?.id],
     enabled: open && !!storeId,
     queryFn: async () => {
       const { data: links } = await supabase
@@ -917,48 +917,45 @@ function ManualReservationDialog({
         .select("user_id")
         .eq("store_id", storeId);
 
-      const allUserIds = Array.from(
+      const followerUserIds = Array.from(
         new Set([
           ...(links ?? []).map((l) => l.user_id),
           ...(orders ?? []).map((o) => o.user_id),
         ])
       ).filter((id) => id !== currentUser?.id);
 
-      if (!allUserIds.length) return [];
+      if (!followerUserIds.length) return [];
 
       const { data: profiles } = await supabase
         .from("profiles")
         .select("id, name, email, phone")
-        .in("id", allUserIds);
+        .in("id", followerUserIds);
 
       const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
 
-      // Mapeia todos os IDs vinculados para garantir que nenhum seguidor seja ignorado
-      return allUserIds
-        .filter((id) => id !== currentUser?.id)
-        .map((id) => {
-          const p = profileMap.get(id);
-          const rawName = p?.name?.trim();
-          const email = p?.email?.trim();
-          const phone = p?.phone?.trim();
+      return followerUserIds.map((id) => {
+        const p = profileMap.get(id);
+        const rawName = p?.name?.trim();
+        const email = p?.email?.trim();
+        const phone = p?.phone?.trim();
 
-          const isGeneric = !rawName || rawName === "Cliente" || rawName === "Cliente cadastrado";
-          const displayName = !isGeneric
-            ? rawName
-            : email
-              ? email
-              : phone
-                ? `Cliente · ${phone}`
-                : "Cliente cadastrado";
+        const isGeneric = !rawName || rawName === "Cliente" || rawName === "Cliente cadastrado";
+        const displayName = !isGeneric
+          ? rawName
+          : email
+            ? email
+            : phone
+              ? `Cliente · ${phone}`
+              : `Cliente #${id.substring(0, 4).toUpperCase()}`;
 
-          return {
-            id,
-            name: displayName,
-            rawName: rawName || "",
-            email: email || null,
-            phone: phone || null,
-          };
-        });
+        return {
+          id,
+          name: displayName,
+          rawName: rawName || "",
+          email: email || null,
+          phone: phone || null,
+        };
+      });
     },
   });
 

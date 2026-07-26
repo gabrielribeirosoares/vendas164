@@ -17,10 +17,20 @@ export function useSession() {
         .eq("id", u.id)
         .maybeSingle();
 
-      // Se já existe registro no banco, NÃO altera o telefone salvo pelo usuário!
+      // Se já existe registro no banco, corrige se estiver sem e-mail ou com nome genérico "Cliente"
       if (existing) {
+        const updates: Record<string, any> = {};
         if (!existing.email && u.email) {
-          await supabase.from("profiles").update({ email: u.email }).eq("id", u.id);
+          updates.email = u.email;
+        }
+        if (
+          (!existing.name || existing.name === "Cliente" || existing.name === "Cliente cadastrado") &&
+          u.email
+        ) {
+          updates.name = u.user_metadata?.name || u.email.split("@")[0];
+        }
+        if (Object.keys(updates).length > 0) {
+          await supabase.from("profiles").update(updates).eq("id", u.id);
         }
         return;
       }
