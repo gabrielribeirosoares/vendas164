@@ -1030,15 +1030,25 @@ function ManualReservationDialog({
       }
 
       // 4. Inserir a ordem usando o ID do lojista (evita erro 403 de RLS no console)
-      const { error: orderErr } = await supabase.from("orders").insert({
+      const orderPayload: any = {
         store_id: storeId,
         product_id: product.id,
         user_id: currentUser?.id || clientId,
         total_price: totalPrice,
         down_payment: downPayment,
         payment_status: paymentStatus,
-        pix_key: pixKey.trim() || null,
-      });
+      };
+      if (pixKey.trim()) {
+        orderPayload.pix_key = pixKey.trim();
+      }
+
+      let { error: orderErr } = await supabase.from("orders").insert(orderPayload);
+
+      if (orderErr && (orderErr.code === "PGRST204" || orderErr.message?.includes("pix_key") || (orderErr as any).status === 400)) {
+        delete orderPayload.pix_key;
+        const retry = await supabase.from("orders").insert(orderPayload);
+        orderErr = retry.error;
+      }
 
       if (orderErr) throw orderErr;
 
@@ -1950,19 +1960,30 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
     }
 
     const logo = form.logo_url.trim() || null;
-    const { error } = await supabase
+    const updatePayload: any = {
+      name: cleanName,
+      slug: cleanSlug,
+      description: form.description.trim() || null,
+      whatsapp_number: form.whatsapp_number.trim() || null,
+      primary_color: form.primary_color,
+      logo_url: logo,
+      favicon_url: logo,
+    };
+    if (form.pix_key.trim()) {
+      updatePayload.pix_key = form.pix_key.trim();
+    }
+
+    let { error } = await supabase
       .from("stores")
-      .update({
-        name: cleanName,
-        slug: cleanSlug,
-        description: form.description.trim() || null,
-        whatsapp_number: form.whatsapp_number.trim() || null,
-        pix_key: form.pix_key.trim() || null,
-        primary_color: form.primary_color,
-        logo_url: logo,
-        favicon_url: logo,
-      })
+      .update(updatePayload)
       .eq("id", store.id);
+
+    if (error && (error.code === "PGRST204" || error.message?.includes("pix_key") || (error as any).status === 400)) {
+      delete updatePayload.pix_key;
+      const retry = await supabase.from("stores").update(updatePayload).eq("id", store.id);
+      error = retry.error;
+    }
+
     setSaving(false);
     if (error) return toast.error("Não foi possível salvar.");
     updateAppFavicon(logo);
