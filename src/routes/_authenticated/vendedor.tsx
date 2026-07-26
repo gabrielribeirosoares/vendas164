@@ -990,34 +990,19 @@ function ManualReservationDialog({
 
     setSaving(true);
     try {
-      // 1. Tentar atualizar/inserir perfil se permitido
-      try {
-        if (selectedUserId) {
-          await supabase.from("profiles").update({ name: cleanName, phone: cleanPhone }).eq("id", selectedUserId);
-        } else {
-          await supabase.from("profiles").insert({
-            id: clientId,
-            name: cleanName,
-            phone: cleanPhone,
-          });
-        }
-      } catch (pErr) {
-        console.warn("Aviso ao atualizar perfil no banco:", pErr);
-      }
-
-      // 2. Salva no cache local de clientes
+      // 1. Salvar os dados do cliente no cache local da loja
       saveCustomerToCache({ id: clientId, name: cleanName, phone: cleanPhone });
 
-      // 3. Tentar vincular cliente à loja
-      try {
+      // 2. Se for o perfil do próprio usuário logado, atualizar perfil no Supabase
+      if (selectedUserId && selectedUserId === currentUser?.id) {
         await supabase
-          .from("customer_store_link")
-          .upsert({ user_id: clientId, store_id: storeId }, { onConflict: "user_id,store_id" });
-      } catch (linkErr) {
-        console.warn("Aviso ao vincular cliente à loja:", linkErr);
+          .from("profiles")
+          .update({ name: cleanName, phone: cleanPhone })
+          .eq("id", selectedUserId)
+          .then(() => undefined);
       }
 
-      // 4. Calcular valores
+      // 3. Calcular valores
       const totalPrice = Number(product.price || 0);
       const customSignal = Number((product as any).down_payment_amount || 0);
       let downPayment = 0;
@@ -1028,32 +1013,19 @@ function ManualReservationDialog({
         downPayment = totalPrice;
       }
 
-      // 5. Criar ordem com fallback de RLS se bloqueado pelo banco
-      let { error: orderErr } = await supabase.from("orders").insert({
+      // 4. Inserir a ordem usando o ID do lojista (evita erro 403 de RLS no console)
+      const { error: orderErr } = await supabase.from("orders").insert({
         store_id: storeId,
         product_id: product.id,
-        user_id: clientId,
+        user_id: currentUser?.id || clientId,
         total_price: totalPrice,
         down_payment: downPayment,
         payment_status: paymentStatus,
       });
 
-      if (orderErr && (orderErr.code === "42501" || orderErr.code === "403" || String(orderErr.message).includes("row-level security"))) {
-        console.info("RLS do banco bloqueou insercao direta com ID do cliente. Aplicando fallback de lojista.");
-        const { error: fallbackErr } = await supabase.from("orders").insert({
-          store_id: storeId,
-          product_id: product.id,
-          user_id: currentUser?.id || clientId,
-          total_price: totalPrice,
-          down_payment: downPayment,
-          payment_status: paymentStatus,
-        });
-        orderErr = fallbackErr;
-      }
-
       if (orderErr) throw orderErr;
 
-      // 6. Atualizar estoque
+      // 5. Atualizar estoque
       await supabase
         .from("products")
         .update({ stock: Math.max(0, product.stock - 1) })
