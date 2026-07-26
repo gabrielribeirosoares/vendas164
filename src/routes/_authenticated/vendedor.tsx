@@ -118,10 +118,26 @@ function SellerDashboard() {
       const rows = data ?? [];
       const userIds = [...new Set(rows.map((r) => r.user_id))];
       const { data: people } = userIds.length
-        ? await supabase.from("profiles").select("id, name, email").in("id", userIds)
+        ? await supabase.from("profiles").select("id, name, email, phone").in("id", userIds)
         : { data: [] };
       const byId = new Map((people ?? []).map((p) => [p.id, p]));
-      return rows.map((r) => ({ ...r, profiles: byId.get(r.user_id) ?? null }));
+      return rows.map((r) => {
+        const p = byId.get(r.user_id);
+        const cached = getCustomerFromCache(r.user_id);
+        const name = p?.name || cached?.name || null;
+        const email = p?.email || cached?.email || null;
+        const phone = p?.phone || cached?.phone || null;
+
+        const profileData = (p || cached)
+          ? {
+              name,
+              email,
+              phone,
+            }
+          : null;
+
+        return { ...r, profiles: profileData };
+      });
     },
   });
 
@@ -224,7 +240,7 @@ function SellerDashboard() {
           </TabsContent>
 
           <TabsContent value="reservas" className="mt-4">
-            <OrdersTab storeId={store.id} products={products ?? []} orders={orders ?? []} />
+            <OrdersTab storeId={store.id} storeColor={store.primary_color} products={products ?? []} orders={orders ?? []} />
           </TabsContent>
 
           <TabsContent value="loja" className="mt-4">
@@ -624,6 +640,7 @@ function ProductsTab({
 
       <ManualReservationDialog
         storeId={store.id}
+        storeColor={store.primary_color}
         products={products}
         open={manualDialogOpen}
         preSelectedProduct={manualReservationProduct}
@@ -880,6 +897,7 @@ function EditProductDialog({
 
 interface ManualReservationDialogProps {
   storeId: string;
+  storeColor?: string;
   products: Product[];
   open: boolean;
   onClose: () => void;
@@ -888,11 +906,13 @@ interface ManualReservationDialogProps {
 
 function ManualReservationDialog({
   storeId,
+  storeColor,
   products,
   open,
   onClose,
   preSelectedProduct,
 }: ManualReservationDialogProps) {
+  const themeColor = storeColor || "#e11d48";
   const { user: currentUser } = useSession();
   const queryClient = useQueryClient();
   const [selectedProductId, setSelectedProductId] = useState("");
@@ -902,6 +922,8 @@ function ManualReservationDialog({
   const [clientPhone, setClientPhone] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("aguardando_sinal");
   const [saving, setSaving] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
 
   // Buscar lista de clientes que seguem ou reservaram NETA loja (excluindo o próprio lojista)
   const { data: storeCustomers } = useQuery({
@@ -1112,52 +1134,124 @@ function ManualReservationDialog({
             </div>
 
             {selectedClientMode === "existing" && (
-              <Select
-                value={selectedUserId}
-                onValueChange={(val) => {
-                  setSelectedUserId(val);
-                  const found = storeCustomers?.find((c) => c.id === val);
-                  if (found) {
-                    const isGenericOrEmail = !found.rawName || found.rawName === "Cliente" || found.name.includes("@");
-                    setClientName(isGenericOrEmail ? (found.email ? found.email.split("@")[0] : "") : found.name);
-                    setClientPhone(found.phone || "");
-                  }
-                }}
-              >
-                <SelectTrigger className="w-full text-xs sm:text-sm truncate">
-                  <SelectValue placeholder="Selecione um cliente cadastrado..." className="truncate" />
-                </SelectTrigger>
-                <SelectContent className="max-w-[calc(100vw-3rem)] max-h-60">
-                  {(storeCustomers ?? []).map((c) => {
-                    const subText = c.email && c.name !== c.email
-                      ? c.email
-                      : c.phone && !c.name.includes(c.phone)
-                        ? c.phone
-                        : !c.rawName
-                          ? "Clique para definir Nome e WhatsApp"
-                          : null;
-                    return (
-                      <SelectItem key={c.id} value={c.id} className="text-xs sm:text-sm py-2">
-                        <div className="flex flex-col min-w-0 text-left">
-                          <span className="font-semibold text-foreground truncate block">
-                            {c.name}
-                          </span>
-                          {subText && (
-                            <span className={`text-[11px] truncate block ${!c.rawName ? "text-primary font-medium" : "text-muted-foreground"}`}>
-                              {subText}
-                            </span>
-                          )}
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                  {(!storeCustomers || storeCustomers.length === 0) && (
-                    <div className="p-3 text-xs text-muted-foreground text-center">
-                      Nenhum cliente cadastrado ainda nesta loja.
+              <div className="relative">
+                {/* Trigger button */}
+                <button
+                  type="button"
+                  onClick={() => { setCustomerDropdownOpen(!customerDropdownOpen); setCustomerSearch(""); }}
+                  className="flex items-center justify-between w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 min-h-[2.5rem]"
+                >
+                  {selectedUserId && storeCustomers?.find((c) => c.id === selectedUserId) ? (
+                    <div className="flex flex-col min-w-0 text-left">
+                      <span className="font-semibold text-foreground truncate block">
+                        {storeCustomers.find((c) => c.id === selectedUserId)!.name}
+                      </span>
+                      {storeCustomers.find((c) => c.id === selectedUserId)!.phone && (
+                        <span className="text-[11px] font-medium truncate block" style={{ color: themeColor }}>
+                          📱 {storeCustomers.find((c) => c.id === selectedUserId)!.phone}
+                        </span>
+                      )}
                     </div>
+                  ) : (
+                    <span className="text-muted-foreground">Selecione um cliente cadastrado...</span>
                   )}
-                </SelectContent>
-              </Select>
+                  <Search className="ml-2 size-4 shrink-0 opacity-50" />
+                </button>
+
+                {/* Dropdown */}
+                {customerDropdownOpen && (
+                  <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-md animate-in fade-in-0 zoom-in-95">
+                    {/* Search input */}
+                    <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+                      <Search className="size-4 shrink-0 text-muted-foreground" />
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="Buscar por nome, e-mail ou WhatsApp..."
+                        value={customerSearch}
+                        onChange={(e) => setCustomerSearch(e.target.value)}
+                        className="flex-1 bg-transparent text-xs sm:text-sm outline-none placeholder:text-muted-foreground"
+                      />
+                    </div>
+
+                    {/* Customer list */}
+                    <div className="max-h-52 overflow-y-auto">
+                      {(() => {
+                        const q = customerSearch.toLowerCase().trim();
+                        const filtered = (storeCustomers ?? []).filter((c) => {
+                          if (!q) return true;
+                          return (
+                            c.name.toLowerCase().includes(q) ||
+                            (c.rawName && c.rawName.toLowerCase().includes(q)) ||
+                            (c.email && c.email.toLowerCase().includes(q)) ||
+                            (c.phone && c.phone.replace(/\D/g, "").includes(q.replace(/\D/g, "")))
+                          );
+                        });
+
+                        if (filtered.length === 0) {
+                          return (
+                            <div className="p-3 text-xs text-muted-foreground text-center">
+                              {storeCustomers?.length ? "Nenhum cliente encontrado." : "Nenhum cliente cadastrado ainda nesta loja."}
+                            </div>
+                          );
+                        }
+
+                        return filtered.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedUserId(c.id);
+                              const isGenericOrEmail = !c.rawName || c.rawName === "Cliente" || c.name.includes("@");
+                              setClientName(isGenericOrEmail ? (c.email ? c.email.split("@")[0] : "") : c.name);
+                              setClientPhone(c.phone || "");
+                              setCustomerDropdownOpen(false);
+                              setCustomerSearch("");
+                            }}
+                            className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-accent/60 transition-colors ${
+                              selectedUserId === c.id ? "bg-accent" : ""
+                            }`}
+                          >
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-semibold text-foreground text-xs sm:text-sm truncate block">
+                                {c.name}
+                              </span>
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-0">
+                                {c.email && c.name !== c.email && (
+                                  <span className="text-[11px] text-muted-foreground truncate">
+                                    {c.email}
+                                  </span>
+                                )}
+                                {c.phone && (
+                                  <span className="text-[11px] font-medium truncate" style={{ color: themeColor }}>
+                                    📱 {c.phone}
+                                  </span>
+                                )}
+                                {!c.rawName && !c.phone && (
+                                  <span className="text-[11px] text-primary font-medium">
+                                    Clique para definir Nome e WhatsApp
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {selectedUserId === c.id && (
+                              <span className="text-primary text-sm">✓</span>
+                            )}
+                          </button>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
+
+                {/* Backdrop to close dropdown */}
+                {customerDropdownOpen && (
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => { setCustomerDropdownOpen(false); setCustomerSearch(""); }}
+                  />
+                )}
+              </div>
             )}
           </div>
 
@@ -1228,10 +1322,12 @@ const PAGE_SIZE = 8;
 function OrdersTab({
   orders,
   storeId,
+  storeColor,
   products = [],
 }: {
   orders: OrderRow[];
   storeId?: string;
+  storeColor?: string;
   products?: Product[];
 }) {
   const queryClient = useQueryClient();
@@ -1731,6 +1827,7 @@ function OrdersTab({
       {storeId && (
         <ManualReservationDialog
           storeId={storeId}
+          storeColor={storeColor}
           products={products}
           open={manualDialogOpen}
           onClose={() => setManualDialogOpen(false)}
