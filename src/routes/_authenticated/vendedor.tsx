@@ -939,20 +939,24 @@ function ManualReservationDialog({
         .map((id) => {
           const p = profileMap.get(id);
           const rawName = p?.name?.trim();
-          const hasRealName = rawName && rawName !== "Cliente" && rawName !== "Cliente cadastrado";
-          const cleanName = hasRealName
+          const email = p?.email?.trim();
+          const phone = p?.phone?.trim();
+
+          const isGeneric = !rawName || rawName === "Cliente" || rawName === "Cliente cadastrado";
+          const displayName = !isGeneric
             ? rawName
-            : p?.email
-              ? p.email
-              : p?.phone
-                ? `Cliente (${p.phone})`
-                : rawName || "Cliente sem nome";
+            : email
+              ? email
+              : phone
+                ? `Cliente · ${phone}`
+                : "Cliente cadastrado";
 
           return {
             id,
-            name: cleanName,
-            email: p?.email || null,
-            phone: p?.phone || null,
+            name: displayName,
+            rawName: rawName || "",
+            email: email || null,
+            phone: phone || null,
           };
         });
     },
@@ -1128,8 +1132,8 @@ function ManualReservationDialog({
                   setSelectedUserId(val);
                   const found = storeCustomers?.find((c) => c.id === val);
                   if (found) {
-                    const isGenericName = !found.name || found.name.startsWith("Cliente");
-                    setClientName(isGenericName ? "" : found.name);
+                    const isGenericOrEmail = !found.rawName || found.rawName === "Cliente" || found.name.includes("@");
+                    setClientName(isGenericOrEmail ? (found.email ? found.email.split("@")[0] : "") : found.name);
                     setClientPhone(found.phone || "");
                   }
                 }}
@@ -1139,26 +1143,19 @@ function ManualReservationDialog({
                 </SelectTrigger>
                 <SelectContent className="max-w-[calc(100vw-3rem)] max-h-60">
                   {(storeCustomers ?? []).map((c) => {
-                    const isGeneric = !c.name || c.name.startsWith("Cliente");
-                    const mainLabel = isGeneric
-                      ? c.phone
-                        ? `Cliente · ${c.phone}`
-                        : c.email
-                          ? c.email
-                          : "Cliente cadastrado"
-                      : c.name;
-                    const subInfo =
-                      !isGeneric && c.phone
-                        ? ` (${c.phone})`
-                        : !isGeneric && c.email
-                          ? ` <${c.email}>`
-                          : "";
-
+                    const subText = c.email && c.name !== c.email ? c.email : c.phone && !c.name.includes(c.phone) ? c.phone : null;
                     return (
-                      <SelectItem key={c.id} value={c.id} className="text-xs sm:text-sm">
-                        <span className="truncate block font-medium">
-                          {mainLabel}{subInfo}
-                        </span>
+                      <SelectItem key={c.id} value={c.id} className="text-xs sm:text-sm py-2">
+                        <div className="flex flex-col min-w-0 text-left">
+                          <span className="font-semibold text-foreground truncate block">
+                            {c.name}
+                          </span>
+                          {subText && (
+                            <span className="text-[11px] text-muted-foreground truncate block">
+                              {subText}
+                            </span>
+                          )}
+                        </div>
                       </SelectItem>
                     );
                   })}

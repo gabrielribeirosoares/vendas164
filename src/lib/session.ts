@@ -10,15 +10,32 @@ export function useSession() {
     let active = true;
     async function syncProfile(u: User | null | undefined) {
       if (!u) return;
-      await supabase.from("profiles").upsert(
-        {
-          id: u.id,
-          name: u.user_metadata?.name || u.email?.split("@")[0] || "Cliente",
-          email: u.email,
-          phone: u.user_metadata?.phone || null,
-        },
-        { onConflict: "id" }
-      ).then(() => undefined);
+
+      const { data: existing } = await supabase
+        .from("profiles")
+        .select("id, name, email, phone")
+        .eq("id", u.id)
+        .maybeSingle();
+
+      // Se já existe registro no banco, NÃO altera o telefone salvo pelo usuário!
+      if (existing) {
+        if (!existing.email && u.email) {
+          await supabase.from("profiles").update({ email: u.email }).eq("id", u.id);
+        }
+        return;
+      }
+
+      // Se não existe registro ainda, cria o registro inicial
+      const emailPrefix = u.email ? u.email.split("@")[0] : null;
+      const metaName = u.user_metadata?.name || u.user_metadata?.full_name;
+      const fallbackName = metaName && metaName.trim() ? metaName.trim() : (u.email || emailPrefix || "Cliente");
+
+      await supabase.from("profiles").insert({
+        id: u.id,
+        name: fallbackName,
+        email: u.email || null,
+        phone: u.user_metadata?.phone || null,
+      });
     }
 
     supabase.auth.getSession().then(({ data }) => {
