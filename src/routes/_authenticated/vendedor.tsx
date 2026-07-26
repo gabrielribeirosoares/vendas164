@@ -938,9 +938,11 @@ function ManualReservationDialog({
         .filter((id) => id !== currentUser?.id)
         .map((id) => {
           const p = profileMap.get(id);
+          const rawName = p?.name?.trim();
+          const cleanName = rawName && rawName !== "Cliente" ? rawName : (p?.email || `Cliente (${id.substring(0, 6)})`);
           return {
             id,
-            name: p?.name || p?.email?.split("@")[0] || "Cliente cadastrado",
+            name: cleanName,
             email: p?.email || null,
             phone: p?.phone || null,
           };
@@ -1130,7 +1132,7 @@ function ManualReservationDialog({
                   {(storeCustomers ?? []).map((c) => (
                     <SelectItem key={c.id} value={c.id} className="text-xs sm:text-sm">
                       <span className="truncate block font-medium">
-                        {c.name || c.email || "Cliente"} {c.phone ? `(${c.phone})` : ""}
+                        {c.name} {c.phone ? `(${c.phone})` : c.email ? `<${c.email}>` : ""}
                       </span>
                     </SelectItem>
                   ))}
