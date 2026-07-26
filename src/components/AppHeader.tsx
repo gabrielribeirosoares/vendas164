@@ -209,7 +209,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
           </nav>
         </div>
       </header>
-      <OnboardingTour />
+      <OnboardingTour userId={user?.id} />
     </>
   );
 }

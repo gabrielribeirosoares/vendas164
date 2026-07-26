@@ -110,9 +110,27 @@ interface TargetRect {
 interface OnboardingTourProps {
   forceOpen?: boolean;
   onClose?: () => void;
+  userId?: string | null;
 }
 
-export function OnboardingTour({ forceOpen, onClose }: OnboardingTourProps) {
+// Encontra o próximo passo cujo elemento de destaque EXISTE no DOM
+function findNextVisibleStep(fromStep: number): number {
+  for (let i = fromStep + 1; i < TOUR_STEPS.length; i++) {
+    const step = TOUR_STEPS[i];
+    if (!step.selector) return i; // Sem selector = sempre visível
+    if (document.querySelector(step.selector)) return i;
+  }
+  // Se não encontrar nenhum passo adiante, tenta voltar ao próprio
+  return fromStep;
+}
+
+function getTourStorageKey(userId?: string | null) {
+  // Chave POR USUÁRIO para que cada conta tenha seu próprio controle
+  if (userId) return `minipre_onboarding_completed_${userId}`;
+  return TOUR_STORAGE_KEY;
+}
+
+export function OnboardingTour({ forceOpen, onClose, userId }: OnboardingTourProps) {
   const [open, setOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
@@ -123,6 +141,8 @@ export function OnboardingTour({ forceOpen, onClose }: OnboardingTourProps) {
     transform: "translateX(-50%)",
   });
 
+  const storageKey = getTourStorageKey(userId);
+
   useEffect(() => {
     if (forceOpen) {
       setOpen(true);
@@ -130,14 +150,17 @@ export function OnboardingTour({ forceOpen, onClose }: OnboardingTourProps) {
       return;
     }
 
-    const hasCompleted = localStorage.getItem(TOUR_STORAGE_KEY);
+    // Só mostrar auto-tour se o usuário está logado
+    if (!userId) return;
+
+    const hasCompleted = localStorage.getItem(storageKey);
     if (!hasCompleted) {
       const timer = setTimeout(() => {
         setOpen(true);
       }, 1200);
       return () => clearTimeout(timer);
     }
-  }, [forceOpen]);
+  }, [forceOpen, userId, storageKey]);
 
   // Atualizar a posição do retângulo de destaque e da caixa flutuante
   useEffect(() => {
@@ -193,14 +216,22 @@ export function OnboardingTour({ forceOpen, onClose }: OnboardingTourProps) {
           width: `${cardWidth}px`,
         });
       } else {
+        // O elemento não existe no DOM (ex: botão "Lojas" não aparece se o usuário não segue nenhuma loja)
+        // Pular automaticamente para o próximo passo disponível
         setTargetRect(null);
-        setPopoverPos({
-          position: "fixed",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          width: `${Math.min(window.innerWidth - 32, 420)}px`,
-        });
+        const nextAvailable = findNextVisibleStep(currentStep);
+        if (nextAvailable !== currentStep) {
+          setCurrentStep(nextAvailable);
+        } else {
+          // Fallback: centralizar na tela se não houver mais passos
+          setPopoverPos({
+            position: "fixed",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: `${Math.min(window.innerWidth - 32, 420)}px`,
+          });
+        }
       }
     }
 
@@ -217,23 +248,29 @@ export function OnboardingTour({ forceOpen, onClose }: OnboardingTourProps) {
   }, [open, currentStep]);
 
   function handleComplete() {
-    localStorage.setItem(TOUR_STORAGE_KEY, "true");
+    localStorage.setItem(storageKey, "true");
     setOpen(false);
     setTargetRect(null);
     if (onClose) onClose();
   }
 
   function handleNext() {
-    if (currentStep < TOUR_STEPS.length - 1) {
-      setCurrentStep((prev) => prev + 1);
+    const next = findNextVisibleStep(currentStep);
+    if (next !== currentStep) {
+      setCurrentStep(next);
     } else {
       handleComplete();
     }
   }
 
   function handlePrev() {
-    if (currentStep > 0) {
-      setCurrentStep((prev) => prev - 1);
+    // Procura o passo anterior cujo elemento existe no DOM
+    for (let i = currentStep - 1; i >= 0; i--) {
+      const step = TOUR_STEPS[i];
+      if (!step.selector || document.querySelector(step.selector)) {
+        setCurrentStep(i);
+        return;
+      }
     }
   }
 
