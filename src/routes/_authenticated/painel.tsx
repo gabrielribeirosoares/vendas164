@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Copy, ExternalLink, Loader2, MessageCircle, Package, Store as StoreIcon, Truck, User } from "lucide-react";
+import { BookmarkCheck, Copy, ExternalLink, Loader2, MessageCircle, Package, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { PhoneInput } from "@/components/PhoneInput";
@@ -61,7 +61,7 @@ function CustomerDashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("*, products(brand, model, image_url), stores(name, slug, whatsapp_number)")
+        .select("*, products(brand, model, image_url), stores(name, slug, whatsapp_number, pix_key)")
         .eq("user_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -264,6 +264,30 @@ function CustomerDashboard() {
                       </Button>
                     )}
                   </div>
+
+                  {/* BLOCO DA CHAVE PIX */}
+                  {(o.pix_key || o.stores?.pix_key) && o.payment_status !== "quitado" && o.payment_status !== "cancelado" && (
+                    <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl bg-primary/10 p-3 text-xs border border-primary/20">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Wallet className="size-4 text-primary shrink-0" />
+                        <span className="font-semibold text-foreground">Chave PIX:</span>
+                        <code className="bg-background px-2.5 py-1 rounded-lg font-mono text-primary font-bold border border-border/60 select-all">
+                          {o.pix_key || o.stores?.pix_key}
+                        </code>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-7 px-3 text-[11px] font-semibold gap-1"
+                        onClick={() => {
+                          navigator.clipboard.writeText(o.pix_key || o.stores?.pix_key!);
+                          toast.success("Chave PIX copiada!");
+                        }}
+                      >
+                        <Copy className="size-3" /> Copiar PIX
+                      </Button>
+                    </div>
+                  )}
 
                   {/* BLOCO DO CÓDIGO DE RASTREIO DOS CORREIOS */}
                   {o.tracking_code && (

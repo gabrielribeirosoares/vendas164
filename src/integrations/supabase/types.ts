@@ -47,6 +47,7 @@ export type Database = {
           down_payment: number
           id: string
           payment_status: string
+          pix_key: string | null
           product_id: string
           remaining_balance: number | null
           reservation_expires_at: string | null
@@ -61,6 +62,7 @@ export type Database = {
           down_payment?: number
           id?: string
           payment_status?: string
+          pix_key?: string | null
           product_id: string
           remaining_balance?: number | null
           reservation_expires_at?: string | null
@@ -75,6 +77,7 @@ export type Database = {
           down_payment?: number
           id?: string
           payment_status?: string
+          pix_key?: string | null
           product_id?: string
           remaining_balance?: number | null
           reservation_expires_at?: string | null
@@ -186,6 +189,7 @@ export type Database = {
           logo_url: string | null
           name: string
           owner_id: string
+          pix_key: string | null
           primary_color: string
           slug: string
           whatsapp_number: string | null
@@ -198,6 +202,7 @@ export type Database = {
           logo_url?: string | null
           name: string
           owner_id: string
+          pix_key?: string | null
           primary_color?: string
           slug: string
           whatsapp_number?: string | null
@@ -210,6 +215,7 @@ export type Database = {
           logo_url?: string | null
           name?: string
           owner_id?: string
+          pix_key?: string | null
           primary_color?: string
           slug?: string
           whatsapp_number?: string | null

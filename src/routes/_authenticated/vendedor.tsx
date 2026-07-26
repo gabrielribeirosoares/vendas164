@@ -913,6 +913,7 @@ function ManualReservationDialog({
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [clientName, setClientName] = useState("");
   const [clientPhone, setClientPhone] = useState("");
+  const [pixKey, setPixKey] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("aguardando_sinal");
   const [saving, setSaving] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
@@ -1036,6 +1037,7 @@ function ManualReservationDialog({
         total_price: totalPrice,
         down_payment: downPayment,
         payment_status: paymentStatus,
+        pix_key: pixKey.trim() || null,
       });
 
       if (orderErr) throw orderErr;
@@ -1275,6 +1277,17 @@ function ManualReservationDialog({
                 Este WhatsApp está vinculado à conta cadastrada do cliente e será sincronizado no perfil dele.
               </p>
             )}
+          </div>
+
+          <div className="space-y-2 min-w-0">
+            <Label htmlFor="manual-pix-key">Chave PIX da Loja (opcional)</Label>
+            <Input
+              id="manual-pix-key"
+              placeholder="Ex: CPF, CNPJ, E-mail, Telefone ou Chave Aleatória"
+              value={pixKey}
+              onChange={(e) => setPixKey(e.target.value)}
+              className="text-xs sm:text-sm font-mono"
+            />
           </div>
 
           <div className="space-y-2 min-w-0">
@@ -1908,6 +1921,7 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
     name: store.name,
     description: store.description ?? "",
     whatsapp_number: store.whatsapp_number ?? "",
+    pix_key: (store as any).pix_key ?? "",
     primary_color: store.primary_color || "#e11d48",
     logo_url: store.logo_url ?? "",
     favicon_url: store.logo_url ?? store.favicon_url ?? "",
@@ -1943,6 +1957,7 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
         slug: cleanSlug,
         description: form.description.trim() || null,
         whatsapp_number: form.whatsapp_number.trim() || null,
+        pix_key: form.pix_key.trim() || null,
         primary_color: form.primary_color,
         logo_url: logo,
         favicon_url: logo,
@@ -2001,6 +2016,17 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
                 id="b-whats"
                 value={form.whatsapp_number}
                 onChange={(val) => setForm({ ...form, whatsapp_number: val })}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="b-pix">Chave PIX da Loja (para o cliente pagar o sinal/saldo)</Label>
+              <Input
+                id="b-pix"
+                placeholder="Ex: CPF/CNPJ, E-mail, Telefone ou Chave Aleatória"
+                value={form.pix_key}
+                onChange={(e) => setForm({ ...form, pix_key: e.target.value })}
+                className="font-mono text-xs sm:text-sm"
               />
             </div>
 
