@@ -931,7 +931,20 @@ function ManualReservationDialog({
         .select("id, name, email, phone")
         .in("id", allUserIds);
 
-      return (profiles ?? []).filter((p) => p.id !== currentUser?.id);
+      const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+
+      // Mapeia todos os IDs vinculados para garantir que nenhum seguidor seja ignorado
+      return allUserIds
+        .filter((id) => id !== currentUser?.id)
+        .map((id) => {
+          const p = profileMap.get(id);
+          return {
+            id,
+            name: p?.name || p?.email?.split("@")[0] || "Cliente cadastrado",
+            email: p?.email || null,
+            phone: p?.phone || null,
+          };
+        });
     },
   });
 

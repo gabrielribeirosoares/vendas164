@@ -98,6 +98,23 @@ function StorePage() {
           { user_id: user.id, store_id: data.store.id },
           { onConflict: "user_id,store_id" }
         );
+
+      // Garantir que a tabela profiles tem o cadastro do cliente
+      const { data: existingProf } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!existingProf) {
+        await supabase.from("profiles").upsert({
+          id: user.id,
+          name: user.user_metadata?.name || user.email?.split("@")[0] || "Cliente",
+          email: user.email,
+          phone: user.user_metadata?.phone || null,
+        });
+      }
+
       queryClient.invalidateQueries();
       toast.success("Você agora está seguindo esta loja!");
     }
