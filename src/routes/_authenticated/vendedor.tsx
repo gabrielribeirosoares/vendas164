@@ -949,7 +949,7 @@ function ManualReservationDialog({
             ? email
             : phone
               ? `Cliente · ${phone}`
-              : `Cliente (${id.substring(0, 6)})`;
+              : "Cliente sem nome registrado";
 
         return {
           id,
@@ -1138,7 +1138,13 @@ function ManualReservationDialog({
                 </SelectTrigger>
                 <SelectContent className="max-w-[calc(100vw-3rem)] max-h-60">
                   {(storeCustomers ?? []).map((c) => {
-                    const subText = c.email && c.name !== c.email ? c.email : c.phone && !c.name.includes(c.phone) ? c.phone : null;
+                    const subText = c.email && c.name !== c.email
+                      ? c.email
+                      : c.phone && !c.name.includes(c.phone)
+                        ? c.phone
+                        : !c.rawName
+                          ? "Clique para definir Nome e WhatsApp"
+                          : null;
                     return (
                       <SelectItem key={c.id} value={c.id} className="text-xs sm:text-sm py-2">
                         <div className="flex flex-col min-w-0 text-left">
@@ -1146,7 +1152,7 @@ function ManualReservationDialog({
                             {c.name}
                           </span>
                           {subText && (
-                            <span className="text-[11px] text-muted-foreground truncate block">
+                            <span className={`text-[11px] truncate block ${!c.rawName ? "text-primary font-medium" : "text-muted-foreground"}`}>
                               {subText}
                             </span>
                           )}
