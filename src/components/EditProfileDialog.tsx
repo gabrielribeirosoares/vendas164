@@ -27,7 +27,7 @@ export function EditProfileDialog({ user, open, onOpenChange }: EditProfileDialo
   const [saving, setSaving] = useState(false);
 
   const { data: profile } = useQuery({
-    queryKey: ["my-profile-dialog", user?.id],
+    queryKey: ["profile", user?.id],
     enabled: !!user && open,
     queryFn: async () => {
       const { data } = await supabase
@@ -40,13 +40,11 @@ export function EditProfileDialog({ user, open, onOpenChange }: EditProfileDialo
   });
 
   useEffect(() => {
-    if (profile) {
-      setName(profile.name ?? "");
-      setPhone(profile.phone ?? "");
-    } else if (user) {
-      setName(user.user_metadata?.name ?? "");
-      setPhone(user.user_metadata?.phone ?? "");
-    }
+    if (!open) return;
+    const initialName = profile?.name ?? user?.user_metadata?.name ?? "";
+    const initialPhone = profile?.phone ?? user?.user_metadata?.phone ?? "";
+    setName(initialName);
+    setPhone(initialPhone);
   }, [profile, user, open]);
 
   async function handleSave(e: React.FormEvent) {
@@ -54,19 +52,37 @@ export function EditProfileDialog({ user, open, onOpenChange }: EditProfileDialo
     if (!name.trim()) return toast.error("Por favor, informe seu nome.");
     setSaving(true);
 
-    const { error } = await supabase.from("profiles").upsert({
-      id: user.id,
-      name: name.trim(),
-      email: user.email,
-      phone: phone.trim() || null,
-    });
+    const cleanName = name.trim();
+    const cleanPhone = phone.trim() || null;
 
-    setSaving(false);
-    if (error) return toast.error("Não foi possível salvar o perfil.");
+    try {
+      // 1. Salva na tabela profiles
+      const { error: profileErr } = await supabase.from("profiles").upsert(
+        {
+          id: user.id,
+          name: cleanName,
+          email: user.email,
+          phone: cleanPhone,
+        },
+        { onConflict: "id" }
+      );
 
-    queryClient.invalidateQueries();
-    toast.success("Perfil atualizado com sucesso!");
-    onOpenChange(false);
+      if (profileErr) throw profileErr;
+
+      // 2. Salva também nos metadados do Supabase Auth para ter redundância
+      await supabase.auth.updateUser({
+        data: { name: cleanName, phone: cleanPhone },
+      });
+
+      queryClient.invalidateQueries();
+      toast.success("Perfil atualizado com sucesso!");
+      onOpenChange(false);
+    } catch (err: any) {
+      console.error("Erro ao salvar perfil:", err);
+      toast.error("Não foi possível salvar o perfil.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
