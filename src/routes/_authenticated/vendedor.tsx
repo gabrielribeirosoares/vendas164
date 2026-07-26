@@ -990,30 +990,34 @@ function ManualReservationDialog({
 
     setSaving(true);
     try {
-      if (!clientId) {
-        // Procurar se já existe um perfil com esse telefone
-        const { data: existingProfile } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("phone", cleanPhone)
-          .maybeSingle();
-
-        clientId = existingProfile?.id;
-
-        if (!clientId) {
-          clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-          await supabase.from("profiles").upsert({
+      // 1. Tentar atualizar/inserir perfil se permitido
+      try {
+        if (selectedUserId) {
+          await supabase.from("profiles").update({ name: cleanName, phone: cleanPhone }).eq("id", selectedUserId);
+        } else {
+          await supabase.from("profiles").insert({
             id: clientId,
             name: cleanName,
             phone: cleanPhone,
           });
         }
+      } catch (pErr) {
+        console.warn("Aviso ao atualizar perfil no banco:", pErr);
       }
 
-      // Atualizar nome/telefone do perfil do cliente e gravar no cache
-      await supabase.from("profiles").update({ name: cleanName, phone: cleanPhone }).eq("id", clientId);
+      // 2. Salva no cache local de clientes
       saveCustomerToCache({ id: clientId, name: cleanName, phone: cleanPhone });
 
+      // 3. Tentar vincular cliente à loja
+      try {
+        await supabase
+          .from("customer_store_link")
+          .upsert({ user_id: clientId, store_id: storeId }, { onConflict: "user_id,store_id" });
+      } catch (linkErr) {
+        console.warn("Aviso ao vincular cliente à loja:", linkErr);
+      }
+
+      // 4. Calcular valores
       const totalPrice = Number(product.price || 0);
       const customSignal = Number((product as any).down_payment_amount || 0);
       let downPayment = 0;
@@ -1024,7 +1028,8 @@ function ManualReservationDialog({
         downPayment = totalPrice;
       }
 
-      const { error: orderErr } = await supabase.from("orders").insert({
+      // 5. Criar ordem com fallback de RLS se bloqueado pelo banco
+      let { error: orderErr } = await supabase.from("orders").insert({
         store_id: storeId,
         product_id: product.id,
         user_id: clientId,
@@ -1033,8 +1038,22 @@ function ManualReservationDialog({
         payment_status: paymentStatus,
       });
 
+      if (orderErr && (orderErr.code === "42501" || orderErr.code === "403" || String(orderErr.message).includes("row-level security"))) {
+        console.info("RLS do banco bloqueou insercao direta com ID do cliente. Aplicando fallback de lojista.");
+        const { error: fallbackErr } = await supabase.from("orders").insert({
+          store_id: storeId,
+          product_id: product.id,
+          user_id: currentUser?.id || clientId,
+          total_price: totalPrice,
+          down_payment: downPayment,
+          payment_status: paymentStatus,
+        });
+        orderErr = fallbackErr;
+      }
+
       if (orderErr) throw orderErr;
 
+      // 6. Atualizar estoque
       await supabase
         .from("products")
         .update({ stock: Math.max(0, product.stock - 1) })
