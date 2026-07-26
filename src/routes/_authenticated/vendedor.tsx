@@ -633,6 +633,7 @@ function ProductsTab({
       <ManualReservationDialog
         storeId={store.id}
         storeColor={store.primary_color}
+        storePixKey={(store as any).pix_key}
         products={products}
         open={manualDialogOpen}
         preSelectedProduct={manualReservationProduct}
@@ -891,6 +892,7 @@ function EditProductDialog({
 interface ManualReservationDialogProps {
   storeId: string;
   storeColor?: string;
+  storePixKey?: string | null;
   products: Product[];
   open: boolean;
   onClose: () => void;
@@ -900,6 +902,7 @@ interface ManualReservationDialogProps {
 function ManualReservationDialog({
   storeId,
   storeColor,
+  storePixKey,
   products,
   open,
   onClose,
@@ -918,6 +921,27 @@ function ManualReservationDialog({
   const [saving, setSaving] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
+
+  // Buscar dados da loja para extrair a Chave PIX cadastrada
+  const { data: storeInfo } = useQuery({
+    queryKey: ["store-pix-info", storeId],
+    enabled: open && !!storeId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("stores")
+        .select("pix_key, whatsapp_number")
+        .eq("id", storeId)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  useEffect(() => {
+    if (open) {
+      const initialPix = storePixKey || storeInfo?.pix_key || storeInfo?.whatsapp_number || "";
+      setPixKey(initialPix);
+    }
+  }, [open, storePixKey, storeInfo]);
 
   // Buscar lista de clientes que seguem ou reservaram NETA loja (excluindo o próprio lojista)
   const { data: storeCustomers } = useQuery({
@@ -1000,6 +1024,21 @@ function ManualReservationDialog({
       return toast.error("Você é o dono da loja e não pode criar reservas em seu próprio nome. Escolha ou informe os dados de um cliente.");
     }
 
+    // Se o lojista não selecionou da lista, tenta encontrar o cadastro do cliente pelo telefone
+    if (!clientId) {
+      const { data: foundProf } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("phone", cleanPhone)
+        .maybeSingle();
+
+      if (foundProf) {
+        clientId = foundProf.id;
+      } else {
+        clientId = crypto.randomUUID();
+      }
+    }
+
     const product = products.find((p) => p.id === selectedProductId);
     if (!product) return toast.error("Pré-venda não encontrada.");
     if (product.stock <= 0) return toast.error("Cotas esgotadas para esta pré-venda.");
@@ -1009,16 +1048,37 @@ function ManualReservationDialog({
       // 1. Salvar os dados do cliente no cache local da loja
       saveCustomerToCache({ id: clientId, name: cleanName, phone: cleanPhone });
 
-      // 2. Se for o perfil do próprio usuário logado, atualizar perfil no Supabase
-      if (selectedUserId && selectedUserId === currentUser?.id) {
+      // 2. Vincular o cliente à loja em customer_store_link (sem travar se RLS negar)
+      try {
         await supabase
-          .from("profiles")
-          .update({ name: cleanName, phone: cleanPhone })
-          .eq("id", selectedUserId)
-          .then(() => undefined);
+          .from("customer_store_link")
+          .upsert(
+            { user_id: clientId, store_id: storeId },
+            { onConflict: "user_id,store_id" }
+          );
+      } catch {
+        // Ignora erros de RLS
       }
 
-      // 3. Calcular valores
+      // 3. Atualizar perfil do cliente no Supabase se existir (sem travar se RLS negar)
+      try {
+        const { data: existingProf } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("id", clientId)
+          .maybeSingle();
+
+        if (existingProf) {
+          await supabase
+            .from("profiles")
+            .update({ name: cleanName, phone: cleanPhone })
+            .eq("id", clientId);
+        }
+      } catch {
+        // Ignora erros de RLS
+      }
+
+      // 4. Calcular valores
       const totalPrice = Number(product.price || 0);
       const customSignal = Number((product as any).down_payment_amount || 0);
       let downPayment = 0;
@@ -1029,11 +1089,11 @@ function ManualReservationDialog({
         downPayment = totalPrice;
       }
 
-      // 4. Inserir a ordem usando o ID do lojista (evita erro 403 de RLS no console)
+      // 5. Inserir a reserva no banco atribuída ao ID DO CLIENTE (clientId)
       const orderPayload: any = {
         store_id: storeId,
         product_id: product.id,
-        user_id: currentUser?.id || clientId,
+        user_id: clientId,
         total_price: totalPrice,
         down_payment: downPayment,
         payment_status: paymentStatus,
@@ -1046,6 +1106,14 @@ function ManualReservationDialog({
 
       if (orderErr && (orderErr.code === "PGRST204" || orderErr.message?.includes("pix_key") || (orderErr as any).status === 400)) {
         delete orderPayload.pix_key;
+        const retry = await supabase.from("orders").insert(orderPayload);
+        orderErr = retry.error;
+      }
+
+      // Se a RLS do Supabase negar o user_id do cliente por falta da política no banco, faz fallback para o id do lojista
+      if (orderErr && (orderErr.code === "42501" || (orderErr as any).status === 403 || orderErr.message?.includes("row-level security"))) {
+        console.warn("RLS bloqueou user_id do cliente. Salvando com user_id do lojista...");
+        orderPayload.user_id = currentUser?.id;
         const retry = await supabase.from("orders").insert(orderPayload);
         orderErr = retry.error;
       }
