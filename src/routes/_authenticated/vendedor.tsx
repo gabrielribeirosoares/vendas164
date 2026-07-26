@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Copy, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Plus, Search, Share2, Trash2 } from "lucide-react";
+import { BookmarkCheck, Copy, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Plus, Search, Share2, Trash2, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { PhoneInput, parsePhoneWithFlag } from "@/components/PhoneInput";
@@ -1328,7 +1328,28 @@ function OrdersTab({
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("todos");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [trackingDrafts, setTrackingDrafts] = useState<Record<string, string>>({});
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
+
+  async function handleTrackingSave(id: string, code: string) {
+    const { error } = await supabase
+      .from("orders")
+      .update({ tracking_code: code.trim() || null })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Erro ao salvar rastreio:", error);
+      if (error.code === "PGRST204" || error.message?.includes("tracking_code") || error.details?.includes("tracking_code")) {
+        return toast.error(
+          "A coluna 'tracking_code' precisa ser criada no Supabase! Execute o comando SQL fornecido no Supabase Dashboard.",
+          { duration: 7000 }
+        );
+      }
+      return toast.error("Não foi possível salvar o código de rastreio. Verifique se executou a SQL no Supabase.");
+    }
+    queryClient.invalidateQueries();
+    toast.success("Código de rastreio salvo!");
+  }
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
@@ -1346,13 +1367,16 @@ function OrdersTab({
       const prodBrand = (o.products?.brand || "").toLowerCase();
       const orderId = (o.id || "").toLowerCase();
 
+      const trackingCode = (o.tracking_code || "").toLowerCase();
+
       return (
         clientName.includes(q) ||
         clientEmail.includes(q) ||
         clientPhone.includes(q) ||
         prodModel.includes(q) ||
         prodBrand.includes(q) ||
-        orderId.includes(q)
+        orderId.includes(q) ||
+        trackingCode.includes(q)
       );
     });
   }, [orders, searchQuery, statusFilter]);
@@ -1634,6 +1658,25 @@ function OrdersTab({
                     </div>
                   )}
                 </div>
+
+                {/* Código de Rastreio dos Correios (Mobile) */}
+                <div className="flex items-center gap-2 pt-2 border-t border-border/40">
+                  <Truck className="size-4 text-primary shrink-0" />
+                  <Input
+                    className="h-8 text-xs font-mono flex-1"
+                    placeholder="Cód. Rastreio (Ex: AA123456789BR)"
+                    value={trackingDrafts[o.id] ?? o.tracking_code ?? ""}
+                    onChange={(e) => setTrackingDrafts({ ...trackingDrafts, [o.id]: e.target.value })}
+                  />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-8 px-3 text-xs font-medium"
+                    onClick={() => handleTrackingSave(o.id, trackingDrafts[o.id] ?? o.tracking_code ?? "")}
+                  >
+                    Salvar
+                  </Button>
+                </div>
               </div>
             );
           })}
@@ -1653,7 +1696,7 @@ function OrdersTab({
                 <TableHead>Total</TableHead>
                 <TableHead>Sinal</TableHead>
                 <TableHead>Saldo</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Status & Rastreio</TableHead>
                 <TableHead>Prazo</TableHead>
               </TableRow>
             </TableHeader>
@@ -1741,13 +1784,13 @@ function OrdersTab({
                     {brl(Number(o.remaining_balance))}
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-col gap-1.5">
+                    <div className="flex flex-col gap-1.5 min-w-[155px]">
                       <PaymentBadge status={o.payment_status} />
                       <Select
                         value={o.payment_status}
                         onValueChange={(v) => handlePaymentStatusChange(o, v)}
                       >
-                        <SelectTrigger className="h-8 w-40">
+                        <SelectTrigger className="h-7 text-xs w-36">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1761,7 +1804,7 @@ function OrdersTab({
                         value={o.delivery_status}
                         onValueChange={(v) => handleDeliveryStatusChange(o, v)}
                       >
-                        <SelectTrigger className="h-8 w-40">
+                        <SelectTrigger className="h-7 text-xs w-36">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1771,6 +1814,24 @@ function OrdersTab({
                           <SelectItem value="cancelado">Cancelado</SelectItem>
                         </SelectContent>
                       </Select>
+                      {/* Campo de Rastreio integrado */}
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <Input
+                          className="h-7 text-[11px] font-mono px-2 w-28"
+                          placeholder="Cód. Rastreio"
+                          value={trackingDrafts[o.id] ?? o.tracking_code ?? ""}
+                          onChange={(e) => setTrackingDrafts({ ...trackingDrafts, [o.id]: e.target.value })}
+                        />
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-7 px-2 text-[11px] font-semibold"
+                          title="Salvar rastreio"
+                          onClick={() => handleTrackingSave(o.id, trackingDrafts[o.id] ?? o.tracking_code ?? "")}
+                        >
+                          OK
+                        </Button>
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>

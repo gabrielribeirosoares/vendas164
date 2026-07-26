@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Loader2, MessageCircle, Package, Store as StoreIcon, User } from "lucide-react";
+import { BookmarkCheck, Copy, ExternalLink, Loader2, MessageCircle, Package, Store as StoreIcon, Truck, User } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { PhoneInput } from "@/components/PhoneInput";
@@ -213,54 +213,88 @@ function CustomerDashboard() {
           <TabsContent value="reservas" className="mt-4 space-y-3">
             {(orders ?? []).map((o) => (
               <Card key={o.id} className="border-border/60 panel">
-                <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
-                  <div className="size-16 shrink-0 overflow-hidden rounded-xl bg-muted">
-                    {o.products?.image_url ? (
-                      <img
-                        src={o.products.image_url}
-                        alt={o.products.model}
-                        loading="lazy"
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-muted-foreground">
-                        <Package className="size-5" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      {o.products?.brand} · {o.stores?.name}
-                    </p>
-                    <h3 className="font-semibold">{o.products?.model}</h3>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <PaymentBadge status={o.payment_status} />
-                      <DeliveryBadge status={o.delivery_status} />
-                      {o.payment_status === "aguardando_sinal" && o.reservation_expires_at && (
-                        <Countdown expiresAt={o.reservation_expires_at} />
+                <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                    <div className="size-16 shrink-0 overflow-hidden rounded-xl bg-muted">
+                      {o.products?.image_url ? (
+                        <img
+                          src={o.products.image_url}
+                          alt={o.products.model}
+                          loading="lazy"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-muted-foreground">
+                          <Package className="size-5" />
+                        </div>
                       )}
                     </div>
-                  </div>
-                  <div className="text-sm sm:text-right">
-                    <p className="text-muted-foreground">Total {brl(Number(o.total_price))}</p>
-                    <p className="text-muted-foreground">Sinal {brl(Number(o.down_payment))}</p>
-                    <p className="font-semibold text-primary">
-                      Saldo {brl(Number(o.remaining_balance))}
-                    </p>
-                  </div>
-                  {o.stores?.whatsapp_number && o.payment_status !== "cancelado" && (
-                    <Button asChild variant="secondary" size="sm">
-                      <a
-                        href={whatsappLink(
-                          o.stores.whatsapp_number,
-                          `Olá, segue o comprovante do pedido #${o.id.slice(0, 8)} da miniatura ${o.products?.brand} ${o.products?.model}.`,
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        {o.products?.brand} · {o.stores?.name}
+                      </p>
+                      <h3 className="font-semibold">{o.products?.model}</h3>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <PaymentBadge status={o.payment_status} />
+                        <DeliveryBadge status={o.delivery_status} />
+                        {o.payment_status === "aguardando_sinal" && o.reservation_expires_at && (
+                          <Countdown expiresAt={o.reservation_expires_at} />
                         )}
+                      </div>
+                    </div>
+                    <div className="text-sm sm:text-right">
+                      <p className="text-muted-foreground">Total {brl(Number(o.total_price))}</p>
+                      <p className="text-muted-foreground">Sinal {brl(Number(o.down_payment))}</p>
+                      <p className="font-semibold text-primary">
+                        Saldo {brl(Number(o.remaining_balance))}
+                      </p>
+                    </div>
+                    {o.stores?.whatsapp_number && o.payment_status !== "cancelado" && (
+                      <Button asChild variant="secondary" size="sm">
+                        <a
+                          href={whatsappLink(
+                            o.stores.whatsapp_number,
+                            `Olá, segue o comprovante do pedido #${o.id.slice(0, 8)} da miniatura ${o.products?.brand} ${o.products?.model}.`,
+                          )}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <MessageCircle className="size-4" /> Comprovante
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* BLOCO DO CÓDIGO DE RASTREIO DOS CORREIOS */}
+                  {o.tracking_code && (
+                    <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl bg-muted/40 p-3 text-xs border border-border/50">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Truck className="size-4 text-primary shrink-0" />
+                        <span className="font-semibold text-foreground">Rastreio:</span>
+                        <code className="bg-background px-2.5 py-1 rounded-lg font-mono text-primary font-bold border border-border/60 select-all">
+                          {o.tracking_code}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-[11px] gap-1 text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            navigator.clipboard.writeText(o.tracking_code!);
+                            toast.success("Código de rastreio copiado!");
+                          }}
+                        >
+                          <Copy className="size-3" /> Copiar
+                        </Button>
+                      </div>
+                      <a
+                        href={`https://rastreamento.correios.com.br/app/index.php?codigo=${encodeURIComponent(o.tracking_code)}`}
                         target="_blank"
                         rel="noreferrer"
+                        className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
                       >
-                        <MessageCircle className="size-4" /> Comprovante
+                        Rastrear nos Correios <ExternalLink className="size-3" />
                       </a>
-                    </Button>
+                    </div>
                   )}
                 </CardContent>
               </Card>

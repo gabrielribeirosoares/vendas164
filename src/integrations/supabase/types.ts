@@ -52,6 +52,7 @@ export type Database = {
           reservation_expires_at: string | null
           store_id: string
           total_price: number
+          tracking_code: string | null
           user_id: string
         }
         Insert: {
@@ -65,6 +66,7 @@ export type Database = {
           reservation_expires_at?: string | null
           store_id: string
           total_price?: number
+          tracking_code?: string | null
           user_id: string
         }
         Update: {
@@ -78,6 +80,7 @@ export type Database = {
           reservation_expires_at?: string | null
           store_id?: string
           total_price?: number
+          tracking_code?: string | null
           user_id?: string
         }
         Relationships: [
