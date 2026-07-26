@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Clock, Package, Share2, Wallet } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
+import { AppFooter } from "@/components/AppFooter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,13 +10,13 @@ import heroImage from "@/assets/hero-miniaturas.jpg";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "MiniPré — Pré-vendas de miniaturas para lojas e colecionadores" },
+      { title: "Vendas 164 — Pré-vendas e Reservas de Miniaturas 1/64" },
       {
         name: "description",
         content:
           "Gerencie pré-vendas, estoque, sinais e saldos de miniaturas colecionáveis. Lojistas vendem, colecionadores acompanham cada reserva.",
       },
-      { property: "og:title", content: "MiniPré — Pré-vendas de miniaturas" },
+      { property: "og:title", content: "Vendas 164 — Pré-vendas de miniaturas" },
       {
         property: "og:description",
         content: "Pré-vendas, controle de cotas e financeiro para lojas de carros em miniatura.",
@@ -27,22 +28,22 @@ export const Route = createFileRoute("/")({
 
 function Home() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen flex flex-col">
       <AppHeader />
 
-      <main>
+      <main className="flex-1">
         <section className="hero-surface border-b border-border/60">
           <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 md:grid-cols-2 md:items-center md:py-20">
             <div>
               <Badge variant="outline" className="border-primary/40 text-primary">
-                SaaS multi-lojas
+                Plataforma 1/64
               </Badge>
               <h1 className="mt-4 text-4xl font-bold leading-[1.05] md:text-5xl">
                 Pré-vendas de miniaturas sem planilha, sem confusão.
               </h1>
               <p className="mt-4 max-w-lg text-base text-muted-foreground">
                 Cadastre cotas, defina o prazo do sinal, acompanhe o saldo a receber e deixe o
-                colecionador enviar o comprovante direto no WhatsApp da loja.
+                colecionador acompanhar tudo e copiar o PIX em 1 clique.
               </p>
               <div className="mt-7 flex flex-wrap gap-3">
                 <Button asChild size="lg" className="glow">
@@ -84,6 +85,8 @@ function Home() {
           </div>
         </section>
       </main>
+
+      <AppFooter />
     </div>
   );
 }

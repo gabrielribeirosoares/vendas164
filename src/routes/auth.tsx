@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
+import { AppFooter } from "@/components/AppFooter";
 import { PhoneInput } from "@/components/PhoneInput";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -292,12 +293,21 @@ function AuthPage() {
             <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
               <span className="h-px flex-1 bg-border" /> ou <span className="h-px flex-1 bg-border" />
             </div>
-            <Button variant="secondary" className="w-full" onClick={handleGoogle}>
-              Continuar com Google
-            </Button>
+            <p className="mt-6 text-center text-[11px] text-muted-foreground leading-relaxed">
+              Ao continuar, você concorda com nossos{" "}
+              <Link to="/termos" className="text-primary underline font-medium">
+                Termos de Uso
+              </Link>{" "}
+              e nossa{" "}
+              <Link to="/privacidade" className="text-emerald-500 underline font-medium">
+                Política de Privacidade (LGPD)
+              </Link>.
+            </p>
           </CardContent>
         </Card>
       </main>
+
+      <AppFooter />
     </div>
   );
 }

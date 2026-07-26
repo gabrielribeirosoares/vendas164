@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookmarkCheck, Copy, ExternalLink, Loader2, MessageCircle, Package, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
+import { AppFooter } from "@/components/AppFooter";
 import { PhoneInput } from "@/components/PhoneInput";
 import { Countdown } from "@/components/Countdown";
 import { DeliveryBadge, PaymentBadge } from "@/components/StatusBadge";
@@ -429,6 +430,8 @@ function CustomerDashboard() {
           </TabsContent>
         </Tabs>
       </main>
+
+      <AppFooter />
     </div>
   );
 }
