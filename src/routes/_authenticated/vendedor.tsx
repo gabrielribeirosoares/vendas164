@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Search, Share2, Trash2 } from "lucide-react";
+import { BookmarkCheck, Copy, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Plus, Search, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { PhoneInput, parsePhoneWithFlag } from "@/components/PhoneInput";
@@ -40,6 +40,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { brl, slugify, whatsappLink } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { uploadImage } from "@/lib/upload";
+import { reserveQuota, reservationErrorMessage } from "@/lib/reservations";
 import type { Tables } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/_authenticated/vendedor")({
@@ -222,7 +223,7 @@ function SellerDashboard() {
           </TabsContent>
 
           <TabsContent value="reservas" className="mt-4">
-            <OrdersTab orders={orders ?? []} />
+            <OrdersTab storeId={store.id} products={products ?? []} orders={orders ?? []} />
           </TabsContent>
 
           <TabsContent value="loja" className="mt-4">
@@ -357,6 +358,16 @@ function ProductsTab({
   const [form, setForm] = useState({ ...emptyProduct });
   const [saving, setSaving] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [manualDialogOpen, setManualDialogOpen] = useState(false);
+  const [manualReservationProduct, setManualReservationProduct] = useState<Product | null>(null);
+
+  function handleReserveCota(p: Product) {
+    if (!p.is_open) return toast.error("Esta pré-venda está fechada.");
+    if (p.stock <= 0) return toast.error("Não há cotas disponíveis para esta miniatura.");
+
+    setManualReservationProduct(p);
+    setManualDialogOpen(true);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -415,180 +426,193 @@ function ProductsTab({
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
-      <Card className="h-fit border-border/60 panel">
-        <CardHeader>
-          <CardTitle className="text-lg">Nova pré-venda</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={submit} className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+    <>
+      <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
+        <Card className="h-fit border-border/60 panel">
+          <CardHeader>
+            <CardTitle className="text-lg">Nova pré-venda</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={submit} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="brand">Marca</Label>
+                  <Input
+                    id="brand"
+                    required
+                    maxLength={40}
+                    value={form.brand}
+                    onChange={(e) => setForm({ ...form, brand: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="scale">Escala</Label>
+                  <Input
+                    id="scale"
+                    maxLength={12}
+                    value={form.scale}
+                    onChange={(e) => setForm({ ...form, scale: e.target.value })}
+                  />
+                </div>
+              </div>
               <div className="space-y-1.5">
-                <Label htmlFor="brand">Marca</Label>
+                <Label htmlFor="model">Modelo</Label>
                 <Input
-                  id="brand"
+                  id="model"
                   required
-                  maxLength={40}
-                  value={form.brand}
-                  onChange={(e) => setForm({ ...form, brand: e.target.value })}
+                  maxLength={80}
+                  value={form.model}
+                  onChange={(e) => setForm({ ...form, model: e.target.value })}
                 />
               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="price">Total (R$)</Label>
+                  <Input
+                    id="price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                    placeholder="240"
+                    value={form.price}
+                    onChange={(e) => setForm({ ...form, price: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="down_payment">Sinal (R$)</Label>
+                  <Input
+                    id="down_payment"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Ex: 50"
+                    value={form.down_payment_amount}
+                    onChange={(e) => setForm({ ...form, down_payment_amount: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="stock">Cotas</Label>
+                  <Input
+                    id="stock"
+                    type="number"
+                    min="0"
+                    required
+                    value={form.stock}
+                    onChange={(e) => setForm({ ...form, stock: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="release">Data estimada</Label>
+                  <Input
+                    id="release"
+                    type="date"
+                    value={form.release_date}
+                    onChange={(e) => setForm({ ...form, release_date: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Prazo do sinal</Label>
+                  <Select
+                    value={form.payment_deadline_hours}
+                    onValueChange={(v) => setForm({ ...form, payment_deadline_hours: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="12">12 horas</SelectItem>
+                      <SelectItem value="24">24 horas</SelectItem>
+                      <SelectItem value="48">48 horas</SelectItem>
+                      <SelectItem value="72">72 horas</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div className="space-y-1.5">
-                <Label htmlFor="scale">Escala</Label>
+                <Label htmlFor="photo">Foto da miniatura</Label>
                 <Input
-                  id="scale"
-                  maxLength={12}
-                  value={form.scale}
-                  onChange={(e) => setForm({ ...form, scale: e.target.value })}
+                  id="photo"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
                 />
+                {form.image_url && <p className="text-xs text-success">Foto pronta para publicar.</p>}
               </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="model">Modelo</Label>
-              <Input
-                id="model"
-                required
-                maxLength={80}
-                value={form.model}
-                onChange={(e) => setForm({ ...form, model: e.target.value })}
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="price">Total (R$)</Label>
-                <Input
-                  id="price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  required
-                  placeholder="240"
-                  value={form.price}
-                  onChange={(e) => setForm({ ...form, price: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="down_payment">Sinal (R$)</Label>
-                <Input
-                  id="down_payment"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="Ex: 50"
-                  value={form.down_payment_amount}
-                  onChange={(e) => setForm({ ...form, down_payment_amount: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="stock">Cotas</Label>
-                <Input
-                  id="stock"
-                  type="number"
-                  min="0"
-                  required
-                  value={form.stock}
-                  onChange={(e) => setForm({ ...form, stock: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="release">Data estimada</Label>
-                <Input
-                  id="release"
-                  type="date"
-                  value={form.release_date}
-                  onChange={(e) => setForm({ ...form, release_date: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Prazo do sinal</Label>
-                <Select
-                  value={form.payment_deadline_hours}
-                  onValueChange={(v) => setForm({ ...form, payment_deadline_hours: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="12">12 horas</SelectItem>
-                    <SelectItem value="24">24 horas</SelectItem>
-                    <SelectItem value="48">48 horas</SelectItem>
-                    <SelectItem value="72">72 horas</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="photo">Foto da miniatura</Label>
-              <Input
-                id="photo"
-                type="file"
-                accept="image/*"
-                onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-              />
-              {form.image_url && <p className="text-xs text-success">Foto pronta para publicar.</p>}
-            </div>
-            <Button type="submit" className="w-full" disabled={saving}>
-              {saving && <Loader2 className="size-4 animate-spin" />} Publicar pré-venda
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              <Button type="submit" className="w-full" disabled={saving}>
+                {saving && <Loader2 className="size-4 animate-spin" />} Publicar pré-venda
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
 
-      <div className="space-y-3">
-        {products.map((p) => (
-          <Card key={p.id} className="border-border/60 panel">
-            <CardContent className="flex flex-wrap items-center gap-4 p-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  {p.brand} · {p.scale} · sinal em {p.payment_deadline_hours}h
-                </p>
-                <h3 className="font-semibold">{p.model}</h3>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                  <Badge variant="secondary">Total: {brl(Number(p.price))}</Badge>
-                  {Number((p as any).down_payment_amount) > 0 && (
-                    <Badge variant="outline" className="border-primary/40 text-primary">
-                      Sinal: {brl(Number((p as any).down_payment_amount))}
-                    </Badge>
-                  )}
-                  <Badge variant="outline">{p.stock} cotas</Badge>
+        <div className="space-y-3">
+          {products.map((p) => (
+            <Card key={p.id} className="border-border/60 panel">
+              <CardContent className="flex flex-wrap items-center gap-4 p-4">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {p.brand} · {p.scale} · sinal em {p.payment_deadline_hours}h
+                  </p>
+                  <h3 className="font-semibold">{p.model}</h3>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                    <Badge variant="secondary">Total: {brl(Number(p.price))}</Badge>
+                    {Number((p as any).down_payment_amount) > 0 && (
+                      <Badge variant="outline" className="border-primary/40 text-primary">
+                        Sinal: {brl(Number((p as any).down_payment_amount))}
+                      </Badge>
+                    )}
+                    <Badge variant="outline">{p.stock} cotas</Badge>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Switch checked={p.is_open} onCheckedChange={() => toggleOpen(p)} />
-                  {p.is_open ? "Aberta" : "Fechada"}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    disabled={!p.is_open || p.stock <= 0}
+                    onClick={() => handleReserveCota(p)}
+                    className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold"
+                    title="Fazer reserva para cliente nesta cota"
+                  >
+                    <BookmarkCheck className="size-3.5" />
+                    <span>Reservar para cliente</span>
+                  </Button>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground ml-1">
+                    <Switch checked={p.is_open} onCheckedChange={() => toggleOpen(p)} />
+                    {p.is_open ? "Aberta" : "Fechada"}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    title="Editar pré-venda"
+                    onClick={() => setEditingProduct(p)}
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    title="Copiar link"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/produto/${p.id}`);
+                      toast.success("Link do produto copiado!");
+                    }}
+                  >
+                    <Share2 className="size-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => remove(p)}>
+                    <Trash2 className="size-4 text-destructive" />
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  title="Editar pré-venda"
-                  onClick={() => setEditingProduct(p)}
-                >
-                  <Pencil className="size-4" />
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  title="Copiar link"
-                  onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/produto/${p.id}`);
-                    toast.success("Link do produto copiado!");
-                  }}
-                >
-                  <Share2 className="size-4" />
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => remove(p)}>
-                  <Trash2 className="size-4 text-destructive" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-        {products.length === 0 && (
-          <p className="text-sm text-muted-foreground">Nenhuma miniatura cadastrada ainda.</p>
-        )}
+              </CardContent>
+            </Card>
+          ))}
+          {products.length === 0 && (
+            <p className="text-sm text-muted-foreground">Nenhuma miniatura cadastrada ainda.</p>
+          )}
+        </div>
       </div>
 
       <EditProductDialog
@@ -596,7 +620,18 @@ function ProductsTab({
         userId={userId}
         onClose={() => setEditingProduct(null)}
       />
-    </div>
+
+      <ManualReservationDialog
+        storeId={store.id}
+        products={products}
+        open={manualDialogOpen}
+        preSelectedProduct={manualReservationProduct}
+        onClose={() => {
+          setManualDialogOpen(false);
+          setManualReservationProduct(null);
+        }}
+      />
+    </>
   );
 }
 
@@ -842,6 +877,317 @@ function EditProductDialog({
   );
 }
 
+interface ManualReservationDialogProps {
+  storeId: string;
+  products: Product[];
+  open: boolean;
+  onClose: () => void;
+  preSelectedProduct?: Product | null;
+}
+
+function ManualReservationDialog({
+  storeId,
+  products,
+  open,
+  onClose,
+  preSelectedProduct,
+}: ManualReservationDialogProps) {
+  const { user: currentUser } = useSession();
+  const queryClient = useQueryClient();
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [selectedClientMode, setSelectedClientMode] = useState<"existing" | "new">("new");
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [clientName, setClientName] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState("aguardando_sinal");
+  const [saving, setSaving] = useState(false);
+
+  // Buscar lista de clientes cadastrados que seguem ou já reservaram nesta loja (excluindo o próprio lojista)
+  const { data: storeCustomers } = useQuery({
+    queryKey: ["store-registered-customers", storeId, currentUser?.id],
+    enabled: open && !!storeId,
+    queryFn: async () => {
+      const { data: links } = await supabase
+        .from("customer_store_link")
+        .select("user_id")
+        .eq("store_id", storeId);
+
+      const { data: orders } = await supabase
+        .from("orders")
+        .select("user_id")
+        .eq("store_id", storeId);
+
+      const allUserIds = Array.from(
+        new Set([
+          ...(links ?? []).map((l) => l.user_id),
+          ...(orders ?? []).map((o) => o.user_id),
+        ])
+      ).filter((id) => id !== currentUser?.id);
+
+      if (!allUserIds.length) return [];
+
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name, email, phone")
+        .in("id", allUserIds);
+
+      return (profiles ?? []).filter((p) => p.id !== currentUser?.id);
+    },
+  });
+
+  useEffect(() => {
+    if (preSelectedProduct) {
+      setSelectedProductId(preSelectedProduct.id);
+    } else if (products.length > 0 && !selectedProductId) {
+      setSelectedProductId(products[0].id);
+    }
+  }, [preSelectedProduct, products, open]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedProductId) return toast.error("Selecione uma pré-venda.");
+    if (!clientName.trim()) return toast.error("Informe o nome do cliente.");
+    if (!clientPhone.trim()) return toast.error("Informe o WhatsApp do cliente.");
+
+    const cleanPhone = clientPhone.trim();
+    const cleanName = clientName.trim();
+    let clientId = selectedUserId;
+
+    if (clientId === currentUser?.id) {
+      return toast.error("Você é o dono da loja e não pode criar reservas em seu próprio nome. Escolha ou informe os dados de um cliente.");
+    }
+
+    const product = products.find((p) => p.id === selectedProductId);
+    if (!product) return toast.error("Pré-venda não encontrada.");
+    if (product.stock <= 0) return toast.error("Cotas esgotadas para esta pré-venda.");
+
+    setSaving(true);
+    try {
+      if (!clientId) {
+        // Procurar se já existe um perfil com esse telefone
+        const { data: existingProfile } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("phone", cleanPhone)
+          .maybeSingle();
+
+        clientId = existingProfile?.id;
+
+        if (!clientId) {
+          clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+          const { error: profileErr } = await supabase.from("profiles").upsert({
+            id: clientId,
+            name: cleanName,
+            phone: cleanPhone,
+          });
+
+          if (profileErr) {
+            console.error("Erro ao criar perfil do cliente:", profileErr);
+          }
+        } else {
+          await supabase.from("profiles").update({ name: cleanName }).eq("id", clientId);
+        }
+      } else {
+        // Atualizar nome/telefone do perfil selecionado se mudaram
+        await supabase.from("profiles").update({ name: cleanName, phone: cleanPhone }).eq("id", clientId);
+      }
+
+      const totalPrice = Number(product.price || 0);
+      const customSignal = Number((product as any).down_payment_amount || 0);
+      let downPayment = 0;
+
+      if (paymentStatus === "sinal_pago") {
+        downPayment = customSignal > 0 ? customSignal : Math.round(totalPrice * 0.2 * 100) / 100;
+      } else if (paymentStatus === "quitado") {
+        downPayment = totalPrice;
+      }
+
+      const { error: orderErr } = await supabase.from("orders").insert({
+        store_id: storeId,
+        product_id: product.id,
+        user_id: clientId,
+        total_price: totalPrice,
+        down_payment: downPayment,
+        payment_status: paymentStatus,
+      });
+
+      if (orderErr) throw orderErr;
+
+      await supabase
+        .from("products")
+        .update({ stock: Math.max(0, product.stock - 1) })
+        .eq("id", product.id);
+
+      await supabase
+        .from("customer_store_link")
+        .upsert({ user_id: clientId, store_id: storeId }, { onConflict: "user_id,store_id" });
+
+      queryClient.invalidateQueries();
+      toast.success(`Reserva vinculada ao cliente ${cleanName}!`);
+      
+      setClientName("");
+      setClientPhone("");
+      setSelectedUserId("");
+      onClose();
+    } catch (err: any) {
+      console.error("Erro ao criar reserva manual:", err);
+      toast.error("Não foi possível registrar a reserva.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-md panel border-border/60 p-4 sm:p-6 overflow-hidden rounded-2xl">
+        <DialogHeader>
+          <DialogTitle className="text-lg sm:text-xl">Nova Reserva para Cliente</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2 min-w-0">
+          <div className="space-y-2 min-w-0">
+            <Label>Pré-venda / Miniatura</Label>
+            <Select value={selectedProductId} onValueChange={setSelectedProductId}>
+              <SelectTrigger className="w-full text-xs sm:text-sm truncate">
+                <SelectValue placeholder="Selecione a miniatura" className="truncate" />
+              </SelectTrigger>
+              <SelectContent className="max-w-[calc(100vw-3rem)] max-h-60">
+                {products.map((p) => (
+                  <SelectItem key={p.id} value={p.id} disabled={p.stock <= 0} className="text-xs sm:text-sm">
+                    <span className="truncate block">
+                      {p.brand} {p.model} ({p.stock} cotas - {brl(Number(p.price))})
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Seleção do Cliente (Já cadastrado vs Novo) */}
+          <div className="space-y-2 min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-1">
+              <Label>Cliente</Label>
+              <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedClientMode("existing");
+                    setSelectedUserId("");
+                  }}
+                  className={`px-2 py-0.5 rounded-md transition-colors ${
+                    selectedClientMode === "existing"
+                      ? "bg-primary text-primary-foreground font-semibold"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Cadastrado ({storeCustomers?.length ?? 0})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedClientMode("new");
+                    setSelectedUserId("");
+                  }}
+                  className={`px-2 py-0.5 rounded-md transition-colors ${
+                    selectedClientMode === "new"
+                      ? "bg-primary text-primary-foreground font-semibold"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Novo cliente
+                </button>
+              </div>
+            </div>
+
+            {selectedClientMode === "existing" && (
+              <Select
+                value={selectedUserId}
+                onValueChange={(val) => {
+                  setSelectedUserId(val);
+                  const found = storeCustomers?.find((c) => c.id === val);
+                  if (found) {
+                    setClientName(found.name || "");
+                    setClientPhone(found.phone || "");
+                  }
+                }}
+              >
+                <SelectTrigger className="w-full text-xs sm:text-sm truncate">
+                  <SelectValue placeholder="Selecione um cliente cadastrado..." className="truncate" />
+                </SelectTrigger>
+                <SelectContent className="max-w-[calc(100vw-3rem)] max-h-60">
+                  {(storeCustomers ?? []).map((c) => (
+                    <SelectItem key={c.id} value={c.id} className="text-xs sm:text-sm">
+                      <span className="truncate block font-medium">
+                        {c.name || c.email || "Cliente"} {c.phone ? `(${c.phone})` : ""}
+                      </span>
+                    </SelectItem>
+                  ))}
+                  {(!storeCustomers || storeCustomers.length === 0) && (
+                    <div className="p-3 text-xs text-muted-foreground text-center">
+                      Nenhum cliente cadastrado ainda nesta loja.
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          <div className="space-y-2 min-w-0">
+            <Label htmlFor="manual-client-name">Nome do Cliente</Label>
+            <Input
+              id="manual-client-name"
+              required
+              placeholder="Ex: João da Silva"
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
+              className="text-xs sm:text-sm"
+            />
+          </div>
+
+          <div className="space-y-2 min-w-0">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="manual-client-phone">WhatsApp do Cliente</Label>
+              {selectedUserId && clientPhone && (
+                <span className="text-[11px] text-success font-medium flex items-center gap-1">
+                  ✓ Do cadastro
+                </span>
+              )}
+            </div>
+            <PhoneInput id="manual-client-phone" required value={clientPhone} onChange={setClientPhone} />
+            {selectedUserId && (
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Este WhatsApp está vinculado à conta cadastrada do cliente e será sincronizado no perfil dele.
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2 min-w-0">
+            <Label>Status do Pagamento</Label>
+            <Select value={paymentStatus} onValueChange={setPaymentStatus}>
+              <SelectTrigger className="w-full text-xs sm:text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="max-w-[calc(100vw-3rem)]">
+                <SelectItem value="aguardando_sinal" className="text-xs sm:text-sm">Aguardando Sinal</SelectItem>
+                <SelectItem value="sinal_pago" className="text-xs sm:text-sm">Sinal Pago</SelectItem>
+                <SelectItem value="quitado" className="text-xs sm:text-sm">Pago Total (Quitado)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3">
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit" size="sm" disabled={saving}>
+              {saving && <Loader2 className="size-4 animate-spin mr-1" />} Confirmar Reserva
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 type OrderRow = Tables<"orders"> & {
   products: { brand: string; model: string; image_url?: string | null } | null;
   profiles: { name: string | null; email: string | null; phone: string | null } | null;
@@ -849,12 +1195,21 @@ type OrderRow = Tables<"orders"> & {
 
 const PAGE_SIZE = 8;
 
-function OrdersTab({ orders }: { orders: OrderRow[] }) {
+function OrdersTab({
+  orders,
+  storeId,
+  products = [],
+}: {
+  orders: OrderRow[];
+  storeId?: string;
+  products?: Product[];
+}) {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("todos");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [manualDialogOpen, setManualDialogOpen] = useState(false);
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
@@ -993,6 +1348,16 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
           />
         </div>
         <div className="flex items-center gap-2">
+          {storeId && (
+            <Button
+              size="sm"
+              onClick={() => setManualDialogOpen(true)}
+              className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs font-semibold"
+            >
+              <Plus className="size-4" />
+              <span>Nova Reserva</span>
+            </Button>
+          )}
           <Filter className="size-4 text-muted-foreground" />
           <Select
             value={statusFilter}
@@ -1333,6 +1698,14 @@ function OrdersTab({ orders }: { orders: OrderRow[] }) {
           </div>
         </div>
       </CardContent>
+      {storeId && (
+        <ManualReservationDialog
+          storeId={storeId}
+          products={products}
+          open={manualDialogOpen}
+          onClose={() => setManualDialogOpen(false)}
+        />
+      )}
     </Card>
   );
 }

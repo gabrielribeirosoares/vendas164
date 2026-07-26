@@ -65,6 +65,10 @@ function ProductPage() {
       navigate({ to: "/auth", search: { produto: id, loja: product.store_id } });
       return;
     }
+    if (product.stores?.owner_id === user.id) {
+      toast.info("Você é o dono desta loja e não pode reservar cotas na sua própria pré-venda.");
+      return;
+    }
     try {
       if (product.stock > 0) {
         await reserveQuota(product.id);
