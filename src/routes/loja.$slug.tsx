@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { brl } from "@/lib/format";
 import { useSession } from "@/lib/session";
+import { saveCustomerToCache } from "@/lib/customerCache";
 
 export const Route = createFileRoute("/loja/$slug")({
   head: ({ params }) => ({
@@ -115,8 +116,15 @@ function StorePage() {
         });
       }
 
-      queryClient.invalidateQueries();
-      toast.success("Você agora está seguindo esta loja!");
+        saveCustomerToCache({
+          id: user.id,
+          name: user.user_metadata?.name || user.email?.split("@")[0] || "Cliente",
+          email: user.email,
+          phone: user.user_metadata?.phone || null,
+        });
+
+        queryClient.invalidateQueries();
+        toast.success("Você agora está seguindo esta loja!");
     }
   }
 

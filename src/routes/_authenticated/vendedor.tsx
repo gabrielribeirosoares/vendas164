@@ -5,6 +5,7 @@ import { BookmarkCheck, Copy, Filter, Loader2, MessageCircle, Package, Palette, 
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { PhoneInput, parsePhoneWithFlag } from "@/components/PhoneInput";
+import { getCustomerFromCache, saveCustomerToCache } from "@/lib/customerCache";
 import { PaymentBadge } from "@/components/StatusBadge";
 import { Countdown } from "@/components/Countdown";
 import { Button } from "@/components/ui/button";
@@ -935,9 +936,11 @@ function ManualReservationDialog({
 
       return followerUserIds.map((id) => {
         const p = profileMap.get(id);
-        const rawName = p?.name?.trim();
-        const email = p?.email?.trim();
-        const phone = p?.phone?.trim();
+        const cached = getCustomerFromCache(id);
+
+        const rawName = (p?.name && p.name !== "Cliente" && p.name !== "Cliente cadastrado" ? p.name : cached?.name) || "";
+        const email = (p?.email?.trim() || cached?.email) || "";
+        const phone = (p?.phone?.trim() || cached?.phone) || "";
 
         const isGeneric = !rawName || rawName === "Cliente" || rawName === "Cliente cadastrado";
         const displayName = !isGeneric
@@ -946,7 +949,7 @@ function ManualReservationDialog({
             ? email
             : phone
               ? `Cliente · ${phone}`
-              : `Cliente #${id.substring(0, 4).toUpperCase()}`;
+              : `Cliente (${id.substring(0, 6)})`;
 
         return {
           id,
@@ -999,22 +1002,17 @@ function ManualReservationDialog({
 
         if (!clientId) {
           clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-          const { error: profileErr } = await supabase.from("profiles").upsert({
+          await supabase.from("profiles").upsert({
             id: clientId,
             name: cleanName,
             phone: cleanPhone,
           });
-
-          if (profileErr) {
-            console.error("Erro ao criar perfil do cliente:", profileErr);
-          }
-        } else {
-          await supabase.from("profiles").update({ name: cleanName }).eq("id", clientId);
         }
-      } else {
-        // Atualizar nome/telefone do perfil selecionado se mudaram
-        await supabase.from("profiles").update({ name: cleanName, phone: cleanPhone }).eq("id", clientId);
       }
+
+      // Atualizar nome/telefone do perfil do cliente e gravar no cache
+      await supabase.from("profiles").update({ name: cleanName, phone: cleanPhone }).eq("id", clientId);
+      saveCustomerToCache({ id: clientId, name: cleanName, phone: cleanPhone });
 
       const totalPrice = Number(product.price || 0);
       const customSignal = Number((product as any).down_payment_amount || 0);
