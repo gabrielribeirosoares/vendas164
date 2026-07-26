@@ -99,7 +99,14 @@ export function PhoneInput({ value, onChange, id, required }: PhoneInputProps) {
   const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]);
   const [localInput, setLocalInput] = useState("");
 
+  // Ref para rastrear o último value externo processado (evita loops)
+  const lastExternalValue = React.useRef(value);
+
   useEffect(() => {
+    // Só atualizar se o value externo realmente mudou (veio do banco/prop)
+    if (value === lastExternalValue.current && localInput) return;
+    lastExternalValue.current = value;
+
     if (!value) {
       setLocalInput("");
       return;
@@ -111,7 +118,7 @@ export function PhoneInput({ value, onChange, id, required }: PhoneInputProps) {
     } else {
       setLocalInput(value.replace(/\D/g, ""));
     }
-  }, []);
+  }, [value]);
 
   function handleCountrySelect(country: Country) {
     setSelectedCountry(country);
