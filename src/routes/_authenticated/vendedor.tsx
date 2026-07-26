@@ -939,7 +939,15 @@ function ManualReservationDialog({
         .map((id) => {
           const p = profileMap.get(id);
           const rawName = p?.name?.trim();
-          const cleanName = rawName && rawName !== "Cliente" ? rawName : (p?.email || `Cliente (${id.substring(0, 6)})`);
+          const hasRealName = rawName && rawName !== "Cliente" && rawName !== "Cliente cadastrado";
+          const cleanName = hasRealName
+            ? rawName
+            : p?.email
+              ? p.email
+              : p?.phone
+                ? `Cliente (${p.phone})`
+                : rawName || "Cliente sem nome";
+
           return {
             id,
             name: cleanName,
@@ -1120,7 +1128,8 @@ function ManualReservationDialog({
                   setSelectedUserId(val);
                   const found = storeCustomers?.find((c) => c.id === val);
                   if (found) {
-                    setClientName(found.name || "");
+                    const isGenericName = !found.name || found.name.startsWith("Cliente");
+                    setClientName(isGenericName ? "" : found.name);
                     setClientPhone(found.phone || "");
                   }
                 }}
@@ -1129,13 +1138,30 @@ function ManualReservationDialog({
                   <SelectValue placeholder="Selecione um cliente cadastrado..." className="truncate" />
                 </SelectTrigger>
                 <SelectContent className="max-w-[calc(100vw-3rem)] max-h-60">
-                  {(storeCustomers ?? []).map((c) => (
-                    <SelectItem key={c.id} value={c.id} className="text-xs sm:text-sm">
-                      <span className="truncate block font-medium">
-                        {c.name} {c.phone ? `(${c.phone})` : c.email ? `<${c.email}>` : ""}
-                      </span>
-                    </SelectItem>
-                  ))}
+                  {(storeCustomers ?? []).map((c) => {
+                    const isGeneric = !c.name || c.name.startsWith("Cliente");
+                    const mainLabel = isGeneric
+                      ? c.phone
+                        ? `Cliente · ${c.phone}`
+                        : c.email
+                          ? c.email
+                          : "Cliente cadastrado"
+                      : c.name;
+                    const subInfo =
+                      !isGeneric && c.phone
+                        ? ` (${c.phone})`
+                        : !isGeneric && c.email
+                          ? ` <${c.email}>`
+                          : "";
+
+                    return (
+                      <SelectItem key={c.id} value={c.id} className="text-xs sm:text-sm">
+                        <span className="truncate block font-medium">
+                          {mainLabel}{subInfo}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
                   {(!storeCustomers || storeCustomers.length === 0) && (
                     <div className="p-3 text-xs text-muted-foreground text-center">
                       Nenhum cliente cadastrado ainda nesta loja.
