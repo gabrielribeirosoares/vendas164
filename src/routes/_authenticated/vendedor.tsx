@@ -1383,13 +1383,14 @@ function OrdersTab({
       // Filtro por termo de busca
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase().trim();
+      const cleanQ = q.replace(/^#/, "");
+
       const clientName = (o.profiles?.name || "").toLowerCase();
       const clientEmail = (o.profiles?.email || "").toLowerCase();
       const clientPhone = (o.profiles?.phone || "").toLowerCase();
       const prodModel = (o.products?.model || "").toLowerCase();
       const prodBrand = (o.products?.brand || "").toLowerCase();
       const orderId = (o.id || "").toLowerCase();
-
       const trackingCode = (o.tracking_code || "").toLowerCase();
 
       return (
@@ -1399,6 +1400,7 @@ function OrdersTab({
         prodModel.includes(q) ||
         prodBrand.includes(q) ||
         orderId.includes(q) ||
+        (cleanQ.length > 0 && orderId.includes(cleanQ)) ||
         trackingCode.includes(q)
       );
     });
@@ -1504,7 +1506,7 @@ function OrdersTab({
         <div className="relative flex-1 min-w-[240px]">
           <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por cliente, WhatsApp, e-mail ou miniatura..."
+            placeholder="Buscar por cliente, Nº do pedido (#id), WhatsApp, miniatura..."
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
