@@ -112,7 +112,12 @@ export type Database = {
           is_open: boolean
           model: string
           payment_deadline_hours: number
+          payment_deadline_date?: string | null
           price: number
+          max_installments?: number | null
+          price_2x?: number | null
+          installment_price?: number | null
+          has_installment_surcharge?: boolean | null
           release_date: string | null
           scale: string
           stock: number
@@ -126,7 +131,12 @@ export type Database = {
           is_open?: boolean
           model: string
           payment_deadline_hours?: number
+          payment_deadline_date?: string | null
           price?: number
+          max_installments?: number | null
+          price_2x?: number | null
+          installment_price?: number | null
+          has_installment_surcharge?: boolean | null
           release_date?: string | null
           scale?: string
           stock?: number
@@ -140,7 +150,12 @@ export type Database = {
           is_open?: boolean
           model?: string
           payment_deadline_hours?: number
+          payment_deadline_date?: string | null
           price?: number
+          max_installments?: number | null
+          price_2x?: number | null
+          installment_price?: number | null
+          has_installment_surcharge?: boolean | null
           release_date?: string | null
           scale?: string
           stock?: number
@@ -192,6 +207,8 @@ export type Database = {
           pix_key: string | null
           primary_color: string
           slug: string
+          status?: string | null
+          rejection_reason?: string | null
           whatsapp_number: string | null
         }
         Insert: {
@@ -205,6 +222,8 @@ export type Database = {
           pix_key?: string | null
           primary_color?: string
           slug: string
+          status?: string | null
+          rejection_reason?: string | null
           whatsapp_number?: string | null
         }
         Update: {
@@ -218,6 +237,8 @@ export type Database = {
           pix_key?: string | null
           primary_color?: string
           slug?: string
+          status?: string | null
+          rejection_reason?: string | null
           whatsapp_number?: string | null
         }
         Relationships: []

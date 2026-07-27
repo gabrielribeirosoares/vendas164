@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { brl } from "@/lib/format";
+import { brl, formatDeadlineHours, getProductInstallmentInfo } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { joinWaitlist, reservationErrorMessage, reserveQuota } from "@/lib/reservations";
 
@@ -152,9 +152,26 @@ function ProductPage() {
               {product.brand} · escala {product.scale}
             </p>
 
-            <p className="mt-6 font-display text-4xl font-bold text-primary">
-              {brl(Number(product.price))}
-            </p>
+            <div className="mt-6 space-y-1">
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">À vista:</span>
+                <span className="font-display text-4xl font-bold text-primary">
+                  {brl(Number(product.price))}
+                </span>
+              </div>
+              {(() => {
+                const inst = getProductInstallmentInfo(product);
+                if (!inst) return null;
+                return (
+                  <div className="flex flex-wrap items-center gap-2 pt-1 text-sm text-muted-foreground">
+                    <Badge variant="outline" className="border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10 font-semibold">
+                      Ou em até {inst.maxInstallments}x de {brl(inst.installmentValue)}
+                    </Badge>
+                    <span>{inst.hasSurcharge ? `(Total parcelado: ${brl(inst.totalPrice)})` : "(sem acréscimo)"}</span>
+                  </div>
+                );
+              })()}
+            </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
               <Badge variant={product.is_open ? "secondary" : "outline"}>
@@ -176,8 +193,10 @@ function ProductPage() {
                   <Clock className="size-4 text-primary" />
                   {isNoSignal ? (
                     <span className="font-semibold text-foreground">Sem necessidade de sinal (reserva garantida)</span>
+                  ) : (product as any).payment_deadline_date ? (
+                    <span>Data limite para pagar o sinal: <strong>{new Date((product as any).payment_deadline_date + "T00:00:00").toLocaleDateString("pt-BR")}</strong></span>
                   ) : (
-                    <span>Prazo para pagar o sinal: {product.payment_deadline_hours}h após a reserva</span>
+                    <span>Prazo para pagar o sinal: {formatDeadlineHours(product.payment_deadline_hours)} após a reserva</span>
                   )}
                 </p>
                 <p className="flex items-center gap-2 text-muted-foreground">
