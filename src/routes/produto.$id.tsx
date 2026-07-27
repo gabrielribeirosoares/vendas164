@@ -71,8 +71,17 @@ function ProductPage() {
     }
     try {
       if (product.stock > 0) {
-        await reserveQuota(product.id);
-        toast.success("Cota reservada! Envie o sinal dentro do prazo.");
+        const orderId = await reserveQuota(product.id);
+        const isNoSignal = product.payment_deadline_hours === 0 || Number((product as any).down_payment_amount) === 0;
+        if (isNoSignal) {
+          await supabase
+            .from("orders")
+            .update({ payment_status: "sem_sinal", reservation_expires_at: null })
+            .eq("id", orderId);
+          toast.success("Cota reservada com sucesso! (Sem necessidade de sinal)");
+        } else {
+          toast.success("Cota reservada! Envie o sinal dentro do prazo.");
+        }
       } else {
         await joinWaitlist(user.id, product.id, product.store_id);
         toast.success("Você entrou na fila de espera.");
@@ -106,6 +115,8 @@ function ProductPage() {
       </div>
     );
   }
+
+  const isNoSignal = product.payment_deadline_hours === 0 || Number((product as any).down_payment_amount) === 0;
 
   return (
     <div className="min-h-screen">
@@ -152,13 +163,22 @@ function ProductPage() {
               <Badge variant="outline">
                 {product.stock > 0 ? `${product.stock} cotas disponíveis` : "Cotas esgotadas"}
               </Badge>
+              {isNoSignal && (
+                <Badge variant="secondary" className="bg-blue-500/15 text-blue-600 border-blue-500/30">
+                  Sem sinal
+                </Badge>
+              )}
             </div>
 
             <Card className="mt-6 border-border/60 panel">
               <CardContent className="space-y-3 p-5 text-sm">
                 <p className="flex items-center gap-2 text-muted-foreground">
                   <Clock className="size-4 text-primary" />
-                  Prazo para pagar o sinal: {product.payment_deadline_hours}h após a reserva
+                  {isNoSignal ? (
+                    <span className="font-semibold text-foreground">Sem necessidade de sinal (reserva garantida)</span>
+                  ) : (
+                    <span>Prazo para pagar o sinal: {product.payment_deadline_hours}h após a reserva</span>
+                  )}
                 </p>
                 <p className="flex items-center gap-2 text-muted-foreground">
                   <CalendarDays className="size-4 text-primary" />

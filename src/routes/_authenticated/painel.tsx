@@ -255,12 +255,15 @@ function CustomerDashboard() {
                         <a
                           href={whatsappLink(
                             o.stores.whatsapp_number,
-                            `Olá, segue o comprovante do pedido #${o.id.slice(0, 8)} da miniatura ${o.products?.brand} ${o.products?.model}.`,
+                            o.payment_status === "sem_sinal"
+                              ? `Olá, gostaria de acompanhar minha reserva #${o.id.slice(0, 8)} da miniatura ${o.products?.brand} ${o.products?.model}.`
+                              : `Olá, segue o comprovante do pedido #${o.id.slice(0, 8)} da miniatura ${o.products?.brand} ${o.products?.model}.`,
                           )}
                           target="_blank"
                           rel="noreferrer"
                         >
-                          <MessageCircle className="size-4" /> Comprovante
+                          <MessageCircle className="size-4" />
+                          {o.payment_status === "sem_sinal" ? "Falar com a loja" : "Comprovante"}
                         </a>
                       </Button>
                     )}

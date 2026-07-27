@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookmarkCheck, Check, Copy, Package, Store as StoreIcon } from "lucide-react";
@@ -32,6 +32,7 @@ function StorePage() {
   const { user } = useSession();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [selectedBrand, setSelectedBrand] = useState<string>("all");
 
   const { data, isLoading } = useQuery({
     queryKey: ["store", slug],
@@ -156,6 +157,16 @@ function StorePage() {
   const { store, products } = data;
   const isOwner = !!(user && store.owner_id === user.id);
 
+  // Agrupamento por marca
+  const brandsMap: Record<string, typeof products> = {};
+  for (const p of products) {
+    const brandName = (p.brand || "Outros").trim();
+    if (!brandsMap[brandName]) brandsMap[brandName] = [];
+    brandsMap[brandName].push(p);
+  }
+  const brandList = Object.keys(brandsMap).sort((a, b) => a.localeCompare(b));
+  const filteredBrands = selectedBrand === "all" ? brandList : brandList.filter((b) => b === selectedBrand);
+
   return (
     <div className="min-h-screen">
       <AppHeader store={store} />
@@ -214,74 +225,133 @@ function StorePage() {
           </div>
         </div>
 
-        <h2 className="mt-10 text-xl font-bold">Pré-vendas</h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {products.map((p) => (
-            <Link key={p.id} to="/produto/$id" params={{ id: p.id }} className="group">
-              <Card className="flex h-full flex-col overflow-hidden border-border/60 panel transition-transform group-hover:-translate-y-1">
-                <div className="relative aspect-video w-full overflow-hidden bg-muted">
-                  {p.image_url ? (
-                    <img
-                      src={p.image_url}
-                      alt={`${p.brand} ${p.model}`}
-                      loading="lazy"
-                      className="h-full w-full object-cover transition-transform group-hover:scale-105 duration-300"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-muted-foreground">
-                      <Package className="size-8" />
-                    </div>
-                  )}
-                  {/* Badge flutuante de acionamento na foto */}
-                  <div
-                    className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur-md transition-transform group-hover:scale-105"
-                    style={{ backgroundColor: store.primary_color }}
-                  >
-                    <BookmarkCheck className="size-3.5" />
-                    <span>Reservar</span>
-                  </div>
+        {/* Cabeçalho & Filtro por marcas */}
+        <div className="mt-10">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-bold">Pré-vendas</h2>
+            <p className="text-xs text-muted-foreground">
+              {products.length} {products.length === 1 ? "miniatura em catálogo" : "miniaturas em catálogo"}
+            </p>
+          </div>
+
+          {brandList.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-b border-border/40 pb-4">
+              <button
+                type="button"
+                onClick={() => setSelectedBrand("all")}
+                className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
+                  selectedBrand === "all"
+                    ? "text-white shadow-md scale-105"
+                    : "bg-muted/70 text-muted-foreground hover:bg-muted"
+                }`}
+                style={selectedBrand === "all" ? { backgroundColor: store.primary_color } : undefined}
+              >
+                Todas ({products.length})
+              </button>
+              {brandList.map((brand) => (
+                <button
+                  type="button"
+                  key={brand}
+                  onClick={() => setSelectedBrand(brand)}
+                  className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
+                    selectedBrand === brand
+                      ? "text-white shadow-md scale-105"
+                      : "bg-muted/70 text-muted-foreground hover:bg-muted"
+                  }`}
+                  style={selectedBrand === brand ? { backgroundColor: store.primary_color } : undefined}
+                >
+                  {brand} ({brandsMap[brand].length})
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Seções por Marca */}
+        <div className="mt-6 space-y-10">
+          {filteredBrands.map((brand) => {
+            const brandProducts = brandsMap[brand];
+            return (
+              <section key={brand} className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-border/40 pb-2">
+                  <h3 className="text-lg font-bold tracking-tight">{brand}</h3>
+                  <Badge variant="secondary" className="text-xs font-medium">
+                    {brandProducts.length} {brandProducts.length === 1 ? "modelo" : "modelos"}
+                  </Badge>
                 </div>
 
-                <CardContent className="flex flex-1 flex-col justify-between p-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      {p.brand} · {p.scale}
-                    </p>
-                    <h3 className="mt-1 font-semibold">{p.model}</h3>
-                  </div>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {brandProducts.map((p) => (
+                    <Link key={p.id} to="/produto/$id" params={{ id: p.id }} className="group">
+                      <Card className="flex h-full flex-col overflow-hidden border-border/60 panel transition-transform group-hover:-translate-y-1">
+                        <div className="relative aspect-video w-full overflow-hidden bg-muted">
+                          {p.image_url ? (
+                            <img
+                              src={p.image_url}
+                              alt={`${p.brand} ${p.model}`}
+                              loading="lazy"
+                              className="h-full w-full object-cover transition-transform group-hover:scale-105 duration-300"
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center text-muted-foreground">
+                              <Package className="size-8" />
+                            </div>
+                          )}
+                          {/* Badge flutuante de acionamento na foto */}
+                          <div
+                            className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur-md transition-transform group-hover:scale-105"
+                            style={{ backgroundColor: store.primary_color }}
+                          >
+                            <BookmarkCheck className="size-3.5" />
+                            <span>Reservar</span>
+                          </div>
+                        </div>
 
-                  <div className="mt-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-display text-lg font-bold" style={{ color: store.primary_color }}>
-                        {brl(Number(p.price))}
-                      </span>
-                      <Badge variant={p.is_open ? "secondary" : "outline"}>
-                        {p.is_open ? `${p.stock} cotas` : "Fechada"}
-                      </Badge>
-                    </div>
+                        <CardContent className="flex flex-1 flex-col justify-between p-4">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                              {p.brand} · {p.scale}
+                            </p>
+                            <h3 className="mt-1 font-semibold">{p.model}</h3>
+                          </div>
 
-                    <Button
-                      size="sm"
-                      className="w-full font-semibold gap-1.5 shadow-md"
-                      style={
-                        p.is_open && p.stock > 0
-                          ? { backgroundColor: store.primary_color, color: "#fff" }
-                          : undefined
-                      }
-                      variant={p.is_open && p.stock > 0 ? "default" : "outline"}
-                    >
-                      <BookmarkCheck className="size-4 shrink-0" />
-                      {!p.is_open
-                        ? "Pré-venda fechada"
-                        : p.stock > 0
-                          ? "Reservar cota"
-                          : "Entrar na fila"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+                          <div className="mt-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="font-display text-lg font-bold" style={{ color: store.primary_color }}>
+                                {brl(Number(p.price))}
+                              </span>
+                              <Badge variant={p.is_open ? "secondary" : "outline"}>
+                                {p.is_open ? `${p.stock} cotas` : "Fechada"}
+                              </Badge>
+                            </div>
+
+                            <Button
+                              size="sm"
+                              className="w-full font-semibold gap-1.5 shadow-md"
+                              style={
+                                p.is_open && p.stock > 0
+                                  ? { backgroundColor: store.primary_color, color: "#fff" }
+                                  : undefined
+                              }
+                              variant={p.is_open && p.stock > 0 ? "default" : "outline"}
+                            >
+                              <BookmarkCheck className="size-4 shrink-0" />
+                              {!p.is_open
+                                ? "Pré-venda fechada"
+                                : p.stock > 0
+                                  ? "Reservar cota"
+                                  : "Entrar na fila"}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+
           {products.length === 0 && (
             <p className="text-sm text-muted-foreground">Nenhuma pré-venda cadastrada ainda.</p>
           )}

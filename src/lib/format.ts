@@ -3,6 +3,7 @@ export const brl = (value: number | null | undefined) =>
 
 export const paymentLabels: Record<string, string> = {
   aguardando_sinal: "Aguardando sinal",
+  sem_sinal: "Sem sinal",
   sinal_pago: "Sinal pago",
   quitado: "Quitado",
   cancelado: "Cancelado",

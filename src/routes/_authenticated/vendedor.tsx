@@ -42,6 +42,7 @@ import { brl, slugify, whatsappLink } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { uploadImage } from "@/lib/upload";
 import { reserveQuota, reservationErrorMessage } from "@/lib/reservations";
+import { DEFAULT_PRESET_BRANDS, getStoreBrands, saveStoreBrands } from "@/lib/brands";
 import type { Tables } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/_authenticated/vendedor")({
@@ -369,6 +370,24 @@ function ProductsTab({
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [manualReservationProduct, setManualReservationProduct] = useState<Product | null>(null);
+  const [selectedBrand, setSelectedBrand] = useState<string>("all");
+  const [isCustomBrand, setIsCustomBrand] = useState(false);
+
+  const configuredBrands = useMemo(() => getStoreBrands(store.id), [store.id]);
+  const availableBrandOptions = useMemo(() => {
+    const set = new Set([...configuredBrands]);
+    products.forEach((p) => p.brand && set.add(p.brand.trim()));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [configuredBrands, products]);
+
+  const brandsMap: Record<string, Product[]> = {};
+  for (const p of products) {
+    const brandName = (p.brand || "Outros").trim();
+    if (!brandsMap[brandName]) brandsMap[brandName] = [];
+    brandsMap[brandName].push(p);
+  }
+  const brandList = Object.keys(brandsMap).sort((a, b) => a.localeCompare(b));
+  const filteredBrands = selectedBrand === "all" ? brandList : brandList.filter((b) => b === selectedBrand);
 
   function handleReserveCota(p: Product) {
     if (!p.is_open) return toast.error("Esta pré-venda está fechada.");
@@ -380,6 +399,10 @@ function ProductsTab({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!form.brand.trim()) {
+      return toast.error("Por favor, selecione ou informe a marca da miniatura.");
+    }
+
     setSaving(true);
     const payload: any = {
       store_id: store.id,
@@ -408,7 +431,14 @@ function ProductsTab({
 
     setSaving(false);
     if (error) return toast.error("Não foi possível salvar a miniatura.");
+
+    // Se adicionou uma marca customizada, salvar na lista da loja
+    if (form.brand.trim() && !configuredBrands.includes(form.brand.trim())) {
+      saveStoreBrands(store.id, [...configuredBrands, form.brand.trim()]);
+    }
+
     setForm({ ...emptyProduct });
+    setIsCustomBrand(false);
     queryClient.invalidateQueries();
     toast.success("Pré-venda cadastrada!");
   }
@@ -446,13 +476,46 @@ function ProductsTab({
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="brand">Marca</Label>
-                  <Input
-                    id="brand"
-                    required
-                    maxLength={40}
-                    value={form.brand}
-                    onChange={(e) => setForm({ ...form, brand: e.target.value })}
-                  />
+                  <Select
+                    value={
+                      isCustomBrand || (form.brand && !availableBrandOptions.includes(form.brand))
+                        ? "__custom"
+                        : form.brand
+                    }
+                    onValueChange={(val) => {
+                      if (val === "__custom") {
+                        setIsCustomBrand(true);
+                        setForm((f) => ({ ...f, brand: "" }));
+                      } else {
+                        setIsCustomBrand(false);
+                        setForm((f) => ({ ...f, brand: val }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="brand">
+                      <SelectValue placeholder="Selecione a marca" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableBrandOptions.map((b) => (
+                        <SelectItem key={b} value={b}>
+                          {b}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="__custom" className="font-semibold text-primary">
+                        + Outra marca...
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {(isCustomBrand || (form.brand && !availableBrandOptions.includes(form.brand))) && (
+                    <Input
+                      placeholder="Digite a nova marca..."
+                      maxLength={40}
+                      required
+                      value={form.brand}
+                      onChange={(e) => setForm({ ...form, brand: e.target.value })}
+                      className="mt-1.5 text-xs sm:text-sm"
+                    />
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="scale">Escala</Label>
@@ -532,6 +595,7 @@ function ProductsTab({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="0">Sem sinal (Sem prazo)</SelectItem>
                       <SelectItem value="12">12 horas</SelectItem>
                       <SelectItem value="24">24 horas</SelectItem>
                       <SelectItem value="48">48 horas</SelectItem>
@@ -557,75 +621,125 @@ function ProductsTab({
           </CardContent>
         </Card>
 
-        <div className="space-y-3">
-          {products.map((p) => (
-            <Card key={p.id} className="border-border/60 panel">
-              <CardContent className="flex flex-wrap items-center gap-4 p-4">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    {p.brand} · {p.scale} · sinal em {p.payment_deadline_hours}h
-                  </p>
-                  <h3 className="font-semibold">{p.model}</h3>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                    <Badge variant="secondary">Total: {brl(Number(p.price))}</Badge>
-                    {Number((p as any).down_payment_amount) > 0 && (
-                      <Badge variant="outline" className="border-primary/40 text-primary">
-                        Sinal: {brl(Number((p as any).down_payment_amount))}
-                      </Badge>
-                    )}
-                    <Badge variant="outline">{p.stock} cotas</Badge>
+        {/* Lista de Pré-vendas Agrupadas por Marca */}
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-3">
+            <h3 className="font-bold text-lg">Catálogo da Loja ({products.length})</h3>
+            {brandList.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={selectedBrand === "all" ? "default" : "outline"}
+                  onClick={() => setSelectedBrand("all")}
+                  className="h-7 px-2.5 text-xs rounded-full"
+                >
+                  Todas ({products.length})
+                </Button>
+                {brandList.map((b) => (
+                  <Button
+                    key={b}
+                    type="button"
+                    size="sm"
+                    variant={selectedBrand === b ? "default" : "outline"}
+                    onClick={() => setSelectedBrand(b)}
+                    className="h-7 px-2.5 text-xs rounded-full"
+                  >
+                    {b} ({brandsMap[b].length})
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-6">
+            {filteredBrands.map((brand) => {
+              const brandProducts = brandsMap[brand];
+              return (
+                <div key={brand} className="space-y-3">
+                  <div className="flex items-center gap-2 border-b border-border/40 pb-1.5">
+                    <h4 className="font-bold text-base">{brand}</h4>
+                    <Badge variant="secondary" className="text-xs font-semibold">
+                      {brandProducts.length} {brandProducts.length === 1 ? "miniatura" : "miniaturas"}
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-3">
+                    {brandProducts.map((p) => (
+                      <Card key={p.id} className="border-border/60 panel">
+                        <CardContent className="flex flex-wrap items-center gap-4 p-4">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                              {p.brand} · {p.scale} · sinal em {p.payment_deadline_hours}h
+                            </p>
+                            <h3 className="font-semibold">{p.model}</h3>
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                              <Badge variant="secondary">Total: {brl(Number(p.price))}</Badge>
+                              {Number((p as any).down_payment_amount) > 0 && (
+                                <Badge variant="outline" className="border-primary/40 text-primary">
+                                  Sinal: {brl(Number((p as any).down_payment_amount))}
+                                </Badge>
+                              )}
+                              <Badge variant="outline">{p.stock} cotas</Badge>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              variant="default"
+                              size="sm"
+                              disabled={!p.is_open || p.stock <= 0}
+                              onClick={() => handleReserveCota(p)}
+                              className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold"
+                              title="Fazer reserva para cliente nesta cota"
+                            >
+                              <BookmarkCheck className="size-3.5" />
+                              <span>Reservar para cliente</span>
+                            </Button>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground ml-1">
+                              <Switch checked={p.is_open} onCheckedChange={() => toggleOpen(p)} />
+                              {p.is_open ? "Aberta" : "Fechada"}
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              title="Editar pré-venda"
+                              onClick={() => setEditingProduct(p)}
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              title="Copiar link"
+                              onClick={() => {
+                                navigator.clipboard.writeText(`${window.location.origin}/produto/${p.id}`);
+                                toast.success("Link do produto copiado!");
+                              }}
+                            >
+                              <Share2 className="size-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => remove(p)}>
+                              <Trash2 className="size-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    disabled={!p.is_open || p.stock <= 0}
-                    onClick={() => handleReserveCota(p)}
-                    className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold"
-                    title="Fazer reserva para cliente nesta cota"
-                  >
-                    <BookmarkCheck className="size-3.5" />
-                    <span>Reservar para cliente</span>
-                  </Button>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground ml-1">
-                    <Switch checked={p.is_open} onCheckedChange={() => toggleOpen(p)} />
-                    {p.is_open ? "Aberta" : "Fechada"}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    title="Editar pré-venda"
-                    onClick={() => setEditingProduct(p)}
-                  >
-                    <Pencil className="size-4" />
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    title="Copiar link"
-                    onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/produto/${p.id}`);
-                      toast.success("Link do produto copiado!");
-                    }}
-                  >
-                    <Share2 className="size-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => remove(p)}>
-                    <Trash2 className="size-4 text-destructive" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-          {products.length === 0 && (
-            <p className="text-sm text-muted-foreground">Nenhuma miniatura cadastrada ainda.</p>
-          )}
+              );
+            })}
+
+            {products.length === 0 && (
+              <p className="text-sm text-muted-foreground">Nenhuma miniatura cadastrada ainda.</p>
+            )}
+          </div>
         </div>
       </div>
 
       <EditProductDialog
         product={editingProduct}
+        storeId={store.id}
         userId={userId}
         onClose={() => setEditingProduct(null)}
       />
@@ -648,10 +762,12 @@ function ProductsTab({
 
 function EditProductDialog({
   product,
+  storeId,
   userId,
   onClose,
 }: {
   product: Product | null;
+  storeId?: string;
   userId: string;
   onClose: () => void;
 }) {
@@ -669,6 +785,14 @@ function EditProductDialog({
     image_url: "",
   });
   const [saving, setSaving] = useState(false);
+  const [isCustomBrand, setIsCustomBrand] = useState(false);
+
+  const configuredBrands = useMemo(() => getStoreBrands(product?.store_id || storeId || ""), [product?.store_id, storeId]);
+  const availableBrandOptions = useMemo(() => {
+    const set = new Set([...configuredBrands]);
+    if (product?.brand) set.add(product.brand.trim());
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [configuredBrands, product?.brand]);
 
   useEffect(() => {
     if (product) {
@@ -685,6 +809,7 @@ function EditProductDialog({
         is_open: product.is_open ?? true,
         image_url: product.image_url ?? "",
       });
+      setIsCustomBrand(false);
     }
   }, [product]);
 
@@ -693,6 +818,10 @@ function EditProductDialog({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!product) return;
+    if (!form.brand.trim()) {
+      return toast.error("Por favor, informe a marca da miniatura.");
+    }
+
     setSaving(true);
     const payload: any = {
       brand: form.brand.trim(),
@@ -749,13 +878,46 @@ function EditProductDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="edit-brand">Marca</Label>
-              <Input
-                id="edit-brand"
-                required
-                maxLength={40}
-                value={form.brand}
-                onChange={(e) => setForm({ ...form, brand: e.target.value })}
-              />
+              <Select
+                value={
+                  isCustomBrand || (form.brand && !availableBrandOptions.includes(form.brand))
+                    ? "__custom"
+                    : form.brand
+                }
+                onValueChange={(val) => {
+                  if (val === "__custom") {
+                    setIsCustomBrand(true);
+                    setForm((f) => ({ ...f, brand: "" }));
+                  } else {
+                    setIsCustomBrand(false);
+                    setForm((f) => ({ ...f, brand: val }));
+                  }
+                }}
+              >
+                <SelectTrigger id="edit-brand">
+                  <SelectValue placeholder="Selecione a marca" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableBrandOptions.map((b) => (
+                    <SelectItem key={b} value={b}>
+                      {b}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="__custom" className="font-semibold text-primary">
+                    + Outra marca...
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {(isCustomBrand || (form.brand && !availableBrandOptions.includes(form.brand))) && (
+                <Input
+                  placeholder="Digite a nova marca..."
+                  maxLength={40}
+                  required
+                  value={form.brand}
+                  onChange={(e) => setForm({ ...form, brand: e.target.value })}
+                  className="mt-1.5 text-xs sm:text-sm"
+                />
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="edit-scale">Escala</Label>
@@ -837,6 +999,7 @@ function EditProductDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="0">Sem sinal (Sem prazo)</SelectItem>
                   <SelectItem value="12">12 horas</SelectItem>
                   <SelectItem value="24">24 horas</SelectItem>
                   <SelectItem value="48">48 horas</SelectItem>
@@ -1087,6 +1250,8 @@ function ManualReservationDialog({
         downPayment = customSignal > 0 ? customSignal : Math.round(totalPrice * 0.2 * 100) / 100;
       } else if (paymentStatus === "quitado") {
         downPayment = totalPrice;
+      } else if (paymentStatus === "sem_sinal") {
+        downPayment = 0;
       }
 
       // 5. Inserir a reserva no banco atribuída ao ID DO CLIENTE (clientId)
@@ -1097,6 +1262,7 @@ function ManualReservationDialog({
         total_price: totalPrice,
         down_payment: downPayment,
         payment_status: paymentStatus,
+        reservation_expires_at: paymentStatus === "sem_sinal" ? null : undefined,
       };
       if (pixKey.trim()) {
         orderPayload.pix_key = pixKey.trim();
@@ -1376,6 +1542,7 @@ function ManualReservationDialog({
               </SelectTrigger>
               <SelectContent className="max-w-[calc(100vw-3rem)]">
                 <SelectItem value="aguardando_sinal" className="text-xs sm:text-sm">Aguardando Sinal</SelectItem>
+                <SelectItem value="sem_sinal" className="text-xs sm:text-sm">Sem Sinal (Reserva Aberta)</SelectItem>
                 <SelectItem value="sinal_pago" className="text-xs sm:text-sm">Sinal Pago</SelectItem>
                 <SelectItem value="quitado" className="text-xs sm:text-sm">Pago Total (Quitado)</SelectItem>
               </SelectContent>
@@ -2007,6 +2174,34 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
     favicon_url: store.logo_url ?? store.favicon_url ?? "",
   });
   const [saving, setSaving] = useState(false);
+  const [selectedBrands, setSelectedBrands] = useState<string[]>(() => getStoreBrands(store.id));
+  const [newCustomBrand, setNewCustomBrand] = useState("");
+
+  function handleToggleBrand(brand: string) {
+    let updated: string[];
+    if (selectedBrands.includes(brand)) {
+      updated = selectedBrands.filter((b) => b !== brand);
+    } else {
+      updated = [...selectedBrands, brand];
+    }
+    setSelectedBrands(updated);
+    saveStoreBrands(store.id, updated);
+  }
+
+  function handleAddCustomBrand() {
+    const trimmed = newCustomBrand.trim();
+    if (!trimmed) return;
+    if (selectedBrands.map((b) => b.toLowerCase()).includes(trimmed.toLowerCase())) {
+      toast.info("Esta marca já está na sua lista.");
+      setNewCustomBrand("");
+      return;
+    }
+    const updated = [...selectedBrands, trimmed];
+    setSelectedBrands(updated);
+    saveStoreBrands(store.id, updated);
+    setNewCustomBrand("");
+    toast.success(`Marca "${trimmed}" adicionada!`);
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -2015,6 +2210,9 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
     if (!cleanSlug) return toast.error("Por favor, insira um nome válido para a loja.");
 
     setSaving(true);
+
+    // Salvar marcas comercializadas
+    saveStoreBrands(store.id, selectedBrands);
 
     // Verificar se já existe OUTRA loja cadastrada com o mesmo slug
     const { data: existing } = await supabase
@@ -2099,6 +2297,70 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
               />
+            </div>
+
+            {/* SEÇÃO DE MARCAS COMERCIALIZADAS */}
+            <div className="space-y-3 rounded-xl border border-border/50 bg-muted/30 p-4">
+              <div>
+                <Label className="text-base font-semibold">Marcas Comercializadas</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Marque quais marcas de miniaturas você vende na loja. Elas ficarão disponíveis no menu de seleção ao cadastrar pré-vendas.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 pt-2">
+                {DEFAULT_PRESET_BRANDS.map((presetBrand) => {
+                  const isSelected = selectedBrands.includes(presetBrand);
+                  return (
+                    <button
+                      key={presetBrand}
+                      type="button"
+                      onClick={() => handleToggleBrand(presetBrand)}
+                      className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                        isSelected
+                          ? "bg-primary text-primary-foreground shadow-sm scale-105"
+                          : "bg-background border border-border/60 text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {isSelected ? "✓ " : "+ "}
+                      {presetBrand}
+                    </button>
+                  );
+                })}
+
+                {/* Exibe marcas customizadas já adicionadas */}
+                {selectedBrands
+                  .filter((b) => !DEFAULT_PRESET_BRANDS.includes(b))
+                  .map((customBrand) => (
+                    <button
+                      key={customBrand}
+                      type="button"
+                      onClick={() => handleToggleBrand(customBrand)}
+                      className="rounded-full px-3 py-1 text-xs font-semibold bg-primary text-primary-foreground shadow-sm scale-105 flex items-center gap-1"
+                    >
+                      <span>✓ {customBrand}</span>
+                      <span className="opacity-70 hover:opacity-100 ml-0.5">×</span>
+                    </button>
+                  ))}
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <Input
+                  placeholder="Adicionar marca personalizada..."
+                  value={newCustomBrand}
+                  onChange={(e) => setNewCustomBrand(e.target.value)}
+                  className="text-xs sm:text-sm"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddCustomBrand();
+                    }
+                  }}
+                />
+                <Button type="button" variant="secondary" size="sm" onClick={handleAddCustomBrand} className="shrink-0">
+                  <Plus className="size-4 mr-1" /> Adicionar
+                </Button>
+              </div>
             </div>
 
             <div className="space-y-2">
