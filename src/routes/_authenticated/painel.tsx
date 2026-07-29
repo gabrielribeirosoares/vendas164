@@ -115,6 +115,21 @@ function CustomerDashboard() {
   // Separar pedidos em andamento vs entregues/na garagem
   const active = (orders ?? []).filter((o) => o.payment_status !== "cancelado");
   const pendingOrders = active.filter((o) => o.delivery_status !== "entregue");
+
+  // Agrupamento de pedidos por produto e status para exibição consolidada
+  const groupedPendingOrders = useMemo(() => {
+    const map = new Map<string, { order: (typeof pendingOrders)[0]; quantity: number }>();
+    for (const o of pendingOrders) {
+      const key = `${o.product_id}_${o.payment_status}_${o.delivery_status}`;
+      if (map.has(key)) {
+        const item = map.get(key)!;
+        item.quantity += 1;
+      } else {
+        map.set(key, { order: o, quantity: 1 });
+      }
+    }
+    return Array.from(map.values());
+  }, [pendingOrders]);
   const deliveredOrders = active.filter((o) => o.delivery_status === "entregue");
   const total = active.reduce((s, o) => s + Number(o.total_price), 0);
   const paid = active.reduce((s, o) => s + Number(o.down_payment), 0);
@@ -219,7 +234,7 @@ function CustomerDashboard() {
           </TabsList>
 
           <TabsContent value="reservas" className="mt-4 space-y-3">
-            {pendingOrders.map((o) => (
+            {groupedPendingOrders.map(({ order: o, quantity: qty }) => (
               <Card key={o.id} className="border-border/60 panel">
                 <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -238,10 +253,20 @@ function CustomerDashboard() {
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        {o.products?.brand} · {o.stores?.name}
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                        <span>{o.products?.brand} · {o.stores?.name}</span>
+                        {qty > 1 && (
+                          <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[11px] px-2 py-0 border-primary/20">
+                            {qty}x unidades acumuladas
+                          </Badge>
+                        )}
                       </p>
-                      <h3 className="font-semibold">{o.products?.model}</h3>
+                      <h3 className="font-semibold text-base flex items-center gap-2">
+                        {o.products?.model}
+                        {qty > 1 && (
+                          <span className="text-xs font-normal text-muted-foreground font-mono">({qty} unidades)</span>
+                        )}
+                      </h3>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         {(() => {
                           const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
@@ -263,10 +288,10 @@ function CustomerDashboard() {
                       </div>
                     </div>
                     <div className="text-sm sm:text-right">
-                      <p className="text-muted-foreground">Total {brl(Number(o.total_price))}</p>
-                      <p className="text-muted-foreground">Sinal {brl(Number(o.down_payment))}</p>
+                      <p className="text-muted-foreground">Total {brl(Number(o.total_price) * qty)}</p>
+                      <p className="text-muted-foreground">Sinal {brl(Number(o.down_payment) * qty)}</p>
                       <p className="font-semibold text-primary">
-                        Saldo {brl(Number(o.remaining_balance))}
+                        Saldo {brl(Number(o.remaining_balance) * qty)}
                       </p>
                     </div>
                     {o.stores?.whatsapp_number && o.payment_status !== "cancelado" && (
@@ -275,8 +300,8 @@ function CustomerDashboard() {
                           href={whatsappLink(
                             o.stores.whatsapp_number,
                             o.payment_status === "sem_sinal"
-                              ? `Olá, gostaria de acompanhar minha reserva #${o.id.slice(0, 8)} da miniatura ${o.products?.brand} ${o.products?.model}.`
-                              : `Olá, segue o comprovante do pedido #${o.id.slice(0, 8)} da miniatura ${o.products?.brand} ${o.products?.model}.`,
+                              ? `Olá, gostaria de acompanhar minha reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`
+                              : `Olá, segue o comprovante da reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`,
                           )}
                           target="_blank"
                           rel="noreferrer"
