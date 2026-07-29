@@ -112,8 +112,10 @@ function CustomerDashboard() {
     },
   });
 
+  // Separar pedidos em andamento vs entregues/na garagem
   const active = (orders ?? []).filter((o) => o.payment_status !== "cancelado");
-  const deliveredOrders = (orders ?? []).filter((o) => o.delivery_status === "entregue" || o.payment_status === "quitado");
+  const pendingOrders = active.filter((o) => o.delivery_status !== "entregue");
+  const deliveredOrders = active.filter((o) => o.delivery_status === "entregue");
   const total = active.reduce((s, o) => s + Number(o.total_price), 0);
   const paid = active.reduce((s, o) => s + Number(o.down_payment), 0);
 
@@ -217,7 +219,7 @@ function CustomerDashboard() {
           </TabsList>
 
           <TabsContent value="reservas" className="mt-4 space-y-3">
-            {(orders ?? []).map((o) => (
+            {pendingOrders.map((o) => (
               <Card key={o.id} className="border-border/60 panel">
                 <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -348,8 +350,10 @@ function CustomerDashboard() {
                 </CardContent>
               </Card>
             ))}
-            {orders && orders.length === 0 && (
-              <p className="text-sm text-muted-foreground">Você ainda não tem reservas.</p>
+            {pendingOrders.length === 0 && (
+              <p className="text-sm text-muted-foreground py-6 text-center border border-dashed rounded-xl">
+                Você não possui reservas em andamento no momento.
+              </p>
             )}
           </TabsContent>
 
