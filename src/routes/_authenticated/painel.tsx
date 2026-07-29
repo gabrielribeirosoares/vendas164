@@ -62,7 +62,7 @@ function CustomerDashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("*, products(brand, model, image_url), stores(name, slug, whatsapp_number, pix_key)")
+        .select("*, products(brand, model, image_url, release_date), stores(name, slug, whatsapp_number, pix_key)")
         .eq("user_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -236,11 +236,23 @@ function CustomerDashboard() {
                       </p>
                       <h3 className="font-semibold">{o.products?.model}</h3>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <PaymentBadge status={o.payment_status} />
-                        <DeliveryBadge status={o.delivery_status} />
-                        {o.payment_status === "aguardando_sinal" && o.reservation_expires_at && (
-                          <Countdown expiresAt={o.reservation_expires_at} />
-                        )}
+                        {(() => {
+                          const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
+                          const currentPaymentStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
+                          return (
+                            <>
+                              <PaymentBadge status={currentPaymentStatus} />
+                              <DeliveryBadge status={o.delivery_status} />
+                              {currentPaymentStatus === "aguardando_sinal" && o.reservation_expires_at ? (
+                                <Countdown expiresAt={o.reservation_expires_at} />
+                              ) : (currentPaymentStatus === "sem_sinal" || currentPaymentStatus === "pagar_na_chegada") && (o.products as any)?.release_date ? (
+                                <span className="text-xs text-muted-foreground font-mono">
+                                  Pagar na chegada ({new Date((o.products as any).release_date + "T00:00:00").toLocaleDateString("pt-BR")})
+                                </span>
+                              ) : null}
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                     <div className="text-sm sm:text-right">
@@ -394,7 +406,7 @@ function CustomerDashboard() {
                           >
                             {brl(Number(p.price))}
                           </span>
-                          <Badge variant="outline">{p.stock} cotas</Badge>
+                          <Badge variant="outline">{p.stock} {p.stock === 1 ? "unidade" : "unidades"}</Badge>
                         </div>
 
                         <Button
@@ -403,7 +415,7 @@ function CustomerDashboard() {
                           style={{ backgroundColor: p.stores?.primary_color || "#e11d48", color: "#fff" }}
                         >
                           <BookmarkCheck className="size-4 shrink-0" />
-                          Reservar cota
+                          Reservar unidade
                         </Button>
                       </div>
                     </CardContent>

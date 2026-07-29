@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { brl } from "@/lib/format";
+import { brl, getProductInstallmentInfo } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { saveCustomerToCache } from "@/lib/customerCache";
 
@@ -156,6 +156,29 @@ function StorePage() {
 
   const { store, products } = data;
   const isOwner = !!(user && store.owner_id === user.id);
+  const storeStatus = (store as any).status || "active";
+
+  // Se a loja ainda estiver pendente ou tiver sido recusada (e quem está vendo não é o próprio dono da loja)
+  if (storeStatus !== "active" && !isOwner) {
+    return (
+      <div className="min-h-screen">
+        <AppHeader />
+        <main className="mx-auto max-w-md px-4 py-16 text-center space-y-4">
+          <div className="rounded-2xl border border-border/60 panel p-8">
+            <h1 className="text-xl font-bold text-foreground">Loja Indisponível</h1>
+            <p className="text-sm text-muted-foreground mt-2">
+              Esta loja está em processo de análise e autorização pelo administrador do site e ainda não possui catálogo público liberado.
+            </p>
+            <div className="pt-4">
+              <Button asChild variant="outline">
+                <Link to="/">Voltar ao início</Link>
+              </Button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   // Agrupamento por marca
   const brandsMap: Record<string, typeof products> = {};
@@ -316,13 +339,27 @@ function StorePage() {
                           </div>
 
                           <div className="mt-4 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <span className="font-display text-lg font-bold" style={{ color: store.primary_color }}>
-                                {brl(Number(p.price))}
-                              </span>
-                              <Badge variant={p.is_open ? "secondary" : "outline"}>
-                                {p.is_open ? `${p.stock} cotas` : "Fechada"}
-                              </Badge>
+                            <div className="flex flex-col gap-0.5">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <span className="text-[10px] uppercase font-semibold text-muted-foreground block">À vista</span>
+                                  <span className="font-display text-lg font-bold" style={{ color: store.primary_color }}>
+                                    {brl(Number(p.price))}
+                                  </span>
+                                </div>
+                                <Badge variant={p.is_open ? "secondary" : "outline"}>
+                                  {p.is_open ? `${p.stock} ${p.stock === 1 ? "unidade" : "unidades"}` : "Fechada"}
+                                </Badge>
+                              </div>
+                              {(() => {
+                                const inst = getProductInstallmentInfo(p);
+                                if (!inst) return null;
+                                return (
+                                  <p className="text-xs text-muted-foreground">
+                                    ou <strong className="text-foreground">{inst.maxInstallments}x de {brl(inst.installmentValue)}</strong> {inst.hasSurcharge ? "" : "sem acréscimo"}
+                                  </p>
+                                );
+                              })()}
                             </div>
 
                             <Button
@@ -339,7 +376,7 @@ function StorePage() {
                               {!p.is_open
                                 ? "Pré-venda fechada"
                                 : p.stock > 0
-                                  ? "Reservar cota"
+                                  ? "Reservar unidade"
                                   : "Entrar na fila"}
                             </Button>
                           </div>

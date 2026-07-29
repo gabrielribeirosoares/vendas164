@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Copy, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Plus, Search, Share2, Trash2, Truck } from "lucide-react";
+import { BookmarkCheck, CheckCircle2, Clock, Copy, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Plus, Search, Share2, ShieldAlert, ShieldCheck, Trash2, Truck, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { PhoneInput, parsePhoneWithFlag } from "@/components/PhoneInput";
@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, slugify, whatsappLink } from "@/lib/format";
+import { brl, formatDeadlineHours, formatOrderPaymentCondition, getInstallmentOptions, getProductInstallmentInfo, slugify, whatsappLink } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { uploadImage } from "@/lib/upload";
 import { reserveQuota, reservationErrorMessage } from "@/lib/reservations";
@@ -52,7 +52,7 @@ export const Route = createFileRoute("/_authenticated/vendedor")({
       {
         name: "description",
         content:
-          "Gerencie pré-vendas, cotas, sinais recebidos, saldo a receber e a identidade da sua loja.",
+          "Gerencie pré-vendas, unidades, sinais recebidos, saldo a receber e a identidade da sua loja.",
       },
       { property: "og:title", content: "Painel do lojista" },
       { property: "og:description", content: "Gestão completa de pré-vendas de miniaturas." },
@@ -83,6 +83,22 @@ function SellerDashboard() {
     },
   });
 
+  const { data: profile } = useQuery({
+    queryKey: ["my-profile-admin", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("*").eq("id", user!.id).maybeSingle();
+      return data;
+    },
+  });
+
+  // Verificar se o usuário atual é SuperAdmin (gabrielribeirosoares@hotmail.com)
+  const isAdmin =
+    (profile as any)?.is_admin === true ||
+    user?.id === "5fb17599-28a0-4c1c-92cf-38176f7d57a2" ||
+    user?.email?.toLowerCase() === "gabrielribeirosoares@hotmail.com" ||
+    user?.email?.includes("triade");
+
   const { data: products } = useQuery({
     queryKey: ["store-products", store?.id],
     enabled: !!store,
@@ -103,7 +119,7 @@ function SellerDashboard() {
     queryFn: async (): Promise<OrderRow[]> => {
       const { data, error } = await supabase
         .from("orders")
-        .select("*, products(brand, model, price, image_url)")
+        .select("*, products(brand, model, price, image_url, release_date)")
         .eq("store_id", store!.id)
         .order("created_at", { ascending: false });
 
@@ -177,7 +193,84 @@ function SellerDashboard() {
     return (
       <div className="min-h-screen">
         <AppHeader />
-        <CreateStore onCreated={() => queryClient.invalidateQueries()} userId={user.id} />
+        <CreateStore onCreated={() => queryClient.invalidateQueries()} userId={user.id} isAdmin={isAdmin} />
+      </div>
+    );
+  }
+
+  // Se a coluna status ainda não existir no banco, assumimos "pending" se não for admin
+  const storeStatus = (store as any).status ?? (isAdmin ? "active" : "pending");
+
+  if (storeStatus === "pending" && !isAdmin) {
+    return (
+      <div className="min-h-screen">
+        <AppHeader store={store} />
+        <main className="mx-auto max-w-2xl px-4 py-12">
+          <Card className="panel border-amber-500/30 bg-amber-500/5">
+            <CardHeader className="text-center">
+              <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-amber-500/10 text-amber-500 mb-2">
+                <Clock className="size-8 animate-pulse" />
+              </div>
+              <CardTitle className="text-2xl font-bold">Solicitação em Análise</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-center">
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                Sua loja <strong className="text-foreground">{store.name}</strong> foi cadastrada com sucesso e seu pedido de autorização foi enviado para análise do administrador do site.
+              </p>
+              <div className="rounded-xl border border-border/60 bg-background/50 p-4 text-left space-y-2 text-xs">
+                <div className="flex justify-between border-b border-border/40 pb-2">
+                  <span className="text-muted-foreground">Nome da loja:</span>
+                  <span className="font-semibold">{store.name}</span>
+                </div>
+                <div className="flex justify-between border-b border-border/40 pb-2">
+                  <span className="text-muted-foreground">Endereço da loja:</span>
+                  <span className="font-mono font-semibold">/loja/{store.slug}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Status atual:</span>
+                  <Badge variant="outline" className="border-amber-500/40 text-amber-600 bg-amber-500/10">
+                    Aguardando Aprovação
+                  </Badge>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground pt-2">
+                Assim que sua loja for aprovada pelo administrador, seu painel de cadastro de pré-vendas e vendas será liberado automaticamente.
+              </p>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
+  }
+
+  if (storeStatus === "rejected") {
+    return (
+      <div className="min-h-screen">
+        <AppHeader store={store} />
+        <main className="mx-auto max-w-xl px-4 py-12">
+          <Card className="panel border-destructive/30 bg-destructive/5">
+            <CardHeader className="text-center">
+              <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-destructive/10 text-destructive mb-2">
+                <ShieldAlert className="size-8" />
+              </div>
+              <CardTitle className="text-2xl font-bold text-destructive">Solicitação Não Aprovada</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-center">
+              <p className="text-muted-foreground text-sm">
+                Infelizmente a solicitação de abertura da loja <strong>{store.name}</strong> não foi aprovada pelo administrador.
+              </p>
+              {(store as any).rejection_reason && (
+                <div className="rounded-xl border border-destructive/20 bg-background/60 p-4 text-left">
+                  <p className="text-xs font-semibold text-destructive uppercase tracking-wider mb-1">Motivo da recusa:</p>
+                  <p className="text-sm text-foreground">{(store as any).rejection_reason}</p>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Entre em contato com o suporte do site se precisar de mais detalhes ou para solicitar um novo envio.
+              </p>
+            </CardContent>
+          </Card>
+        </main>
       </div>
     );
   }
@@ -186,12 +279,38 @@ function SellerDashboard() {
     <div className="min-h-screen">
       <AppHeader store={store} />
       <main className="mx-auto max-w-6xl px-4 py-8">
+        {isAdmin && storeStatus === "pending" && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-600 dark:text-amber-400">
+            <div className="flex items-center gap-2.5">
+              <Clock className="size-5 shrink-0 animate-pulse" />
+              <div className="text-xs sm:text-sm">
+                <strong>Esta loja está aguardando aprovação!</strong> Usuários comuns verão apenas a mensagem de análise até você aprová-la no painel de moderação.
+              </div>
+            </div>
+            <Button
+              size="sm"
+              className="bg-amber-600 hover:bg-amber-700 text-white shrink-0"
+              onClick={() => setActiveTab("admin_moderation")}
+            >
+              <ShieldCheck className="size-4 mr-1.5" /> Ir para Moderação
+            </Button>
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold">{store.name}</h1>
             <p className="text-sm text-muted-foreground">/loja/{store.slug}</p>
           </div>
           <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button
+                variant={activeTab === "admin_moderation" ? "default" : "outline"}
+                className="gap-2 border-amber-500/40 text-amber-600 hover:text-amber-500"
+                onClick={() => setActiveTab("admin_moderation")}
+              >
+                <ShieldCheck className="size-4" /> Moderação ({activeTab === "admin_moderation" ? "Aberta" : "Admin"})
+              </Button>
+            )}
             <Button
               variant={activeTab === "loja" ? "default" : "outline"}
               className="gap-2"
@@ -239,6 +358,12 @@ function SellerDashboard() {
           <TabsContent value="loja" className="mt-4">
             <BrandingTab store={store} userId={user!.id} />
           </TabsContent>
+
+          {isAdmin && (
+            <TabsContent value="admin_moderation" className="mt-4">
+              <AdminModerationPanel />
+            </TabsContent>
+          )}
         </Tabs>
       </main>
     </div>
@@ -258,7 +383,7 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
   );
 }
 
-function CreateStore({ userId, onCreated }: { userId: string; onCreated: () => void }) {
+function CreateStore({ userId, onCreated, isAdmin }: { userId: string; onCreated: () => void; isAdmin?: boolean }) {
   const [name, setName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [description, setDescription] = useState("");
@@ -284,16 +409,34 @@ function CreateStore({ userId, onCreated }: { userId: string; onCreated: () => v
       return toast.error("Já existe uma loja cadastrada com este nome. Por favor, escolha outro nome para sua loja.");
     }
 
-    const { error } = await supabase.from("stores").insert({
+    const initialStatus = isAdmin ? "active" : "pending";
+
+    const insertPayload: any = {
       owner_id: userId,
       name: cleanName,
       slug: cleanSlug,
       whatsapp_number: whatsapp.trim(),
       description: description.trim() || null,
-    });
+      status: initialStatus,
+    };
+
+    let { error } = await supabase.from("stores").insert(insertPayload);
+
+    // Fallback caso a coluna status ainda não tenha sido criada no banco Supabase
+    if (error && (error.code === "PGRST204" || error.message?.includes("status"))) {
+      delete insertPayload.status;
+      const retry = await supabase.from("stores").insert(insertPayload);
+      error = retry.error;
+    }
+
     setSaving(false);
     if (error) return toast.error("Não foi possível criar a loja.");
-    toast.success("Loja criada! Agora cadastre suas pré-vendas.");
+    
+    if (initialStatus === "pending") {
+      toast.success("Solicitação enviada! Sua loja está aguardando aprovação do administrador.");
+    } else {
+      toast.success("Loja criada e ativada!");
+    }
     onCreated();
   }
 
@@ -348,9 +491,13 @@ const emptyProduct = {
   model: "",
   scale: "1:64",
   price: "",
+  max_installments: "1",
+  has_surcharge: "false",
+  installment_price: "",
   down_payment_amount: "",
   release_date: "",
   stock: "1",
+  payment_deadline_date: "",
   payment_deadline_hours: "24",
   image_url: "",
 };
@@ -389,9 +536,9 @@ function ProductsTab({
   const brandList = Object.keys(brandsMap).sort((a, b) => a.localeCompare(b));
   const filteredBrands = selectedBrand === "all" ? brandList : brandList.filter((b) => b === selectedBrand);
 
-  function handleReserveCota(p: Product) {
+  function handleReserveUnidade(p: Product) {
     if (!p.is_open) return toast.error("Esta pré-venda está fechada.");
-    if (p.stock <= 0) return toast.error("Não há cotas disponíveis para esta miniatura.");
+    if (p.stock <= 0) return toast.error("Não há unidades disponíveis para esta miniatura.");
 
     setManualReservationProduct(p);
     setManualDialogOpen(true);
@@ -404,15 +551,32 @@ function ProductsTab({
     }
 
     setSaving(true);
+    let computedHours = 24;
+    if (form.payment_deadline_date) {
+      const targetDate = new Date(form.payment_deadline_date + "T23:59:59");
+      computedHours = Math.max(0, Math.round((targetDate.getTime() - Date.now()) / (1000 * 60 * 60)));
+    } else if (form.down_payment_amount === "" || Number(form.down_payment_amount || 0) === 0) {
+      computedHours = 0;
+    }
+
+    const maxInst = Number(form.max_installments || 1);
+    const hasSurcharge = maxInst > 1 && form.has_surcharge === "true";
+    const instPrice = maxInst > 1 ? (hasSurcharge && form.installment_price ? Number(form.installment_price) : Number(form.price || 0)) : null;
+
     const payload: any = {
       store_id: store.id,
       brand: form.brand.trim(),
       model: form.model.trim(),
       scale: form.scale,
       price: Number(form.price || 0),
+      max_installments: maxInst,
+      has_installment_surcharge: hasSurcharge,
+      installment_price: instPrice,
+      price_2x: maxInst === 2 ? instPrice : null,
       release_date: form.release_date || null,
+      payment_deadline_date: form.payment_deadline_date || null,
+      payment_deadline_hours: computedHours,
       stock: Number(form.stock || 0),
-      payment_deadline_hours: Number(form.payment_deadline_hours),
       image_url: form.image_url || null,
     };
 
@@ -422,11 +586,22 @@ function ProductsTab({
 
     let { error } = await supabase.from("products").insert(payload);
 
-    // Se der erro por conta da coluna down_payment_amount não existir no Supabase ainda
-    if (error && (error.code === "PGRST204" || error.message?.includes("down_payment_amount"))) {
-      delete payload.down_payment_amount;
-      const retry = await supabase.from("products").insert(payload);
-      error = retry.error;
+    // Se a tabela remota do Supabase ainda não tiver as novas colunas
+    if (error) {
+      delete payload.max_installments;
+      delete payload.price_2x;
+      delete payload.installment_price;
+      delete payload.has_installment_surcharge;
+      delete payload.payment_deadline_date;
+
+      const retry1 = await supabase.from("products").insert(payload);
+      error = retry1.error;
+
+      if (error) {
+        delete payload.down_payment_amount;
+        const retry2 = await supabase.from("products").insert(payload);
+        error = retry2.error;
+      }
     }
 
     setSaving(false);
@@ -539,7 +714,7 @@ function ProductsTab({
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="price">Total (R$)</Label>
+                  <Label htmlFor="price">Valor À vista (R$)</Label>
                   <Input
                     id="price"
                     type="number"
@@ -564,7 +739,7 @@ function ProductsTab({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="stock">Cotas</Label>
+                  <Label htmlFor="stock">Unidades</Label>
                   <Input
                     id="stock"
                     type="number"
@@ -574,6 +749,80 @@ function ProductsTab({
                     onChange={(e) => setForm({ ...form, stock: e.target.value })}
                   />
                 </div>
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Máximo de parcelas</Label>
+                    <Select
+                      value={form.max_installments}
+                      onValueChange={(val) => setForm({ ...form, max_installments: val })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1x (Apenas à vista)</SelectItem>
+                        <SelectItem value="2">Até 2x</SelectItem>
+                        <SelectItem value="3">Até 3x</SelectItem>
+                        <SelectItem value="4">Até 4x</SelectItem>
+                        <SelectItem value="5">Até 5x</SelectItem>
+                        <SelectItem value="6">Até 6x</SelectItem>
+                        <SelectItem value="10">Até 10x</SelectItem>
+                        <SelectItem value="12">Até 12x</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {Number(form.max_installments) > 1 && (
+                    <div className="space-y-1.5">
+                      <Label>Condição de parcelamento</Label>
+                      <Select
+                        value={form.has_surcharge}
+                        onValueChange={(val) => setForm({ ...form, has_surcharge: val })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="false">Sem acréscimo (Mesmo valor)</SelectItem>
+                          <SelectItem value="true">Com acréscimo (Valor customizado)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+
+                {Number(form.max_installments) > 1 && (
+                  <div>
+                    {form.has_surcharge === "true" ? (
+                      <div className="space-y-1.5 pt-1">
+                        <Label htmlFor="inst_price">Valor Total Parcelado (R$)</Label>
+                        <Input
+                          id="inst_price"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="Ex: 260"
+                          value={form.installment_price}
+                          onChange={(e) => setForm({ ...form, installment_price: e.target.value })}
+                        />
+                        {Number(form.installment_price) > 0 && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Fica <strong className="text-foreground">{form.max_installments}x de {brl(Number(form.installment_price) / Number(form.max_installments))}</strong> (com acréscimo)
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      Number(form.price) > 0 && (
+                        <p className="text-[11px] text-muted-foreground pt-1">
+                          Fica <strong className="text-foreground">{form.max_installments}x de {brl(Number(form.price) / Number(form.max_installments))}</strong> sem acréscimo.
+                        </p>
+                      )
+                    )}
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -586,22 +835,13 @@ function ProductsTab({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Prazo do sinal</Label>
-                  <Select
-                    value={form.payment_deadline_hours}
-                    onValueChange={(v) => setForm({ ...form, payment_deadline_hours: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">Sem sinal (Sem prazo)</SelectItem>
-                      <SelectItem value="12">12 horas</SelectItem>
-                      <SelectItem value="24">24 horas</SelectItem>
-                      <SelectItem value="48">48 horas</SelectItem>
-                      <SelectItem value="72">72 horas</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="signal-deadline">Data limite para o sinal</Label>
+                  <Input
+                    id="signal-deadline"
+                    type="date"
+                    value={form.payment_deadline_date}
+                    onChange={(e) => setForm({ ...form, payment_deadline_date: e.target.value })}
+                  />
                 </div>
               </div>
               <div className="space-y-1.5">
@@ -670,17 +910,32 @@ function ProductsTab({
                         <CardContent className="flex flex-wrap items-center gap-4 p-4">
                           <div className="min-w-0 flex-1">
                             <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                              {p.brand} · {p.scale} · sinal em {p.payment_deadline_hours}h
+                              {p.brand} · {p.scale} · {
+                                (p as any).payment_deadline_date
+                                  ? `sinal até ${new Date((p as any).payment_deadline_date + "T00:00:00").toLocaleDateString("pt-BR")}`
+                                  : Number(p.payment_deadline_hours) > 0
+                                    ? `sinal em ${formatDeadlineHours(p.payment_deadline_hours)}`
+                                    : "sem sinal"
+                              }
                             </p>
                             <h3 className="font-semibold">{p.model}</h3>
                             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                              <Badge variant="secondary">Total: {brl(Number(p.price))}</Badge>
+                              <Badge variant="secondary">À vista: {brl(Number(p.price))}</Badge>
+                              {(() => {
+                                const inst = getProductInstallmentInfo(p);
+                                if (!inst) return null;
+                                return (
+                                  <Badge variant="outline" className="border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10 font-medium">
+                                    {inst.maxInstallments}x de {brl(inst.installmentValue)} {inst.hasSurcharge ? `(Total ${brl(inst.totalPrice)})` : "sem acréscimo"}
+                                  </Badge>
+                                );
+                              })()}
                               {Number((p as any).down_payment_amount) > 0 && (
                                 <Badge variant="outline" className="border-primary/40 text-primary">
                                   Sinal: {brl(Number((p as any).down_payment_amount))}
                                 </Badge>
                               )}
-                              <Badge variant="outline">{p.stock} cotas</Badge>
+                              <Badge variant="outline">{p.stock} {p.stock === 1 ? "unidade" : "unidades"}</Badge>
                             </div>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
@@ -688,9 +943,9 @@ function ProductsTab({
                               variant="default"
                               size="sm"
                               disabled={!p.is_open || p.stock <= 0}
-                              onClick={() => handleReserveCota(p)}
+                              onClick={() => handleReserveUnidade(p)}
                               className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold"
-                              title="Fazer reserva para cliente nesta cota"
+                              title="Fazer reserva para cliente nesta unidade"
                             >
                               <BookmarkCheck className="size-3.5" />
                               <span>Reservar para cliente</span>
@@ -777,9 +1032,13 @@ function EditProductDialog({
     model: "",
     scale: "1:64",
     price: "",
+    max_installments: "1",
+    has_surcharge: "false",
+    installment_price: "",
     down_payment_amount: "",
     release_date: "",
     stock: "1",
+    payment_deadline_date: "",
     payment_deadline_hours: "24",
     is_open: true,
     image_url: "",
@@ -797,14 +1056,23 @@ function EditProductDialog({
   useEffect(() => {
     if (product) {
       const rawVal = (product as any).down_payment_amount;
+      const rawMaxInst = (product as any).max_installments;
+      const rawPrice2x = (product as any).price_2x;
+      const rawInstPrice = (product as any).installment_price ?? rawPrice2x;
+      const rawHasSurcharge = (product as any).has_installment_surcharge ?? (rawInstPrice != null && Number(rawInstPrice) > Number(product.price));
+      const rawDeadlineDate = (product as any).payment_deadline_date;
       setForm({
         brand: product.brand ?? "",
         model: product.model ?? "",
         scale: product.scale ?? "1:64",
         price: product.price != null ? String(product.price) : "",
+        max_installments: rawMaxInst != null ? String(rawMaxInst) : "1",
+        has_surcharge: rawHasSurcharge ? "true" : "false",
+        installment_price: rawInstPrice != null ? String(rawInstPrice) : "",
         down_payment_amount: rawVal != null ? String(rawVal) : "",
         release_date: product.release_date ?? "",
         stock: product.stock != null ? String(product.stock) : "1",
+        payment_deadline_date: rawDeadlineDate ?? "",
         payment_deadline_hours: product.payment_deadline_hours != null ? String(product.payment_deadline_hours) : "24",
         is_open: product.is_open ?? true,
         image_url: product.image_url ?? "",
@@ -823,14 +1091,31 @@ function EditProductDialog({
     }
 
     setSaving(true);
+    let computedHours = 24;
+    if (form.payment_deadline_date) {
+      const targetDate = new Date(form.payment_deadline_date + "T23:59:59");
+      computedHours = Math.max(0, Math.round((targetDate.getTime() - Date.now()) / (1000 * 60 * 60)));
+    } else if (form.down_payment_amount === "" || Number(form.down_payment_amount || 0) === 0) {
+      computedHours = 0;
+    }
+
+    const maxInst = Number(form.max_installments || 1);
+    const hasSurcharge = maxInst > 1 && form.has_surcharge === "true";
+    const instPrice = maxInst > 1 ? (hasSurcharge && form.installment_price ? Number(form.installment_price) : Number(form.price || 0)) : null;
+
     const payload: any = {
       brand: form.brand.trim(),
       model: form.model.trim(),
       scale: form.scale,
       price: Number(form.price || 0),
+      max_installments: maxInst,
+      has_installment_surcharge: hasSurcharge,
+      installment_price: instPrice,
+      price_2x: maxInst === 2 ? instPrice : null,
       release_date: form.release_date || null,
+      payment_deadline_date: form.payment_deadline_date || null,
+      payment_deadline_hours: computedHours,
       stock: Number(form.stock || 0),
-      payment_deadline_hours: Number(form.payment_deadline_hours),
       is_open: form.is_open,
       image_url: form.image_url || null,
     };
@@ -844,15 +1129,34 @@ function EditProductDialog({
       .update(payload)
       .eq("id", product.id);
 
-    // Se a coluna down_payment_amount não existir ainda na tabela products do Supabase
-    if (error && (error.code === "PGRST204" || error.message?.includes("down_payment_amount"))) {
+    // Fallbacks para bancos do Supabase que ainda não possuem todas as colunas de parcelamento/sinal
+    if (error && (error.code === "PGRST204" || error.message?.includes("max_installments") || error.message?.includes("has_installment_surcharge") || (error as any).status === 400)) {
+      delete payload.max_installments;
+      delete payload.price_2x;
+      delete payload.installment_price;
+      delete payload.has_installment_surcharge;
+
+      const retry1 = await supabase.from("products").update(payload).eq("id", product.id);
+      error = retry1.error;
+    }
+
+    if (error && (error.code === "PGRST204" || error.message?.includes("payment_deadline_date") || (error as any).status === 400)) {
+      delete payload.payment_deadline_date;
+      const retry2 = await supabase.from("products").update(payload).eq("id", product.id);
+      error = retry2.error;
+    }
+
+    if (error && (error.code === "PGRST204" || error.message?.includes("down_payment_amount") || (error as any).status === 400)) {
       delete payload.down_payment_amount;
-      const retry = await supabase.from("products").update(payload).eq("id", product.id);
-      error = retry.error;
+      const retry3 = await supabase.from("products").update(payload).eq("id", product.id);
+      error = retry3.error;
     }
 
     setSaving(false);
-    if (error) return toast.error("Não foi possível salvar as alterações.");
+    if (error) {
+      console.error("Erro ao editar miniatura:", error);
+      return toast.error(`Não foi possível salvar as alterações: ${error.message || "Erro de permissão"}`);
+    }
     queryClient.invalidateQueries();
     toast.success("Miniatura atualizada com sucesso!");
     onClose();
@@ -870,7 +1174,7 @@ function EditProductDialog({
 
   return (
     <Dialog open={!!product} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md panel border-border/60">
+      <DialogContent className="max-w-md panel border-border/60 max-h-[85vh] overflow-y-auto pr-3">
         <DialogHeader>
           <DialogTitle>Editar pré-venda</DialogTitle>
         </DialogHeader>
@@ -943,7 +1247,7 @@ function EditProductDialog({
 
           <div className="grid grid-cols-3 gap-2">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-price">Total (R$)</Label>
+              <Label htmlFor="edit-price">À vista (R$)</Label>
               <Input
                 id="edit-price"
                 type="number"
@@ -967,7 +1271,7 @@ function EditProductDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="edit-stock">Cotas</Label>
+              <Label htmlFor="edit-stock">Unidades</Label>
               <Input
                 id="edit-stock"
                 type="number"
@@ -977,6 +1281,80 @@ function EditProductDialog({
                 onChange={(e) => setForm({ ...form, stock: e.target.value })}
               />
             </div>
+          </div>
+
+          <div className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Máximo de parcelas</Label>
+                <Select
+                  value={form.max_installments}
+                  onValueChange={(val) => setForm({ ...form, max_installments: val })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1x (Apenas à vista)</SelectItem>
+                    <SelectItem value="2">Até 2x</SelectItem>
+                    <SelectItem value="3">Até 3x</SelectItem>
+                    <SelectItem value="4">Até 4x</SelectItem>
+                    <SelectItem value="5">Até 5x</SelectItem>
+                    <SelectItem value="6">Até 6x</SelectItem>
+                    <SelectItem value="10">Até 10x</SelectItem>
+                    <SelectItem value="12">Até 12x</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {Number(form.max_installments) > 1 && (
+                <div className="space-y-1.5">
+                  <Label>Condição de parcelamento</Label>
+                  <Select
+                    value={form.has_surcharge}
+                    onValueChange={(val) => setForm({ ...form, has_surcharge: val })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="false">Sem acréscimo (Mesmo valor)</SelectItem>
+                      <SelectItem value="true">Com acréscimo (Valor customizado)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            {Number(form.max_installments) > 1 && (
+              <div>
+                {form.has_surcharge === "true" ? (
+                  <div className="space-y-1.5 pt-1">
+                    <Label htmlFor="edit-inst-price">Valor Total Parcelado (R$)</Label>
+                    <Input
+                      id="edit-inst-price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Ex: 260"
+                      value={form.installment_price}
+                      onChange={(e) => setForm({ ...form, installment_price: e.target.value })}
+                    />
+                    {Number(form.installment_price) > 0 && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Fica <strong className="text-foreground">{form.max_installments}x de {brl(Number(form.installment_price) / Number(form.max_installments))}</strong> (com acréscimo)
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  Number(form.price) > 0 && (
+                    <p className="text-[11px] text-muted-foreground pt-1">
+                      Fica <strong className="text-foreground">{form.max_installments}x de {brl(Number(form.price) / Number(form.max_installments))}</strong> sem acréscimo.
+                    </p>
+                  )
+                )}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -990,22 +1368,13 @@ function EditProductDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Prazo do sinal</Label>
-              <Select
-                value={form.payment_deadline_hours}
-                onValueChange={(v) => setForm({ ...form, payment_deadline_hours: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0">Sem sinal (Sem prazo)</SelectItem>
-                  <SelectItem value="12">12 horas</SelectItem>
-                  <SelectItem value="24">24 horas</SelectItem>
-                  <SelectItem value="48">48 horas</SelectItem>
-                  <SelectItem value="72">72 horas</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="edit-signal-deadline">Data limite para o sinal</Label>
+              <Input
+                id="edit-signal-deadline"
+                type="date"
+                value={form.payment_deadline_date}
+                onChange={(e) => setForm({ ...form, payment_deadline_date: e.target.value })}
+              />
             </div>
           </div>
 
@@ -1081,9 +1450,11 @@ function ManualReservationDialog({
   const [clientPhone, setClientPhone] = useState("");
   const [pixKey, setPixKey] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("aguardando_sinal");
+  const [installmentCount, setInstallmentCount] = useState(1);
   const [saving, setSaving] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
+
 
   // Buscar dados da loja para extrair a Chave PIX cadastrada
   const { data: storeInfo } = useQuery({
@@ -1204,7 +1575,7 @@ function ManualReservationDialog({
 
     const product = products.find((p) => p.id === selectedProductId);
     if (!product) return toast.error("Pré-venda não encontrada.");
-    if (product.stock <= 0) return toast.error("Cotas esgotadas para esta pré-venda.");
+    if (product.stock <= 0) return toast.error("Unidades esgotadas para esta pré-venda.");
 
     setSaving(true);
     try {
@@ -1242,12 +1613,15 @@ function ManualReservationDialog({
       }
 
       // 4. Calcular valores
-      const totalPrice = Number(product.price || 0);
+      const cashPrice = Number(product.price || 0);
+      const instOptions = getInstallmentOptions(product);
+      const chosenOption = instOptions.find((o) => o.value === installmentCount) ?? instOptions[0];
+      const totalPrice = chosenOption.totalPrice;
       const customSignal = Number((product as any).down_payment_amount || 0);
       let downPayment = 0;
 
       if (paymentStatus === "sinal_pago") {
-        downPayment = customSignal > 0 ? customSignal : Math.round(totalPrice * 0.2 * 100) / 100;
+        downPayment = customSignal > 0 ? customSignal : Math.round(cashPrice * 0.2 * 100) / 100;
       } else if (paymentStatus === "quitado") {
         downPayment = totalPrice;
       } else if (paymentStatus === "sem_sinal") {
@@ -1262,6 +1636,7 @@ function ManualReservationDialog({
         total_price: totalPrice,
         down_payment: downPayment,
         payment_status: paymentStatus,
+        installment_count: installmentCount > 1 ? installmentCount : null,
         reservation_expires_at: paymentStatus === "sem_sinal" ? null : undefined,
       };
       if (pixKey.trim()) {
@@ -1275,6 +1650,14 @@ function ManualReservationDialog({
         const retry = await supabase.from("orders").insert(orderPayload);
         orderErr = retry.error;
       }
+
+      // Fallback se a coluna installment_count não existe ainda no banco
+      if (orderErr && (orderErr.message?.includes("installment_count") || orderErr.code === "PGRST204")) {
+        delete orderPayload.installment_count;
+        const retry = await supabase.from("orders").insert(orderPayload);
+        orderErr = retry.error;
+      }
+
 
       // Se a RLS do Supabase negar o user_id do cliente por falta da política no banco, faz fallback para o id do lojista
       if (orderErr && (orderErr.code === "42501" || (orderErr as any).status === 403 || orderErr.message?.includes("row-level security"))) {
@@ -1302,6 +1685,7 @@ function ManualReservationDialog({
       setClientName("");
       setClientPhone("");
       setSelectedUserId("");
+      setInstallmentCount(1);
       onClose();
     } catch (err: any) {
       console.error("Erro ao criar reserva manual:", err);
@@ -1328,7 +1712,7 @@ function ManualReservationDialog({
                 {products.map((p) => (
                   <SelectItem key={p.id} value={p.id} disabled={p.stock <= 0} className="text-xs sm:text-sm">
                     <span className="truncate block">
-                      {p.brand} {p.model} ({p.stock} cotas - {brl(Number(p.price))})
+                      {p.brand} {p.model} ({p.stock} unidades - {brl(Number(p.price))})
                     </span>
                   </SelectItem>
                 ))}
@@ -1542,12 +1926,46 @@ function ManualReservationDialog({
               </SelectTrigger>
               <SelectContent className="max-w-[calc(100vw-3rem)]">
                 <SelectItem value="aguardando_sinal" className="text-xs sm:text-sm">Aguardando Sinal</SelectItem>
-                <SelectItem value="sem_sinal" className="text-xs sm:text-sm">Sem Sinal (Reserva Aberta)</SelectItem>
+                <SelectItem value="sem_sinal" className="text-xs sm:text-sm">Sem sinal / Pagar na chegada</SelectItem>
                 <SelectItem value="sinal_pago" className="text-xs sm:text-sm">Sinal Pago</SelectItem>
                 <SelectItem value="quitado" className="text-xs sm:text-sm">Pago Total (Quitado)</SelectItem>
               </SelectContent>
             </Select>
           </div>
+
+          {/* Seleção de Parcelamento */}
+          {(() => {
+            const selectedProduct = products.find((p) => p.id === selectedProductId);
+            const instOptions = selectedProduct ? getInstallmentOptions(selectedProduct) : [];
+            if (instOptions.length <= 1) return null;
+            const chosenOption = instOptions.find((o) => o.value === installmentCount) ?? instOptions[0];
+            return (
+              <div className="space-y-2 min-w-0">
+                <Label>Condição de Pagamento</Label>
+                <Select
+                  value={String(installmentCount)}
+                  onValueChange={(v) => setInstallmentCount(Number(v))}
+                >
+                  <SelectTrigger className="w-full text-xs sm:text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-w-[calc(100vw-3rem)]">
+                    {instOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={String(opt.value)} className="text-xs sm:text-sm">
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {installmentCount > 1 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Total da reserva: <strong className="text-foreground">{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(chosenOption.totalPrice)}</strong>
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
 
           <div className="flex justify-end gap-2 pt-3">
             <Button type="button" variant="outline" size="sm" onClick={onClose}>
@@ -1611,8 +2029,11 @@ function OrdersTab({
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
+      const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
+      const effectiveStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
+
       // Filtro por status
-      if (statusFilter !== "todos" && o.payment_status !== statusFilter) {
+      if (statusFilter !== "todos" && effectiveStatus !== statusFilter) {
         return false;
       }
       // Filtro por termo de busca
@@ -1709,7 +2130,7 @@ function OrdersTab({
     await update(o.id, { payment_status: newStatus, down_payment: downPayment });
 
     if (!wasCancelled && isNowCancelled) {
-      toast.success("Reserva cancelada! +1 cota devolvida ao estoque.");
+      toast.success("Reserva cancelada! +1 unidade devolvida ao estoque.");
     } else {
       toast.success("Reserva atualizada.");
     }
@@ -1728,7 +2149,7 @@ function OrdersTab({
     await update(o.id, { delivery_status: newStatus });
 
     if (!wasCancelled && isNowCancelled) {
-      toast.success("Reserva cancelada! +1 cota devolvida ao estoque.");
+      toast.success("Reserva cancelada! +1 unidade devolvida ao estoque.");
     } else {
       toast.success("Reserva atualizada.");
     }
@@ -1774,6 +2195,7 @@ function OrdersTab({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos os status</SelectItem>
+              <SelectItem value="sem_sinal">Sem sinal / Pagar na chegada</SelectItem>
               <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
               <SelectItem value="sinal_pago">Sinal pago</SelectItem>
               <SelectItem value="quitado">Quitado</SelectItem>
@@ -1879,45 +2301,59 @@ function OrdersTab({
                 </div>
 
                 {/* Status e Prazo */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <PaymentBadge status={o.payment_status} />
-                    <Select
-                      value={o.payment_status}
-                      onValueChange={(v) => handlePaymentStatusChange(o, v)}
-                    >
-                      <SelectTrigger className="h-8 text-xs w-36">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
-                        <SelectItem value="sinal_pago">Sinal pago</SelectItem>
-                        <SelectItem value="quitado">Quitado</SelectItem>
-                        <SelectItem value="cancelado">Cancelado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select
-                      value={o.delivery_status}
-                      onValueChange={(v) => handleDeliveryStatusChange(o, v)}
-                    >
-                      <SelectTrigger className="h-8 text-xs w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pendente">Pendente</SelectItem>
-                        <SelectItem value="em_transito">Em trânsito</SelectItem>
-                        <SelectItem value="entregue">Entregue</SelectItem>
-                        <SelectItem value="cancelado">Cancelado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                {(() => {
+                  const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
+                  const currentPaymentStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
+                  return (
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <PaymentBadge status={currentPaymentStatus} />
+                        <Select
+                          value={currentPaymentStatus}
+                          onValueChange={(v) => handlePaymentStatusChange(o, v)}
+                        >
+                          <SelectTrigger className="h-8 text-xs w-36">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="sem_sinal">Sem sinal / Pagar na chegada</SelectItem>
+                            <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
+                            <SelectItem value="sinal_pago">Sinal pago</SelectItem>
+                            <SelectItem value="quitado">Quitado</SelectItem>
+                            <SelectItem value="cancelado">Cancelado</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={o.delivery_status}
+                          onValueChange={(v) => handleDeliveryStatusChange(o, v)}
+                        >
+                          <SelectTrigger className="h-8 text-xs w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pendente">Pendente</SelectItem>
+                            <SelectItem value="em_transito">Em trânsito</SelectItem>
+                            <SelectItem value="entregue">Entregue</SelectItem>
+                            <SelectItem value="cancelado">Cancelado</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-                  {o.payment_status === "aguardando_sinal" && o.reservation_expires_at && (
-                    <div className="text-xs">
-                      <Countdown expiresAt={o.reservation_expires_at} />
+                      {currentPaymentStatus === "aguardando_sinal" && o.reservation_expires_at ? (
+                        <div className="text-xs">
+                          <Countdown expiresAt={o.reservation_expires_at} />
+                        </div>
+                      ) : (currentPaymentStatus === "sem_sinal" || currentPaymentStatus === "pagar_na_chegada") && (o.products as any)?.release_date ? (
+                        <div className="text-xs text-right">
+                          <span className="font-semibold text-purple-600 dark:text-purple-400 block text-[11px]">Pagar na chegada</span>
+                          <span className="text-muted-foreground font-mono text-[10px]">
+                            {new Date((o.products as any).release_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
 
                 {/* Código de Rastreio dos Correios (Mobile) */}
                 <div className="flex items-center gap-2 pt-2 border-t border-border/40">
@@ -1968,6 +2404,9 @@ function OrdersTab({
                     : o.profiles?.email
                       ? o.profiles.email.split("@")[0]
                       : "Cliente";
+
+                const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
+                const currentPaymentStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
 
                 return (
                   <TableRow key={o.id}>
@@ -2045,15 +2484,16 @@ function OrdersTab({
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1.5 min-w-[155px]">
-                      <PaymentBadge status={o.payment_status} />
+                      <PaymentBadge status={currentPaymentStatus} />
                       <Select
-                        value={o.payment_status}
+                        value={currentPaymentStatus}
                         onValueChange={(v) => handlePaymentStatusChange(o, v)}
                       >
                         <SelectTrigger className="h-7 text-xs w-36">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="sem_sinal">Sem sinal / Pagar na chegada</SelectItem>
                           <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
                           <SelectItem value="sinal_pago">Sinal pago</SelectItem>
                           <SelectItem value="quitado">Quitado</SelectItem>
@@ -2095,8 +2535,15 @@ function OrdersTab({
                     </div>
                   </TableCell>
                   <TableCell>
-                    {o.payment_status === "aguardando_sinal" && o.reservation_expires_at ? (
+                    {currentPaymentStatus === "aguardando_sinal" && o.reservation_expires_at ? (
                       <Countdown expiresAt={o.reservation_expires_at} />
+                    ) : (currentPaymentStatus === "sem_sinal" || currentPaymentStatus === "pagar_na_chegada") && (o.products as any)?.release_date ? (
+                      <div className="flex flex-col text-xs">
+                        <span className="font-semibold text-purple-600 dark:text-purple-400">Na chegada</span>
+                        <span className="text-muted-foreground font-mono">
+                          {new Date((o.products as any).release_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                        </span>
+                      </div>
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
@@ -2520,6 +2967,290 @@ function BrandingTab({ store, userId }: { store: Store; userId: string }) {
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function AdminModerationPanel() {
+  const queryClient = useQueryClient();
+  const [rejectingStore, setRejectingStore] = useState<any>(null);
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const { data: allStores, isLoading } = useQuery({
+    queryKey: ["admin-all-stores"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("stores")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+
+      // Buscar dados de perfil dos donos das lojas
+      const ownerIds = [...new Set((data ?? []).map((s) => s.owner_id))];
+      const { data: profiles } = ownerIds.length
+        ? await supabase.from("profiles").select("id, name, email, phone").in("id", ownerIds)
+        : { data: [] };
+      
+      const profilesMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+      return (data ?? []).map((s) => ({
+        ...s,
+        owner: profilesMap.get(s.owner_id) ?? null,
+      }));
+    },
+  });
+
+  async function updateStoreStatus(storeId: string, status: "active" | "rejected", rejectionReason?: string) {
+    setSubmitting(true);
+
+    const updatePayload: any = { status };
+    if (rejectionReason) {
+      updatePayload.rejection_reason = rejectionReason;
+    }
+
+    let { error, data } = await supabase
+      .from("stores")
+      .update(updatePayload)
+      .eq("id", storeId)
+      .select();
+
+    // Se falhar porque a coluna rejection_reason não existe na tabela stores remota:
+    if (error && (error.code === "PGRST204" || error.message?.includes("rejection_reason"))) {
+      delete updatePayload.rejection_reason;
+      const retry = await supabase
+        .from("stores")
+        .update(updatePayload)
+        .eq("id", storeId)
+        .select();
+      error = retry.error;
+      data = retry.data;
+    }
+
+    setSubmitting(false);
+
+    if (error) {
+      console.error("Erro detalhado do Supabase:", error);
+      toast.error(`Não foi possível atualizar a loja: ${error.message || "Erro de permissão no Supabase"}`);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      toast.error("A alteração foi bloqueada pelas políticas de segurança (RLS) do Supabase.");
+      return;
+    }
+
+    toast.success(status === "active" ? "Loja APROVADA com sucesso!" : "Solicitação RECUSADA.");
+    setRejectingStore(null);
+    setReason("");
+    queryClient.invalidateQueries();
+  }
+
+  const pendingStores = (allStores ?? []).filter((s: any) => s.status === "pending" || !s.status);
+  const activeStores = (allStores ?? []).filter((s: any) => s.status === "active");
+  const rejectedStores = (allStores ?? []).filter((s: any) => s.status === "rejected");
+
+  if (isLoading) {
+    return (
+      <Card className="panel border-border/60">
+        <CardContent className="p-8 text-center text-sm text-muted-foreground">
+          <Loader2 className="mx-auto size-6 animate-spin mb-2" /> Carregando solicitações de lojas…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card className="panel border-amber-500/40 bg-amber-500/5">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xl font-bold flex items-center gap-2">
+              <ShieldCheck className="size-5 text-amber-500" /> Painel de Moderação SuperAdmin
+            </CardTitle>
+            <Badge variant="outline" className="border-amber-500/40 text-amber-600 bg-amber-500/10">
+              {pendingStores.length} {pendingStores.length === 1 ? "pendente" : "pendentes"}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground mb-4">
+            Aqui você controla os pedidos de autorização para novas lojas. Apenas lojas <strong>Aprovadas (Ativas)</strong> ficam visíveis ao público.
+          </p>
+
+          {/* LOJAS PENDENTES */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Clock className="size-4 text-amber-500" /> Solicitações Pendentes ({pendingStores.length})
+            </h3>
+
+            {pendingStores.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-4 text-center border border-dashed rounded-xl">
+                Nenhuma solicitação de nova loja pendente no momento.
+              </p>
+            ) : (
+              <div className="grid gap-3">
+                {pendingStores.map((st: any) => (
+                  <div
+                    key={st.id}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-amber-500/30 bg-background p-4 shadow-sm"
+                  >
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-base text-foreground">{st.name}</h4>
+                        <span className="font-mono text-xs text-muted-foreground">/loja/{st.slug}</span>
+                      </div>
+                      {st.description && <p className="text-xs text-muted-foreground line-clamp-1">{st.description}</p>}
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground pt-1">
+                        <span>👤 Dono: <strong>{st.owner?.name || "Não informado"}</strong></span>
+                        <span>📧 {st.owner?.email || "Sem e-mail"}</span>
+                        {st.whatsapp_number && <span>📱 Whats: {st.whatsapp_number}</span>}
+                        <span>📅 {new Date(st.created_at).toLocaleDateString("pt-BR")}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                        disabled={submitting}
+                        onClick={() => updateStoreStatus(st.id, "active")}
+                      >
+                        <CheckCircle2 className="size-4" /> Aprovar Loja
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={submitting}
+                        onClick={() => setRejectingStore(st)}
+                        className="gap-1.5"
+                      >
+                        <XCircle className="size-4" /> Recusar
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* LOJAS ATIVAS */}
+      <Card className="panel border-border/60">
+        <CardHeader>
+          <CardTitle className="text-lg font-bold">Lojas Ativas e Aprovadas ({activeStores.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {activeStores.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-4 text-center border border-dashed rounded-xl">
+              Nenhuma loja ativa no momento.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {activeStores.map((st: any) => (
+                <div key={st.id} className="flex items-center justify-between border-b border-border/40 pb-2 pt-1 text-xs">
+                  <div>
+                    <span className="font-bold text-foreground">{st.name}</span>{" "}
+                    <span className="text-muted-foreground">(/loja/{st.slug})</span>
+                    <div className="text-muted-foreground">Dono: {st.owner?.name || "N/A"} ({st.owner?.email})</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 bg-emerald-500/10">
+                      Ativa
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-xs text-destructive hover:bg-destructive/10"
+                      onClick={() => updateStoreStatus(st.id, "rejected", "Loja suspensa pelo administrador.")}
+                    >
+                      Suspender
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* LOJAS SUSPENSAS OU RECUSADAS */}
+      <Card className="panel border-destructive/40 bg-destructive/5">
+        <CardHeader>
+          <CardTitle className="text-lg font-bold flex items-center gap-2 text-destructive">
+            <XCircle className="size-5" /> Lojas Suspensas / Recusadas ({rejectedStores.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {rejectedStores.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-4 text-center border border-dashed rounded-xl">
+              Nenhuma loja suspensa ou recusada.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {rejectedStores.map((st: any) => (
+                <div key={st.id} className="flex items-center justify-between border-b border-border/40 pb-2 pt-1 text-xs">
+                  <div>
+                    <span className="font-bold text-foreground">{st.name}</span>{" "}
+                    <span className="text-muted-foreground">(/loja/{st.slug})</span>
+                    <div className="text-muted-foreground">Dono: {st.owner?.name || "N/A"} ({st.owner?.email})</div>
+                    {st.rejection_reason && (
+                      <p className="text-[11px] text-destructive mt-0.5">Motivo: {st.rejection_reason}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="border-destructive/40 text-destructive bg-destructive/10">
+                      Suspensa
+                    </Badge>
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1"
+                      disabled={submitting}
+                      onClick={() => updateStoreStatus(st.id, "active")}
+                    >
+                      <CheckCircle2 className="size-3.5" /> Reativar Loja
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* DIÁLOGO DE RECUSA COM MOTIVO */}
+      <Dialog open={!!rejectingStore} onOpenChange={(open) => !open && setRejectingStore(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Recusar Solicitação de Loja</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Você está recusando a solicitação da loja <strong>{rejectingStore?.name}</strong>.
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="rej-reason">Motivo da recusa (opcional)</Label>
+              <Textarea
+                id="rej-reason"
+                placeholder="Ex: Dados cadastrais incompletos ou nome indisponível..."
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                maxLength={200}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setRejectingStore(null)}>Cancelar</Button>
+              <Button
+                variant="destructive"
+                disabled={submitting}
+                onClick={() => updateStoreStatus(rejectingStore.id, "rejected", reason)}
+              >
+                {submitting && <Loader2 className="size-4 animate-spin mr-1" />} Confirmar Recusa
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

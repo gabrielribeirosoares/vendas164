@@ -139,6 +139,33 @@ function AuthPage() {
         email: user.email,
         phone: cleanPhone,
       });
+
+      // Lógica de Garagem: Migração de reservas vinculadas por telefone/email temporário para o novo user.id
+      try {
+        const matchingIds: string[] = [];
+        if (cleanPhone) {
+          const { data: cacheHits } = await supabase
+            .from("orders")
+            .select("user_id");
+          // Buscar via profiles ou através do cache local / telefone
+          if (cacheHits) {
+            for (const item of cacheHits) {
+              const cached = (await import("@/lib/customerCache")).getCustomerFromCache(item.user_id);
+              if (cached?.phone && cleanPhone.replace(/\D/g, "") === cached.phone.replace(/\D/g, "")) {
+                matchingIds.push(item.user_id);
+              }
+            }
+          }
+        }
+        if (matchingIds.length > 0) {
+          await supabase
+            .from("orders")
+            .update({ user_id: user.id })
+            .in("user_id", matchingIds);
+        }
+      } catch (err) {
+        console.error("Erro ao migrar reservas pendentes:", err);
+      }
     }
 
     const dest = search.next ?? (search.produto ? `/produto/${search.produto}` : "/painel");
