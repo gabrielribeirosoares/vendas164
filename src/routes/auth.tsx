@@ -142,29 +142,90 @@ function AuthPage() {
 
       // Lógica de Garagem: Migração de reservas vinculadas por telefone/email temporário para o novo user.id
       try {
-        const matchingIds: string[] = [];
-        if (cleanPhone) {
-          const { data: cacheHits } = await supabase
-            .from("orders")
-            .select("user_id");
-          // Buscar via profiles ou através do cache local / telefone
-          if (cacheHits) {
-            for (const item of cacheHits) {
-              const cached = (await import("@/lib/customerCache")).getCustomerFromCache(item.user_id);
-              if (cached?.phone && cleanPhone.replace(/\D/g, "") === cached.phone.replace(/\D/g, "")) {
-                matchingIds.push(item.user_id);
+        const rawPhoneDigits = cleanPhone ? cleanPhone.replace(/\D/g, "") : "";
+        const userEmail = (user.email || "").toLowerCase().trim();
+        const lowerName = cleanName.toLowerCase().trim();
+
+        // 1. Buscar ordens no banco que possuem metadados em pix_key (guest reservation) ou vinculadas por cache
+        const { data: allOrders } = await supabase
+          .from("orders")
+          .select("id, user_id, pix_key, store_id");
+
+        if (allOrders && allOrders.length > 0) {
+          const { getCustomerFromCache } = await import("@/lib/customerCache");
+          const storesToLink = new Set<string>();
+
+          for (const orderItem of allOrders) {
+            let matches = false;
+            let customPixKey: string | null = null;
+
+            // Verificar via metadados de guest salvos diretamente na coluna pix_key no banco
+            if (orderItem.pix_key && typeof orderItem.pix_key === "string") {
+              try {
+                let meta: any = null;
+                if (orderItem.pix_key.startsWith("GUEST:")) {
+                  meta = JSON.parse(orderItem.pix_key.replace(/^GUEST:/, ""));
+                } else if (orderItem.pix_key.startsWith('{"manual_guest":true')) {
+                  meta = JSON.parse(orderItem.pix_key);
+                }
+
+                if (meta) {
+                  customPixKey = meta.pix || meta.custom_pix || null;
+                  const metaPhoneDigits = meta.phone ? meta.phone.replace(/\D/g, "") : "";
+                  const metaEmail = (meta.email || "").toLowerCase().trim();
+                  const metaName = (meta.name || "").toLowerCase().trim();
+
+                  const phoneMatch = rawPhoneDigits.length >= 8 && metaPhoneDigits.length >= 8 &&
+                    (rawPhoneDigits.endsWith(metaPhoneDigits) || metaPhoneDigits.endsWith(rawPhoneDigits));
+                  const emailMatch = userEmail && metaEmail && userEmail === metaEmail;
+                  const nameMatch = lowerName && metaName && lowerName.length > 2 && lowerName === metaName;
+
+                  if (phoneMatch || emailMatch || nameMatch) {
+                    matches = true;
+                  }
+                }
+              } catch {}
+            }
+
+            // Fallback via cache local
+            if (!matches) {
+              const cached = getCustomerFromCache(orderItem.user_id);
+              if (cached) {
+                const cachedPhoneDigits = cached.phone ? cached.phone.replace(/\D/g, "") : "";
+                const cachedEmail = (cached.email || "").toLowerCase().trim();
+
+                const phoneMatch = rawPhoneDigits && cachedPhoneDigits && (cachedPhoneDigits.endsWith(rawPhoneDigits) || rawPhoneDigits.endsWith(cachedPhoneDigits));
+                const emailMatch = userEmail && cachedEmail && userEmail === cachedEmail;
+
+                if (phoneMatch || emailMatch) {
+                  matches = true;
+                }
+              }
+            }
+
+            if (matches) {
+              await supabase
+                .from("orders")
+                .update({ user_id: user.id, pix_key: customPixKey })
+                .eq("id", orderItem.id);
+
+              if (orderItem.store_id) {
+                storesToLink.add(orderItem.store_id);
               }
             }
           }
-        }
-        if (matchingIds.length > 0) {
-          await supabase
-            .from("orders")
-            .update({ user_id: user.id })
-            .in("user_id", matchingIds);
+
+          // Vincular o cliente às lojas correspondentes
+          for (const sId of storesToLink) {
+            await supabase
+              .from("customer_store_link")
+              .upsert({ user_id: user.id, store_id: sId }, { onConflict: "user_id,store_id" })
+              .then(() => undefined)
+              .catch(() => undefined);
+          }
         }
       } catch (err) {
-        console.error("Erro ao migrar reservas pendentes:", err);
+        console.error("Erro ao migrar reservas pendentes para a conta do cliente:", err);
       }
     }
 

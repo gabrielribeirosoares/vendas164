@@ -1536,6 +1536,8 @@ function ManualReservationDialog({
     },
   });
 
+  const [manualQuantity, setManualQuantity] = useState<number>(1);
+
   useEffect(() => {
     if (preSelectedProduct) {
       setSelectedProductId(preSelectedProduct.id);
@@ -1577,22 +1579,15 @@ function ManualReservationDialog({
     if (!product) return toast.error("Pré-venda não encontrada.");
     if (product.stock <= 0) return toast.error("Unidades esgotadas para esta pré-venda.");
 
+    const qtyToCreate = Math.min(manualQuantity, product.stock);
+    if (qtyToCreate <= 0) return toast.error("Quantidade inválida.");
+
     setSaving(true);
     try {
       // 1. Salvar os dados do cliente no cache local da loja
       saveCustomerToCache({ id: clientId, name: cleanName, phone: cleanPhone });
 
-      // 2. Vincular o cliente à loja em customer_store_link (sem travar se RLS negar)
-      try {
-        await supabase
-          .from("customer_store_link")
-          .upsert(
-            { user_id: clientId, store_id: storeId },
-            { onConflict: "user_id,store_id" }
-          );
-      } catch {
-        // Ignora erros de RLS
-      }
+
 
       // 3. Atualizar perfil do cliente no Supabase se existir (sem travar se RLS negar)
       try {
@@ -1612,11 +1607,12 @@ function ManualReservationDialog({
         // Ignora erros de RLS
       }
 
-      // 4. Calcular valores
-      const cashPrice = Number(product.price || 0);
+      // 4. Calcular preços unitários
+      const cashPrice = Number(product.price);
       const instOptions = getInstallmentOptions(product);
       const chosenOption = instOptions.find((o) => o.value === installmentCount) ?? instOptions[0];
-      const totalPrice = chosenOption.totalPrice;
+      const totalPrice = installmentCount > 1 ? chosenOption.totalPrice : cashPrice;
+      
       const customSignal = Number((product as any).down_payment_amount || 0);
       let downPayment = 0;
 
@@ -1628,64 +1624,70 @@ function ManualReservationDialog({
         downPayment = 0;
       }
 
-      // 5. Inserir a reserva no banco atribuída ao ID DO CLIENTE (clientId)
-      const orderPayload: any = {
-        store_id: storeId,
-        product_id: product.id,
-        user_id: clientId,
-        total_price: totalPrice,
-        down_payment: downPayment,
-        payment_status: paymentStatus,
-        installment_count: installmentCount > 1 ? installmentCount : null,
-        reservation_expires_at: paymentStatus === "sem_sinal" ? null : undefined,
-      };
-      if (pixKey.trim()) {
-        orderPayload.pix_key = pixKey.trim();
+      // 5. Inserir as reservas no banco
+      const isRegisteredUser = !!selectedUserId;
+      const effectiveUserId = isRegisteredUser ? selectedUserId : currentUser!.id;
+      const guestKeyString = !isRegisteredUser
+        ? `GUEST:${JSON.stringify({ name: cleanName, phone: cleanPhone, pix: pixKey.trim() || null })}`
+        : (pixKey.trim() || null);
+
+      for (let i = 0; i < qtyToCreate; i++) {
+        const orderPayload: any = {
+          store_id: storeId,
+          product_id: product.id,
+          user_id: effectiveUserId,
+          total_price: totalPrice,
+          down_payment: downPayment,
+          payment_status: paymentStatus,
+        };
+
+        if (installmentCount > 1) {
+          orderPayload.installment_count = installmentCount;
+        }
+        if (paymentStatus === "sem_sinal") {
+          orderPayload.reservation_expires_at = null;
+        }
+        if (guestKeyString) {
+          orderPayload.pix_key = guestKeyString;
+        }
+
+        let { data: insertedOrder, error: orderErr } = await supabase
+          .from("orders")
+          .insert(orderPayload)
+          .select("id")
+          .single();
+
+        // Fallback se .select().single() não retornar ou se houver erro pontual de coluna
+        if (orderErr) {
+          if (orderErr.message?.includes("installment_count") || orderErr.code === "PGRST204") {
+            delete orderPayload.installment_count;
+          }
+          const retry = await supabase.from("orders").insert(orderPayload).select("id").maybeSingle();
+          orderErr = retry.error;
+          if (retry.data?.id) {
+            saveCustomerToCache({ id: retry.data.id, name: cleanName, phone: cleanPhone });
+          }
+        } else if (insertedOrder?.id) {
+          saveCustomerToCache({ id: insertedOrder.id, name: cleanName, phone: cleanPhone });
+        }
+
+        if (orderErr) throw orderErr;
       }
 
-      let { error: orderErr } = await supabase.from("orders").insert(orderPayload);
-
-      if (orderErr && (orderErr.code === "PGRST204" || orderErr.message?.includes("pix_key") || (orderErr as any).status === 400)) {
-        delete orderPayload.pix_key;
-        const retry = await supabase.from("orders").insert(orderPayload);
-        orderErr = retry.error;
-      }
-
-      // Fallback se a coluna installment_count não existe ainda no banco
-      if (orderErr && (orderErr.message?.includes("installment_count") || orderErr.code === "PGRST204")) {
-        delete orderPayload.installment_count;
-        const retry = await supabase.from("orders").insert(orderPayload);
-        orderErr = retry.error;
-      }
-
-
-      // Se a RLS do Supabase negar o user_id do cliente por falta da política no banco, faz fallback para o id do lojista
-      if (orderErr && (orderErr.code === "42501" || (orderErr as any).status === 403 || orderErr.message?.includes("row-level security"))) {
-        console.warn("RLS bloqueou user_id do cliente. Salvando com user_id do lojista...");
-        orderPayload.user_id = currentUser?.id;
-        const retry = await supabase.from("orders").insert(orderPayload);
-        orderErr = retry.error;
-      }
-
-      if (orderErr) throw orderErr;
-
-      // 5. Atualizar estoque
+      // 6. Atualizar estoque
       await supabase
         .from("products")
-        .update({ stock: Math.max(0, product.stock - 1) })
+        .update({ stock: Math.max(0, product.stock - qtyToCreate) })
         .eq("id", product.id);
 
-      await supabase
-        .from("customer_store_link")
-        .upsert({ user_id: clientId, store_id: storeId }, { onConflict: "user_id,store_id" });
-
       queryClient.invalidateQueries();
-      toast.success(`Reserva vinculada ao cliente ${cleanName}!`);
+      toast.success(qtyToCreate > 1 ? `${qtyToCreate} unidades vinculadas ao cliente ${cleanName}!` : `Reserva vinculada ao cliente ${cleanName}!`);
       
       setClientName("");
       setClientPhone("");
       setSelectedUserId("");
       setInstallmentCount(1);
+      setManualQuantity(1);
       onClose();
     } catch (err: any) {
       console.error("Erro ao criar reserva manual:", err);
@@ -1697,14 +1699,20 @@ function ManualReservationDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-md panel border-border/60 p-4 sm:p-6 overflow-hidden rounded-2xl">
-        <DialogHeader>
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-md panel border-border/60 p-4 sm:p-6 overflow-hidden rounded-2xl flex flex-col max-h-[90vh]">
+        <DialogHeader className="shrink-0 pb-2 border-b border-border/40">
           <DialogTitle className="text-lg sm:text-xl">Nova Reserva para Cliente</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2 min-w-0">
+        <form onSubmit={handleSubmit} className="space-y-4 pt-4 min-w-0 overflow-y-auto pr-2.5 flex-1">
           <div className="space-y-2 min-w-0">
             <Label>Pré-venda / Miniatura</Label>
-            <Select value={selectedProductId} onValueChange={setSelectedProductId}>
+            <Select
+              value={selectedProductId}
+              onValueChange={(id) => {
+                setSelectedProductId(id);
+                setManualQuantity(1);
+              }}
+            >
               <SelectTrigger className="w-full text-xs sm:text-sm truncate">
                 <SelectValue placeholder="Selecione a miniatura" className="truncate" />
               </SelectTrigger>
@@ -1712,13 +1720,52 @@ function ManualReservationDialog({
                 {products.map((p) => (
                   <SelectItem key={p.id} value={p.id} disabled={p.stock <= 0} className="text-xs sm:text-sm">
                     <span className="truncate block">
-                      {p.brand} {p.model} ({p.stock} unidades - {brl(Number(p.price))})
+                      {p.brand} {p.model} ({p.stock} {p.stock === 1 ? "unidade" : "unidades"} em estoque — {brl(Number(p.price))})
                     </span>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+
+          {/* Quantidade e Resumo de Valor */}
+          {(() => {
+            const selProd = products.find((p) => p.id === selectedProductId);
+            if (!selProd) return null;
+            const maxStock = Math.min(selProd.stock, 20);
+            const unitPrice = Number(selProd.price || 0);
+            const totalPrice = unitPrice * manualQuantity;
+
+            return (
+              <div className="grid grid-cols-2 gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs">
+                <div className="space-y-1">
+                  <Label htmlFor="manual-qty" className="text-xs font-semibold">Quantidade de Unidades</Label>
+                  <Select
+                    value={String(manualQuantity)}
+                    onValueChange={(v) => setManualQuantity(Number(v))}
+                  >
+                    <SelectTrigger id="manual-qty" className="h-8 bg-background text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: maxStock }, (_, i) => i + 1).map((q) => (
+                        <SelectItem key={q} value={String(q)} className="text-xs">
+                          {q} {q === 1 ? "unidade" : "unidades"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col justify-center text-right">
+                  <span className="text-[11px] text-muted-foreground">Valor Total da Reserva</span>
+                  <span className="text-base font-bold text-primary">{brl(totalPrice)}</span>
+                  {manualQuantity > 1 && (
+                    <span className="text-[10px] text-muted-foreground font-mono">({manualQuantity}x {brl(unitPrice)})</span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Seleção do Cliente (Já cadastrado vs Novo) */}
           <div className="space-y-2 min-w-0">
@@ -1967,7 +2014,7 @@ function ManualReservationDialog({
           })()}
 
 
-          <div className="flex justify-end gap-2 pt-3">
+          <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm flex justify-end gap-2 pt-3 pb-1 border-t border-border/40 mt-4 shrink-0">
             <Button type="button" variant="outline" size="sm" onClick={onClose}>
               Cancelar
             </Button>
@@ -2239,12 +2286,24 @@ function OrdersTab({
         {/* VISÃO PARA CELULAR (CARDS INDIVIDUAIS COM ESPAÇAMENTO CLARO) */}
         <div className="md:hidden space-y-4 p-4 bg-muted/20">
           {rows.map((o) => {
+            let guestMeta: { name?: string; phone?: string } | null = null;
+            if (o.pix_key && typeof o.pix_key === "string") {
+              if (o.pix_key.startsWith("GUEST:")) {
+                try { guestMeta = JSON.parse(o.pix_key.replace(/^GUEST:/, "")); } catch {}
+              } else if (o.pix_key.startsWith('{"manual_guest":true')) {
+                try { guestMeta = JSON.parse(o.pix_key); } catch {}
+              }
+            }
+            const cached = getCustomerFromCache(o.id) || getCustomerFromCache(o.user_id);
             const displayName =
-              o.profiles?.name && o.profiles.name !== "Cliente"
+              guestMeta?.name ||
+              (o.profiles?.name && o.profiles.name !== "Cliente" && o.profiles.name !== "Cliente cadastrado"
                 ? o.profiles.name
-                : o.profiles?.email
-                  ? o.profiles.email.split("@")[0]
-                  : "Cliente";
+                : cached?.name) ||
+              (o.profiles?.email ? o.profiles.email.split("@")[0] : null) ||
+              (guestMeta?.phone || o.profiles?.phone || cached?.phone ? `Cliente (${guestMeta?.phone || o.profiles?.phone || cached?.phone})` : "Cliente sem nome");
+
+            const clientPhone = guestMeta?.phone || o.profiles?.phone || cached?.phone;
 
             return (
               <div key={o.id} className="rounded-2xl border border-border/70 bg-card p-4 space-y-3.5 shadow-sm">
@@ -2252,22 +2311,22 @@ function OrdersTab({
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-semibold text-base">{displayName}</p>
-                    {o.profiles?.email && (
+                    {o.profiles?.email && !guestMeta && (
                       <p className="text-xs text-muted-foreground">{o.profiles.email}</p>
                     )}
                     <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{o.id.slice(0, 8)}</p>
                   </div>
-                  {o.profiles?.phone ? (() => {
-                    const parsed = parsePhoneWithFlag(o.profiles.phone);
+                  {clientPhone ? (() => {
+                    const parsed = parsePhoneWithFlag(clientPhone);
                     return (
                       <a
-                        href={whatsappLink(o.profiles.phone, `Olá ${displayName}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
+                        href={whatsappLink(clientPhone, `Olá ${displayName}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-1 text-xs text-success font-medium font-mono border border-success/30"
                       >
                         <MessageCircle className="size-3.5" />
-                        {parsed?.display || o.profiles.phone}
+                        {parsed?.display || clientPhone}
                       </a>
                     );
                   })() : (
@@ -2428,13 +2487,24 @@ function OrdersTab({
             </TableHeader>
             <TableBody>
               {rows.map((o) => {
+                let guestMeta: { name?: string; phone?: string } | null = null;
+                if (o.pix_key && typeof o.pix_key === "string") {
+                  if (o.pix_key.startsWith("GUEST:")) {
+                    try { guestMeta = JSON.parse(o.pix_key.replace(/^GUEST:/, "")); } catch {}
+                  } else if (o.pix_key.startsWith('{"manual_guest":true')) {
+                    try { guestMeta = JSON.parse(o.pix_key); } catch {}
+                  }
+                }
+                const cached = getCustomerFromCache(o.id) || getCustomerFromCache(o.user_id);
                 const displayName =
-                  o.profiles?.name && o.profiles.name !== "Cliente"
+                  guestMeta?.name ||
+                  (o.profiles?.name && o.profiles.name !== "Cliente" && o.profiles.name !== "Cliente cadastrado"
                     ? o.profiles.name
-                    : o.profiles?.email
-                      ? o.profiles.email.split("@")[0]
-                      : "Cliente";
+                    : cached?.name) ||
+                  (o.profiles?.email ? o.profiles.email.split("@")[0] : null) ||
+                  (guestMeta?.phone || o.profiles?.phone || cached?.phone ? `Cliente (${guestMeta?.phone || o.profiles?.phone || cached?.phone})` : "Cliente sem nome");
 
+                const clientPhone = guestMeta?.phone || o.profiles?.phone || cached?.phone;
                 const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
                 const currentPaymentStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
 
@@ -2442,20 +2512,20 @@ function OrdersTab({
                   <TableRow key={o.id}>
                     <TableCell className="whitespace-nowrap">
                       <p className="font-medium">{displayName}</p>
-                      {o.profiles?.email && (
+                      {o.profiles?.email && !guestMeta && (
                         <p className="text-[11px] text-muted-foreground">{o.profiles.email}</p>
                       )}
-                      {o.profiles?.phone ? (() => {
-                        const parsed = parsePhoneWithFlag(o.profiles.phone);
+                      {clientPhone ? (() => {
+                        const parsed = parsePhoneWithFlag(clientPhone);
                         return (
                           <a
-                            href={whatsappLink(o.profiles.phone, `Olá ${displayName}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
+                            href={whatsappLink(clientPhone, `Olá ${displayName}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
                             target="_blank"
                             rel="noreferrer"
                             className="mt-0.5 flex items-center gap-1 text-xs text-success hover:underline font-mono"
                           >
                             <MessageCircle className="size-3" />
-                            {parsed?.display || o.profiles.phone}
+                            {parsed?.display || clientPhone}
                           </a>
                         );
                       })() : (

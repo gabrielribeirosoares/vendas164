@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookmarkCheck, Car, CheckCircle2, Copy, ExternalLink, Loader2, MessageCircle, Package, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { getCustomerFromCache } from "@/lib/customerCache";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -60,6 +61,67 @@ function CustomerDashboard() {
     queryKey: ["my-orders", user?.id],
     enabled: !!user,
     queryFn: async () => {
+      // 1. Tentar auto-migrar reservas pendentes criadas com este e-mail/telefone/nome
+      if (user) {
+        try {
+          const userEmail = (user.email || "").toLowerCase().trim();
+          const userPhone = user.user_metadata?.phone || profile?.phone || "";
+          const userName = user.user_metadata?.name || profile?.name || "";
+          const rawPhoneDigits = userPhone ? userPhone.replace(/\D/g, "") : "";
+          const lowerName = userName.toLowerCase().trim();
+
+          const { data: guestOrders } = await supabase
+            .from("orders")
+            .select("id, pix_key, store_id")
+            .not("pix_key", "is", null);
+
+          if (guestOrders && guestOrders.length > 0) {
+            for (const orderItem of guestOrders) {
+              if (orderItem.pix_key && typeof orderItem.pix_key === "string") {
+                try {
+                  let meta: any = null;
+                  if (orderItem.pix_key.startsWith("GUEST:")) {
+                    meta = JSON.parse(orderItem.pix_key.replace(/^GUEST:/, ""));
+                  } else if (orderItem.pix_key.startsWith('{"manual_guest":true')) {
+                    meta = JSON.parse(orderItem.pix_key);
+                  }
+
+                  if (meta) {
+                    const customPixKey = meta.pix || meta.custom_pix || null;
+                    const metaPhoneDigits = meta.phone ? meta.phone.replace(/\D/g, "") : "";
+                    const metaEmail = (meta.email || "").toLowerCase().trim();
+                    const metaName = (meta.name || "").toLowerCase().trim();
+
+                    const phoneMatch = rawPhoneDigits.length >= 8 && metaPhoneDigits.length >= 8 &&
+                      (rawPhoneDigits.endsWith(metaPhoneDigits) || metaPhoneDigits.endsWith(rawPhoneDigits));
+                    const emailMatch = userEmail && metaEmail && userEmail === metaEmail;
+                    const nameMatch = lowerName && metaName && lowerName.length > 2 && lowerName === metaName;
+
+                    if (phoneMatch || emailMatch || nameMatch) {
+                      await supabase
+                        .from("orders")
+                        .update({ user_id: user.id, pix_key: customPixKey })
+                        .eq("id", orderItem.id);
+
+                      if (orderItem.store_id) {
+                        await supabase
+                          .from("customer_store_link")
+                          .upsert({ user_id: user.id, store_id: orderItem.store_id }, { onConflict: "user_id,store_id" })
+                          .then(() => undefined)
+                          .catch(() => undefined);
+                      }
+                    }
+                  }
+                } catch {}
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Erro na auto-migração do painel:", err);
+        }
+      }
+
+      // 2. Buscar ordens atualizadas do usuário
       const { data, error } = await supabase
         .from("orders")
         .select("*, products(brand, model, image_url, release_date), stores(name, slug, whatsapp_number, pix_key)")
@@ -113,7 +175,15 @@ function CustomerDashboard() {
   });
 
   // Separar pedidos em andamento vs entregues/na garagem
-  const active = (orders ?? []).filter((o) => o.payment_status !== "cancelado");
+  const active = (orders ?? []).filter((o) => {
+    if (o.payment_status === "cancelado") return false;
+    if (o.pix_key && typeof o.pix_key === "string" && (o.pix_key.startsWith("GUEST:") || o.pix_key.startsWith('{"manual_guest":true'))) {
+      return false;
+    }
+    const cachedGuest = getCustomerFromCache(o.id);
+    if (cachedGuest && cachedGuest.phone) return false;
+    return true;
+  });
   const pendingOrders = active.filter((o) => o.delivery_status !== "entregue");
 
   // Agrupamento de pedidos por produto e status para exibição consolidada
@@ -253,14 +323,14 @@ function CustomerDashboard() {
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                         <span>{o.products?.brand} · {o.stores?.name}</span>
                         {qty > 1 && (
                           <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[11px] px-2 py-0 border-primary/20">
                             {qty}x unidades acumuladas
                           </Badge>
                         )}
-                      </p>
+                      </div>
                       <h3 className="font-semibold text-base flex items-center gap-2">
                         {o.products?.model}
                         {qty > 1 && (
