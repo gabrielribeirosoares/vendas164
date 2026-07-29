@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, CheckCircle2, Clock, Copy, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Plus, Search, Share2, ShieldAlert, ShieldCheck, Trash2, Truck, XCircle } from "lucide-react";
+import { BookmarkCheck, CheckCircle2, Clock, Copy, Download, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Plus, Search, Share2, ShieldAlert, ShieldCheck, Trash2, Truck, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { PhoneInput, parsePhoneWithFlag } from "@/components/PhoneInput";
@@ -2172,6 +2172,36 @@ function OrdersTab({
           />
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const csvRows = [
+                ["ID Pedido", "Cliente", "WhatsApp", "Miniatura", "Marca", "Total (R$)", "Sinal (R$)", "Status Pagamento", "Status Entrega", "Data"].join(";"),
+                ...filtered.map((o) => {
+                  const name = o.profiles?.name || "Cliente";
+                  const phone = o.profiles?.phone || "";
+                  const model = o.products?.model || "";
+                  const brand = o.products?.brand || "";
+                  const date = new Date(o.created_at).toLocaleDateString("pt-BR");
+                  return [o.id, `"${name}"`, `"${phone}"`, `"${model}"`, `"${brand}"`, o.total_price, o.down_payment, o.payment_status, o.delivery_status, date].join(";");
+                }),
+              ];
+              const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `pedidos-loja-${new Date().toISOString().slice(0, 10)}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+              toast.success("Relatório de pedidos exportado com sucesso!");
+            }}
+            className="h-9 text-xs gap-1.5 border-border/80"
+          >
+            <Download className="size-3.5 text-primary" />
+            <span>Exportar CSV</span>
+          </Button>
+
           {storeId && (
             <Button
               size="sm"
@@ -3061,6 +3091,27 @@ function AdminModerationPanel() {
 
   return (
     <div className="space-y-6">
+      {/* METRICAS GLOBAIS DA PLATAFORMA */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card className="panel border-primary/30 bg-primary/5 p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase">Total de Lojas</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{(allStores ?? []).length}</p>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            {activeStores.length} ativas · {pendingStores.length} pendentes · {rejectedStores.length} suspensas
+          </p>
+        </Card>
+        <Card className="panel border-emerald-500/30 bg-emerald-500/5 p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase">Lojas Ativas</p>
+          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{activeStores.length}</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Visíveis e com catálogo liberado</p>
+        </Card>
+        <Card className="panel border-amber-500/30 bg-amber-500/5 p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase">Solicitações Pendentes</p>
+          <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{pendingStores.length}</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Aguardando autorização</p>
+        </Card>
+      </div>
+
       <Card className="panel border-amber-500/40 bg-amber-500/5">
         <CardHeader>
           <div className="flex items-center justify-between">

@@ -33,6 +33,7 @@ function StorePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selectedBrand, setSelectedBrand] = useState<string>("all");
+  const [selectedScale, setSelectedScale] = useState<string>("all");
 
   const { data, isLoading } = useQuery({
     queryKey: ["store", slug],
@@ -180,9 +181,20 @@ function StorePage() {
     );
   }
 
+  // Extração de marcas e escalas disponíveis
+  const availableScales = Array.from(
+    new Set((products ?? []).map((p) => p.scale).filter(Boolean)),
+  ).sort();
+
+  const filteredProducts = (products ?? []).filter((p) => {
+    const matchBrand = selectedBrand === "all" || (p.brand || "Outros").trim() === selectedBrand;
+    const matchScale = selectedScale === "all" || p.scale === selectedScale;
+    return matchBrand && matchScale;
+  });
+
   // Agrupamento por marca
   const brandsMap: Record<string, typeof products> = {};
-  for (const p of products) {
+  for (const p of filteredProducts) {
     const brandName = (p.brand || "Outros").trim();
     if (!brandsMap[brandName]) brandsMap[brandName] = [];
     brandsMap[brandName].push(p);
@@ -257,8 +269,42 @@ function StorePage() {
             </p>
           </div>
 
+          {/* Filtro de Escalas */}
+          {availableScales.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-muted-foreground mr-1">Escala:</span>
+              <button
+                type="button"
+                onClick={() => setSelectedScale("all")}
+                className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all border ${
+                  selectedScale === "all"
+                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                    : "bg-muted/40 text-muted-foreground border-border/60 hover:bg-muted"
+                }`}
+              >
+                Todas escalas
+              </button>
+              {availableScales.map((scale) => (
+                <button
+                  type="button"
+                  key={scale}
+                  onClick={() => setSelectedScale(scale)}
+                  className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all border ${
+                    selectedScale === scale
+                      ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                      : "bg-muted/40 text-muted-foreground border-border/60 hover:bg-muted"
+                  }`}
+                >
+                  {scale}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Filtro de Marcas */}
           {brandList.length > 0 && (
-            <div className="mt-4 flex flex-wrap items-center gap-2 border-b border-border/40 pb-4">
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-b border-border/40 pb-4">
+              <span className="text-xs font-semibold text-muted-foreground mr-1">Marca:</span>
               <button
                 type="button"
                 onClick={() => setSelectedBrand("all")}
@@ -269,7 +315,7 @@ function StorePage() {
                 }`}
                 style={selectedBrand === "all" ? { backgroundColor: store.primary_color } : undefined}
               >
-                Todas ({products.length})
+                Todas ({filteredProducts.length})
               </button>
               {brandList.map((brand) => (
                 <button

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Copy, ExternalLink, Loader2, MessageCircle, Package, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
+import { BookmarkCheck, Car, CheckCircle2, Copy, ExternalLink, Loader2, MessageCircle, Package, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { AppFooter } from "@/components/AppFooter";
@@ -113,6 +113,7 @@ function CustomerDashboard() {
   });
 
   const active = (orders ?? []).filter((o) => o.payment_status !== "cancelado");
+  const deliveredOrders = (orders ?? []).filter((o) => o.delivery_status === "entregue" || o.payment_status === "quitado");
   const total = active.reduce((s, o) => s + Number(o.total_price), 0);
   const paid = active.reduce((s, o) => s + Number(o.down_payment), 0);
 
@@ -207,6 +208,10 @@ function CustomerDashboard() {
         <Tabs defaultValue="reservas" className="mt-8">
           <TabsList className="w-full flex overflow-x-auto justify-start sm:justify-center whitespace-nowrap p-1 max-w-full">
             <TabsTrigger value="reservas" className="text-xs sm:text-sm">Minhas reservas</TabsTrigger>
+            <TabsTrigger value="garagem" className="gap-1.5 text-xs sm:text-sm font-semibold">
+              <Car className="size-3.5 text-primary" />
+              <span>Minha Garagem ({deliveredOrders.length})</span>
+            </TabsTrigger>
             <TabsTrigger value="lojas" className="text-xs sm:text-sm">Lojas seguidas</TabsTrigger>
             <TabsTrigger value="fila" className="text-xs sm:text-sm">Fila de espera</TabsTrigger>
           </TabsList>
@@ -345,6 +350,56 @@ function CustomerDashboard() {
             ))}
             {orders && orders.length === 0 && (
               <p className="text-sm text-muted-foreground">Você ainda não tem reservas.</p>
+            )}
+          </TabsContent>
+
+          {/* ABA GARAGEM (COLEÇÃO ENTREGUE) */}
+          <TabsContent value="garagem" className="mt-4 space-y-4">
+            {deliveredOrders.length === 0 ? (
+              <Card className="panel border-dashed border-border/60">
+                <CardContent className="p-8 text-center space-y-2">
+                  <Car className="mx-auto size-10 text-muted-foreground/40" />
+                  <h3 className="font-bold text-base">Sua garagem está vazia</h3>
+                  <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                    Assim que suas reservas forem quitadas ou entregues pelo lojista, as miniaturas aparecerão automaticamente aqui na sua Garagem Colecionável!
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {deliveredOrders.map((o) => (
+                  <Card key={o.id} className="panel border-emerald-500/30 bg-emerald-500/5 overflow-hidden">
+                    <div className="aspect-video w-full overflow-hidden bg-muted relative">
+                      {o.products?.image_url ? (
+                        <img
+                          src={o.products.image_url}
+                          alt={o.products.model}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-muted-foreground">
+                          <Package className="size-10" />
+                        </div>
+                      )}
+                      <div className="absolute top-2 right-2">
+                        <Badge className="bg-emerald-600 text-white font-semibold text-[10px] gap-1 shadow-sm">
+                          <CheckCircle2 className="size-3" /> Na Garagem
+                        </Badge>
+                      </div>
+                    </div>
+                    <CardContent className="p-4 space-y-1.5">
+                      <p className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">
+                        {o.products?.brand} · {o.stores?.name}
+                      </p>
+                      <h4 className="font-bold text-base text-foreground leading-snug">{o.products?.model}</h4>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/40">
+                        <span>Valor pago: <strong>{brl(Number(o.total_price))}</strong></span>
+                        <span className="font-mono text-[10px]">#{o.id.slice(0, 6)}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             )}
           </TabsContent>
 
