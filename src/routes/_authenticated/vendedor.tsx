@@ -2023,7 +2023,7 @@ function ManualReservationDialog({
           {/* Seleção de Parcelamento */}
           {(() => {
             const selectedProduct = products.find((p) => p.id === selectedProductId);
-            const instOptions = selectedProduct ? getInstallmentOptions(selectedProduct) : [];
+            const instOptions = selectedProduct ? getInstallmentOptions(selectedProduct, manualQuantity) : [];
             if (instOptions.length <= 1) return null;
             const chosenOption = instOptions.find((o) => o.value === installmentCount) ?? instOptions[0];
             return (
@@ -2094,11 +2094,11 @@ function OrdersTab({
   const [trackingDrafts, setTrackingDrafts] = useState<Record<string, string>>({});
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
 
-  async function handleTrackingSave(id: string, code: string) {
+  async function handleTrackingSave(ids: string[], code: string) {
     const { error } = await supabase
       .from("orders")
       .update({ tracking_code: code.trim() || null })
-      .eq("id", id);
+      .in("id", ids);
 
     if (error) {
       console.error("Erro ao salvar rastreio:", error);
@@ -2119,11 +2119,9 @@ function OrdersTab({
       const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
       const effectiveStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
 
-      // Filtro por status
       if (statusFilter !== "todos" && effectiveStatus !== statusFilter) {
         return false;
       }
-      // Filtro por termo de busca
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase().trim();
       const cleanQ = q.replace(/^#/, "");
@@ -2149,10 +2147,44 @@ function OrdersTab({
     });
   }, [orders, searchQuery, statusFilter]);
 
-  const pages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
-  const rows = filteredOrders.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  type GroupedOrderRow = { order: OrderRow; quantity: number; ids: string[] };
 
-  async function adjustStockOnCancel(productId: string, isCancelling: boolean) {
+  const groupedOrders = useMemo(() => {
+    const map = new Map<string, GroupedOrderRow>();
+    for (const o of filteredOrders) {
+      const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
+      const effectiveStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
+
+      let guestMeta: any = null;
+      if (o.pix_key && typeof o.pix_key === "string") {
+        if (o.pix_key.startsWith("GUEST:")) {
+          try { guestMeta = JSON.parse(o.pix_key.replace(/^GUEST:/, "")); } catch {}
+        } else if (o.pix_key.startsWith('{"manual_guest":true')) {
+          try { guestMeta = JSON.parse(o.pix_key); } catch {}
+        }
+      }
+
+      const clientPhone = guestMeta?.phone || o.profiles?.phone || "";
+      const effectiveUserId = o.user_id + "_" + clientPhone;
+      const tracking = o.tracking_code || "";
+
+      const key = `${o.product_id}_${effectiveUserId}_${effectiveStatus}_${o.delivery_status}_${tracking}`;
+
+      if (map.has(key)) {
+        const item = map.get(key)!;
+        item.quantity += 1;
+        item.ids.push(o.id);
+      } else {
+        map.set(key, { order: o, quantity: 1, ids: [o.id] });
+      }
+    }
+    return Array.from(map.values());
+  }, [filteredOrders]);
+
+  const pages = Math.max(1, Math.ceil(groupedOrders.length / PAGE_SIZE));
+  const rows = groupedOrders.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+
+  async function adjustStockOnCancel(productId: string, isCancelling: boolean, quantity: number) {
     if (!productId) return;
     const { data: product } = await supabase
       .from("products")
@@ -2163,13 +2195,13 @@ function OrdersTab({
     if (!product) return;
 
     if (isCancelling) {
-      const newStock = (product.stock ?? 0) + 1;
+      const newStock = (product.stock ?? 0) + quantity;
       await supabase
         .from("products")
         .update({ stock: newStock, is_open: true })
         .eq("id", productId);
     } else {
-      const newStock = Math.max(0, (product.stock ?? 0) - 1);
+      const newStock = Math.max(0, (product.stock ?? 0) - quantity);
       await supabase
         .from("products")
         .update({ stock: newStock })
@@ -2177,18 +2209,20 @@ function OrdersTab({
     }
   }
 
-  async function update(
-    id: string,
+  async function updateGroup(
+    ids: string[],
     patch: Partial<Pick<Tables<"orders">, "down_payment" | "payment_status" | "delivery_status">>,
   ) {
-    const { error } = await supabase.from("orders").update(patch).eq("id", id);
+    const { error } = await supabase.from("orders").update(patch).in("id", ids);
 
     if (error) return toast.error("Não foi possível atualizar a reserva.");
     queryClient.invalidateQueries();
   }
 
-  async function handlePaymentStatusChange(o: OrderRow, newStatus: string) {
-    let downPayment = Number(drafts[o.id] ?? o.down_payment);
+  async function handlePaymentStatusChange(item: GroupedOrderRow, newStatus: string) {
+    const { order: o, quantity, ids } = item;
+    const groupId = ids[0];
+    let downPayment = Number(drafts[groupId] ?? o.down_payment);
     const totalPrice = Number(o.total_price);
     const customSignal = Number((o.products as any)?.down_payment_amount || 0);
 
@@ -2196,9 +2230,9 @@ function OrdersTab({
     const isNowCancelled = newStatus === "cancelado";
 
     if (!wasCancelled && isNowCancelled) {
-      await adjustStockOnCancel(o.product_id, true);
+      await adjustStockOnCancel(o.product_id, true, quantity);
     } else if (wasCancelled && !isNowCancelled) {
-      await adjustStockOnCancel(o.product_id, false);
+      await adjustStockOnCancel(o.product_id, false, quantity);
     }
 
     if (newStatus === "sinal_pago") {
@@ -2213,30 +2247,31 @@ function OrdersTab({
       downPayment = 0;
     }
 
-    setDrafts((prev) => ({ ...prev, [o.id]: String(downPayment) }));
-    await update(o.id, { payment_status: newStatus, down_payment: downPayment });
+    setDrafts((prev) => ({ ...prev, [groupId]: String(downPayment) }));
+    await updateGroup(ids, { payment_status: newStatus, down_payment: downPayment });
 
     if (!wasCancelled && isNowCancelled) {
-      toast.success("Reserva cancelada! +1 unidade devolvida ao estoque.");
+      toast.success(`Reserva cancelada! +${quantity} unidade(s) devolvida(s) ao estoque.`);
     } else {
       toast.success("Reserva atualizada.");
     }
   }
 
-  async function handleDeliveryStatusChange(o: OrderRow, newStatus: string) {
+  async function handleDeliveryStatusChange(item: GroupedOrderRow, newStatus: string) {
+    const { order: o, quantity, ids } = item;
     const wasCancelled = o.payment_status === "cancelado" || o.delivery_status === "cancelado";
     const isNowCancelled = newStatus === "cancelado";
 
     if (!wasCancelled && isNowCancelled) {
-      await adjustStockOnCancel(o.product_id, true);
+      await adjustStockOnCancel(o.product_id, true, quantity);
     } else if (wasCancelled && !isNowCancelled) {
-      await adjustStockOnCancel(o.product_id, false);
+      await adjustStockOnCancel(o.product_id, false, quantity);
     }
 
-    await update(o.id, { delivery_status: newStatus });
+    await updateGroup(ids, { delivery_status: newStatus });
 
     if (!wasCancelled && isNowCancelled) {
-      toast.success("Reserva cancelada! +1 unidade devolvida ao estoque.");
+      toast.success(`Reserva cancelada! +${quantity} unidade(s) devolvida(s) ao estoque.`);
     } else {
       toast.success("Reserva atualizada.");
     }
@@ -2265,7 +2300,7 @@ function OrdersTab({
             onClick={() => {
               const csvRows = [
                 ["ID Pedido", "Cliente", "WhatsApp", "Miniatura", "Marca", "Total (R$)", "Sinal (R$)", "Status Pagamento", "Status Entrega", "Data"].join(";"),
-                ...filtered.map((o) => {
+                ...filteredOrders.map((o) => {
                   const name = o.profiles?.name || "Cliente";
                   const phone = o.profiles?.phone || "";
                   const model = o.products?.model || "";
@@ -2325,7 +2360,9 @@ function OrdersTab({
       <CardContent className="p-0">
         {/* VISÃO PARA CELULAR (CARDS INDIVIDUAIS COM ESPAÇAMENTO CLARO) */}
         <div className="md:hidden space-y-4 p-4 bg-muted/20">
-          {rows.map((o) => {
+          {rows.map((item) => {
+            const { order: o, quantity, ids } = item;
+            const groupId = ids[0];
             let guestMeta: { name?: string; phone?: string } | null = null;
             if (o.pix_key && typeof o.pix_key === "string") {
               if (o.pix_key.startsWith("GUEST:")) {
@@ -2346,7 +2383,7 @@ function OrdersTab({
             const clientPhone = guestMeta?.phone || o.profiles?.phone || cached?.phone;
 
             return (
-              <div key={o.id} className="rounded-2xl border border-border/70 bg-card p-4 space-y-3.5 shadow-sm">
+              <div key={groupId} className="rounded-2xl border border-border/70 bg-card p-4 space-y-3.5 shadow-sm">
                 {/* Cliente e WhatsApp */}
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -2354,7 +2391,7 @@ function OrdersTab({
                     {o.profiles?.email && !guestMeta && (
                       <p className="text-xs text-muted-foreground">{o.profiles.email}</p>
                     )}
-                    <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{o.id.slice(0, 8)}</p>
+                    <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{groupId.slice(0, 8)}</p>
                   </div>
                   {clientPhone ? (() => {
                     const parsed = parsePhoneWithFlag(clientPhone);
@@ -2391,8 +2428,17 @@ function OrdersTab({
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wide">{o.products?.brand}</p>
-                    <p className="font-semibold text-sm truncate">{o.products?.model || "Miniatura"}</p>
+                    <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wide flex items-center gap-1.5">
+                      <span>{o.products?.brand}</span>
+                      {quantity > 1 && (
+                        <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[10px] px-1.5 py-0 border-primary/20">
+                          {quantity}x
+                        </Badge>
+                      )}
+                    </p>
+                    <p className="font-semibold text-sm truncate flex items-center gap-1">
+                      {o.products?.model || "Miniatura"}
+                    </p>
                   </div>
                 </div>
 
@@ -2400,24 +2446,24 @@ function OrdersTab({
                 <div className="grid grid-cols-3 gap-2 rounded-xl bg-muted/20 p-2.5 text-center text-xs border border-border/30">
                   <div>
                     <p className="text-muted-foreground">Total</p>
-                    <p className="font-semibold text-sm">{brl(Number(o.total_price))}</p>
+                    <p className="font-semibold text-sm">{brl(Number(o.total_price) * quantity)}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Sinal (R$)</p>
+                    <p className="text-muted-foreground">Sinal (un.)</p>
                     <div className="flex items-center justify-center gap-1 mt-0.5">
                       <Input
                         className="h-7 w-16 text-center text-xs px-1"
                         type="number"
                         min="0"
                         step="0.01"
-                        value={drafts[o.id] ?? String(o.down_payment)}
-                        onChange={(e) => setDrafts({ ...drafts, [o.id]: e.target.value })}
+                        value={drafts[groupId] ?? String(o.down_payment)}
+                        onChange={(e) => setDrafts({ ...drafts, [groupId]: e.target.value })}
                       />
                       <Button
                         size="icon"
                         variant="secondary"
                         className="size-7 text-[10px]"
-                        onClick={() => update(o.id, { down_payment: Number(drafts[o.id] ?? o.down_payment) })}
+                        onClick={() => updateGroup(ids, { down_payment: Number(drafts[groupId] ?? o.down_payment) })}
                       >
                         OK
                       </Button>
@@ -2425,7 +2471,7 @@ function OrdersTab({
                   </div>
                   <div>
                     <p className="text-muted-foreground">Saldo</p>
-                    <p className="font-bold text-sm text-primary">{brl(Number(o.remaining_balance))}</p>
+                    <p className="font-bold text-sm text-primary">{brl(Number(o.remaining_balance) * quantity)}</p>
                   </div>
                 </div>
 
@@ -2439,7 +2485,7 @@ function OrdersTab({
                         <PaymentBadge status={currentPaymentStatus} />
                         <Select
                           value={currentPaymentStatus}
-                          onValueChange={(v) => handlePaymentStatusChange(o, v)}
+                          onValueChange={(v) => handlePaymentStatusChange(item, v)}
                         >
                           <SelectTrigger className="h-8 text-xs w-36">
                             <SelectValue />
@@ -2454,7 +2500,7 @@ function OrdersTab({
                         </Select>
                         <Select
                           value={o.delivery_status}
-                          onValueChange={(v) => handleDeliveryStatusChange(o, v)}
+                          onValueChange={(v) => handleDeliveryStatusChange(item, v)}
                         >
                           <SelectTrigger className="h-8 text-xs w-32">
                             <SelectValue />
@@ -2490,14 +2536,14 @@ function OrdersTab({
                   <Input
                     className="h-8 text-xs font-mono flex-1"
                     placeholder="Cód. Rastreio (Ex: AA123456789BR)"
-                    value={trackingDrafts[o.id] ?? o.tracking_code ?? ""}
-                    onChange={(e) => setTrackingDrafts({ ...trackingDrafts, [o.id]: e.target.value })}
+                    value={trackingDrafts[groupId] ?? o.tracking_code ?? ""}
+                    onChange={(e) => setTrackingDrafts({ ...trackingDrafts, [groupId]: e.target.value })}
                   />
                   <Button
                     size="sm"
                     variant="secondary"
                     className="h-8 px-3 text-xs font-medium"
-                    onClick={() => handleTrackingSave(o.id, trackingDrafts[o.id] ?? o.tracking_code ?? "")}
+                    onClick={() => handleTrackingSave(ids, trackingDrafts[groupId] ?? o.tracking_code ?? "")}
                   >
                     Salvar
                   </Button>
@@ -2519,14 +2565,16 @@ function OrdersTab({
                 <TableHead>Cliente</TableHead>
                 <TableHead>Miniatura</TableHead>
                 <TableHead>Total</TableHead>
-                <TableHead>Sinal</TableHead>
+                <TableHead>Sinal (un.)</TableHead>
                 <TableHead>Saldo</TableHead>
                 <TableHead>Status & Rastreio</TableHead>
                 <TableHead>Prazo</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((o) => {
+              {rows.map((item) => {
+                const { order: o, quantity, ids } = item;
+                const groupId = ids[0];
                 let guestMeta: { name?: string; phone?: string } | null = null;
                 if (o.pix_key && typeof o.pix_key === "string") {
                   if (o.pix_key.startsWith("GUEST:")) {
@@ -2549,7 +2597,7 @@ function OrdersTab({
                 const currentPaymentStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
 
                 return (
-                  <TableRow key={o.id}>
+                  <TableRow key={groupId}>
                     <TableCell className="whitespace-nowrap">
                       <p className="font-medium">{displayName}</p>
                       {o.profiles?.email && !guestMeta && (
@@ -2571,7 +2619,7 @@ function OrdersTab({
                       })() : (
                         <span className="text-[11px] text-muted-foreground/60 italic block">Sem WhatsApp</span>
                       )}
-                      <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{o.id.slice(0, 8)}</p>
+                      <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{groupId.slice(0, 8)}</p>
                     </TableCell>
                   <TableCell className="whitespace-nowrap">
                     <div className="flex items-center gap-3">
@@ -2590,14 +2638,24 @@ function OrdersTab({
                         )}
                       </div>
                       <div>
-                        <p className="font-semibold text-sm">{o.products?.model || "Miniatura"}</p>
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                          {o.products?.brand}
+                        <p className="font-semibold text-sm flex items-center gap-1">
+                          {o.products?.model || "Miniatura"}
+                        </p>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                          <span>{o.products?.brand}</span>
+                          {quantity > 1 && (
+                            <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[10px] px-1.5 py-0 border-primary/20">
+                              {quantity}x
+                            </Badge>
+                          )}
                         </p>
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>{brl(Number(o.total_price))}</TableCell>
+                  <TableCell>
+                    {brl(Number(o.total_price) * quantity)}
+                    {quantity > 1 && <span className="block text-[10px] text-muted-foreground font-mono">({quantity}x {brl(Number(o.total_price))})</span>}
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5">
                       <Input
@@ -2605,14 +2663,14 @@ function OrdersTab({
                         type="number"
                         min="0"
                         step="0.01"
-                        value={drafts[o.id] ?? String(o.down_payment)}
-                        onChange={(e) => setDrafts({ ...drafts, [o.id]: e.target.value })}
+                        value={drafts[groupId] ?? String(o.down_payment)}
+                        onChange={(e) => setDrafts({ ...drafts, [groupId]: e.target.value })}
                       />
                       <Button
                         size="sm"
                         variant="secondary"
                         onClick={() =>
-                          update(o.id, { down_payment: Number(drafts[o.id] ?? o.down_payment) })
+                          updateGroup(ids, { down_payment: Number(drafts[groupId] ?? o.down_payment) })
                         }
                       >
                         OK
@@ -2620,14 +2678,14 @@ function OrdersTab({
                     </div>
                   </TableCell>
                   <TableCell className="font-medium text-primary">
-                    {brl(Number(o.remaining_balance))}
+                    {brl(Number(o.remaining_balance) * quantity)}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1.5 min-w-[155px]">
                       <PaymentBadge status={currentPaymentStatus} />
                       <Select
                         value={currentPaymentStatus}
-                        onValueChange={(v) => handlePaymentStatusChange(o, v)}
+                        onValueChange={(v) => handlePaymentStatusChange(item, v)}
                       >
                         <SelectTrigger className="h-7 text-xs w-36">
                           <SelectValue />
@@ -2642,7 +2700,7 @@ function OrdersTab({
                       </Select>
                       <Select
                         value={o.delivery_status}
-                        onValueChange={(v) => handleDeliveryStatusChange(o, v)}
+                        onValueChange={(v) => handleDeliveryStatusChange(item, v)}
                       >
                         <SelectTrigger className="h-7 text-xs w-36">
                           <SelectValue />
@@ -2659,15 +2717,15 @@ function OrdersTab({
                         <Input
                           className="h-7 text-[11px] font-mono px-2 w-28"
                           placeholder="Cód. Rastreio"
-                          value={trackingDrafts[o.id] ?? o.tracking_code ?? ""}
-                          onChange={(e) => setTrackingDrafts({ ...trackingDrafts, [o.id]: e.target.value })}
+                          value={trackingDrafts[groupId] ?? o.tracking_code ?? ""}
+                          onChange={(e) => setTrackingDrafts({ ...trackingDrafts, [groupId]: e.target.value })}
                         />
                         <Button
                           size="sm"
                           variant="secondary"
                           className="h-7 px-2 text-[11px] font-semibold"
                           title="Salvar rastreio"
-                          onClick={() => handleTrackingSave(o.id, trackingDrafts[o.id] ?? o.tracking_code ?? "")}
+                          onClick={() => handleTrackingSave(ids, trackingDrafts[groupId] ?? o.tracking_code ?? "")}
                         >
                           OK
                         </Button>

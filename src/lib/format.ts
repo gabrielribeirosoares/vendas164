@@ -69,16 +69,21 @@ export function getProductInstallmentInfo(product: any) {
  * Retorna a lista de opções de parcelamento para um produto.
  * Ex: [{ value: 1, label: "À vista — R$ 100,00" }, { value: 2, label: "2x de R$ 51,00 (Total R$ 102,00)" }, ...]
  */
-export function getInstallmentOptions(product: any): { value: number; label: string; totalPrice: number }[] {
-  const cashPrice = Number(product?.price ?? 0);
+export function getInstallmentOptions(product: any, quantity: number = 1): { value: number; label: string; totalPrice: number }[] {
+  const unitCashPrice = Number(product?.price ?? 0);
   const maxInst = Number(product?.max_installments && Number(product.max_installments) > 0 ? product.max_installments : 12);
   const instPriceRaw = product?.installment_price ?? product?.price_2x;
+  
   const hasSurcharge =
     product?.has_installment_surcharge === true ||
-    (instPriceRaw != null && Number(instPriceRaw) > cashPrice);
-  const instTotal = hasSurcharge && instPriceRaw != null && Number(instPriceRaw) > 0
+    (instPriceRaw != null && Number(instPriceRaw) > unitCashPrice);
+    
+  const unitInstPrice = hasSurcharge && instPriceRaw != null && Number(instPriceRaw) > 0
     ? Number(instPriceRaw)
-    : cashPrice;
+    : unitCashPrice;
+
+  const cashPrice = unitCashPrice * quantity;
+  const instTotal = unitInstPrice * quantity;
 
   const options: { value: number; label: string; totalPrice: number }[] = [
     { value: 1, label: `À vista — ${brl(cashPrice)}`, totalPrice: cashPrice },
