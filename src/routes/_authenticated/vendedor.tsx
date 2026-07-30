@@ -342,6 +342,7 @@ function SellerDashboard() {
           <TabsList className="w-full flex overflow-x-auto justify-start sm:justify-center whitespace-nowrap p-1 max-w-full">
             <TabsTrigger value="produtos" className="text-xs sm:text-sm">Estoque e pré-vendas</TabsTrigger>
             <TabsTrigger value="reservas" className="text-xs sm:text-sm">Reservas</TabsTrigger>
+            <TabsTrigger value="clientes" className="text-xs sm:text-sm">Clientes</TabsTrigger>
             <TabsTrigger value="loja" className="gap-1.5 text-xs sm:text-sm">
               <Palette className="size-3.5" /> Personalização
             </TabsTrigger>
@@ -353,6 +354,10 @@ function SellerDashboard() {
 
           <TabsContent value="reservas" className="mt-4">
             <OrdersTab storeId={store.id} storeColor={store.primary_color} products={products ?? []} orders={orders ?? []} />
+          </TabsContent>
+
+          <TabsContent value="clientes" className="mt-4">
+            <ClientsTab orders={orders ?? []} />
           </TabsContent>
 
           <TabsContent value="loja" className="mt-4">
@@ -3495,6 +3500,133 @@ function AdminModerationPanel() {
               >
                 {submitting && <Loader2 className="size-4 animate-spin mr-1" />} Confirmar Recusa
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function ClientsTab({ orders }: { orders: OrderRow[] }) {
+  const clientsMap = new Map<string, { profile: any, orders: OrderRow[], totalSpent: number }>();
+
+  for (const order of orders) {
+    const userId = order.user_id;
+    if (!clientsMap.has(userId)) {
+      clientsMap.set(userId, {
+        profile: order.profiles || { name: 'Desconhecido', email: '', phone: '' },
+        orders: [],
+        totalSpent: 0
+      });
+    }
+    const client = clientsMap.get(userId)!;
+    client.orders.push(order);
+    if (order.payment_status !== 'cancelado') {
+      client.totalSpent += Number(order.total_price || 0);
+    }
+  }
+
+  const clients = Array.from(clientsMap.values()).sort((a, b) => b.totalSpent - a.totalSpent);
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+
+  return (
+    <div className="space-y-4">
+      <Card className="panel border-border/60">
+        <CardHeader>
+          <CardTitle className="text-lg">Meus Clientes ({clients.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {clients.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground">
+              Nenhum cliente encontrado ainda.
+            </div>
+          ) : (
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Contato</TableHead>
+                    <TableHead className="text-center">Reservas</TableHead>
+                    <TableHead>Total Gasto</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {clients.map((c) => (
+                    <TableRow key={c.orders[0].user_id}>
+                      <TableCell className="font-medium">
+                        {c.profile.name || 'Desconhecido'}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col text-xs text-muted-foreground">
+                          <span>{c.profile.email || '-'}</span>
+                          <span>{c.profile.phone || '-'}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="secondary">{c.orders.length}</Badge>
+                      </TableCell>
+                      <TableCell className="font-semibold text-green-600 dark:text-green-500">
+                        {brl(c.totalSpent)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="outline" size="sm" onClick={() => setSelectedClient(c)}>
+                          Ver compras
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!selectedClient} onOpenChange={(open) => !open && setSelectedClient(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Compras de {selectedClient?.profile?.name || 'Desconhecido'}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 mt-4">
+            <div className="flex flex-col sm:flex-row gap-4 mb-4 text-sm text-muted-foreground bg-muted/30 p-3 rounded-lg">
+              <div><strong>Email:</strong> {selectedClient?.profile?.email || '-'}</div>
+              <div><strong>WhatsApp:</strong> {selectedClient?.profile?.phone || '-'}</div>
+              <div><strong>Total em compras:</strong> {selectedClient ? brl(selectedClient.totalSpent) : '-'}</div>
+            </div>
+
+            <div className="space-y-3">
+              {selectedClient?.orders.map((order: OrderRow) => (
+                <div key={order.id} className="border rounded-lg p-3 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+                  <div className="flex items-center gap-4">
+                    {order.products?.image_url ? (
+                      <img src={order.products.image_url} alt="Produto" className="w-12 h-12 rounded object-cover" />
+                    ) : (
+                      <div className="w-12 h-12 bg-muted rounded flex items-center justify-center text-muted-foreground">
+                        <Package className="w-6 h-6" />
+                      </div>
+                    )}
+                    <div>
+                      <div className="font-semibold text-sm">
+                        {order.products?.brand || 'Desconhecido'} {order.products?.model || 'Produto indisponível'}
+                      </div>
+                      <div className="text-xs text-muted-foreground flex gap-2 items-center mt-1">
+                        <span>Reserva: {new Date(order.created_at).toLocaleDateString('pt-BR')}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col items-end gap-1 text-sm">
+                    <div className="font-medium">{brl(Number(order.total_price))}</div>
+                    <PaymentBadge status={order.payment_status} />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </DialogContent>
