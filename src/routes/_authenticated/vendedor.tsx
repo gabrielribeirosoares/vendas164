@@ -3883,32 +3883,45 @@ function ClientsTab({ orders }: { orders: OrderRow[] }) {
             </div>
 
             <div className="space-y-3">
-              {selectedClient?.orders.map((order: OrderRow) => (
-                <div key={order.id} className="border rounded-lg p-3 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-                  <div className="flex items-center gap-4">
-                    {order.products?.image_url ? (
-                      <img src={order.products.image_url} alt="Produto" className="w-12 h-12 rounded object-cover" />
-                    ) : (
-                      <div className="w-12 h-12 bg-muted rounded flex items-center justify-center text-muted-foreground">
-                        <Package className="w-6 h-6" />
-                      </div>
-                    )}
-                    <div>
-                      <div className="font-semibold text-sm">
-                        {order.products?.brand || 'Desconhecido'} {order.products?.model || 'Produto indisponível'}
-                      </div>
-                      <div className="text-xs text-muted-foreground flex gap-2 items-center mt-1">
-                        <span>Reserva: {new Date(order.created_at).toLocaleDateString('pt-BR')}</span>
+              {(() => {
+                const grouped = new Map<string, { order: OrderRow; quantity: number }>();
+                selectedClient?.orders.forEach(order => {
+                  const key = `${order.product_id}_${order.payment_status}`;
+                  if (grouped.has(key)) {
+                    grouped.get(key)!.quantity += 1;
+                  } else {
+                    grouped.set(key, { order, quantity: 1 });
+                  }
+                });
+
+                return Array.from(grouped.values()).map(({ order, quantity }) => (
+                  <div key={`${order.product_id}_${order.payment_status}`} className="border rounded-lg p-3 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+                    <div className="flex items-center gap-4">
+                      {order.products?.image_url ? (
+                        <img src={order.products.image_url} alt="Produto" className="w-12 h-12 rounded object-cover" />
+                      ) : (
+                        <div className="w-12 h-12 bg-muted rounded flex items-center justify-center text-muted-foreground">
+                          <Package className="w-6 h-6" />
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-semibold text-sm flex items-center flex-wrap">
+                          {quantity > 1 && <Badge variant="secondary" className="mr-2 text-xs py-0 h-5 px-1.5">{quantity}x</Badge>}
+                          {order.products?.brand || 'Desconhecido'} {order.products?.model || 'Produto indisponível'}
+                        </div>
+                        <div className="text-xs text-muted-foreground flex gap-2 items-center mt-1">
+                          <span>Reserva: {new Date(order.created_at).toLocaleDateString('pt-BR')}</span>
+                        </div>
                       </div>
                     </div>
+                    
+                    <div className="flex flex-col items-end gap-1 text-sm">
+                      <div className="font-medium">{brl(Number(order.total_price) * quantity)}</div>
+                      <PaymentBadge status={order.payment_status} />
+                    </div>
                   </div>
-                  
-                  <div className="flex flex-col items-end gap-1 text-sm">
-                    <div className="font-medium">{brl(Number(order.total_price))}</div>
-                    <PaymentBadge status={order.payment_status} />
-                  </div>
-                </div>
-              ))}
+                ));
+              })()}
             </div>
           </div>
         </DialogContent>
