@@ -62,10 +62,6 @@ export function useSession() {
             }
           } else {
             console.log("Reservas sincronizadas com sucesso via RPC.");
-            if (typeof window !== "undefined") {
-              const { toast } = await import("sonner");
-              toast.success("Migração de reservas concluída com sucesso!");
-            }
           }
         } catch (e) {
           console.error("Erro de exceção na RPC:", e);
