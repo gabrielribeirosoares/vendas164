@@ -46,6 +46,7 @@ export type Database = {
           delivery_status: string
           down_payment: number
           id: string
+          installment_count: number | null
           payment_status: string
           pix_key: string | null
           product_id: string
@@ -61,6 +62,7 @@ export type Database = {
           delivery_status?: string
           down_payment?: number
           id?: string
+          installment_count?: number | null
           payment_status?: string
           pix_key?: string | null
           product_id: string
@@ -76,6 +78,7 @@ export type Database = {
           delivery_status?: string
           down_payment?: number
           id?: string
+          installment_count?: number | null
           payment_status?: string
           pix_key?: string | null
           product_id?: string

@@ -1,13 +1,16 @@
+import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Clock, Package, Share2, Store as StoreIcon } from "lucide-react";
+import { CalendarDays, Clock, Package, Share2, Store as StoreIcon, CreditCard, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, formatDeadlineHours, getProductInstallmentInfo } from "@/lib/format";
+import { brl, formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { joinWaitlist, reservationErrorMessage, reserveQuota } from "@/lib/reservations";
 
@@ -17,10 +20,10 @@ export const Route = createFileRoute("/produto/$id")({
       { title: "Pré-venda de miniatura — MiniPré" },
       {
         name: "description",
-        content: "Detalhes da pré-venda: preço, cotas disponíveis, prazo do sinal e reserva.",
+        content: "Detalhes da pré-venda: preço, unidades disponíveis, prazo do sinal e reserva.",
       },
       { property: "og:title", content: "Pré-venda de miniatura — MiniPré" },
-      { property: "og:description", content: "Reserve sua cota desta miniatura colecionável." },
+      { property: "og:description", content: "Reserve sua unidade desta miniatura colecionável." },
     ],
   }),
   component: ProductPage,
@@ -31,6 +34,10 @@ function ProductPage() {
   const { user } = useSession();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  const [quantity, setQuantity] = useState<number>(1);
+  const [selectedInstallment, setSelectedInstallment] = useState<number>(1);
+  const [reserving, setReserving] = useState<boolean>(false);
 
   const { data: product, isLoading } = useQuery({
     queryKey: ["product", id],
@@ -66,21 +73,45 @@ function ProductPage() {
       return;
     }
     if (product.stores?.owner_id === user.id) {
-      toast.info("Você é o dono desta loja e não pode reservar cotas na sua própria pré-venda.");
+      toast.info("Você é o dono desta loja e não pode reservar unidades na sua própria pré-venda.");
       return;
     }
+    setReserving(true);
     try {
       if (product.stock > 0) {
-        const orderId = await reserveQuota(product.id);
+        const qtyToReserve = Math.min(quantity, product.stock);
+        const orderIds: string[] = [];
+
+        for (let i = 0; i < qtyToReserve; i++) {
+          const orderId = await reserveQuota(product.id);
+          orderIds.push(orderId);
+        }
+
         const isNoSignal = product.payment_deadline_hours === 0 || Number((product as any).down_payment_amount) === 0;
+        
+        // Atualizar pedidos com número de parcelas escolhido e status se sem sinal
+        if (orderIds.length > 0) {
+          const updatePayload: any = {};
+          if (selectedInstallment > 1) {
+            updatePayload.installment_count = selectedInstallment;
+          }
+          if (isNoSignal) {
+            updatePayload.payment_status = "sem_sinal";
+            updatePayload.reservation_expires_at = null;
+          }
+
+          if (Object.keys(updatePayload).length > 0) {
+            await supabase
+              .from("orders")
+              .update(updatePayload)
+              .in("id", orderIds);
+          }
+        }
+
         if (isNoSignal) {
-          await supabase
-            .from("orders")
-            .update({ payment_status: "sem_sinal", reservation_expires_at: null })
-            .eq("id", orderId);
-          toast.success("Cota reservada com sucesso! (Sem necessidade de sinal)");
+          toast.success(qtyToReserve > 1 ? `${qtyToReserve} unidades reservadas com sucesso! (Sem sinal)` : "Unidade reservada com sucesso! (Sem sinal)");
         } else {
-          toast.success("Cota reservada! Envie o sinal dentro do prazo.");
+          toast.success(qtyToReserve > 1 ? `${qtyToReserve} unidades reservadas! Envie o sinal dentro do prazo.` : "Unidade reservada! Envie o sinal dentro do prazo.");
         }
       } else {
         await joinWaitlist(user.id, product.id, product.store_id);
@@ -90,6 +121,8 @@ function ProductPage() {
       navigate({ to: "/painel" });
     } catch (error) {
       toast.error(reservationErrorMessage(error));
+    } finally {
+      setReserving(false);
     }
   }
 
@@ -117,6 +150,13 @@ function ProductPage() {
   }
 
   const isNoSignal = product.payment_deadline_hours === 0 || Number((product as any).down_payment_amount) === 0;
+
+  // Cálculo de parcelamento e total com base no produto e quantidade selecionada
+  const installmentOptions = getInstallmentOptions(product);
+  const chosenInstallmentObj = installmentOptions.find((o) => o.value === selectedInstallment) ?? installmentOptions[0];
+  const unitPriceForChosenOption = chosenInstallmentObj.totalPrice;
+  const totalPriceCalculated = unitPriceForChosenOption * quantity;
+  const installmentValCalculated = selectedInstallment > 1 ? totalPriceCalculated / selectedInstallment : totalPriceCalculated;
 
   return (
     <div className="min-h-screen">
@@ -156,8 +196,11 @@ function ProductPage() {
               <div className="flex items-baseline gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">À vista:</span>
                 <span className="font-display text-4xl font-bold text-primary">
-                  {brl(Number(product.price))}
+                  {brl(Number(product.price) * quantity)}
                 </span>
+                {quantity > 1 && (
+                  <span className="text-xs text-muted-foreground">({quantity}x {brl(Number(product.price))})</span>
+                )}
               </div>
               {(() => {
                 const inst = getProductInstallmentInfo(product);
@@ -165,9 +208,9 @@ function ProductPage() {
                 return (
                   <div className="flex flex-wrap items-center gap-2 pt-1 text-sm text-muted-foreground">
                     <Badge variant="outline" className="border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10 font-semibold">
-                      Ou em até {inst.maxInstallments}x de {brl(inst.installmentValue)}
+                      Ou em até {inst.maxInstallments}x de {brl(inst.installmentValue * quantity)}
                     </Badge>
-                    <span>{inst.hasSurcharge ? `(Total parcelado: ${brl(inst.totalPrice)})` : "(sem acréscimo)"}</span>
+                    <span>{inst.hasSurcharge ? `(Total parcelado: ${brl(inst.totalPrice * quantity)})` : "(sem acréscimo)"}</span>
                   </div>
                 );
               })()}
@@ -178,7 +221,7 @@ function ProductPage() {
                 {product.is_open ? "Pré-venda aberta" : "Pré-venda fechada"}
               </Badge>
               <Badge variant="outline">
-                {product.stock > 0 ? `${product.stock} cotas disponíveis` : "Cotas esgotadas"}
+                {product.stock > 0 ? `${product.stock} ${product.stock === 1 ? "unidade disponível" : "unidades disponíveis"}` : "Unidades esgotadas"}
               </Badge>
               {isNoSignal && (
                 <Badge variant="secondary" className="bg-blue-500/15 text-blue-600 border-blue-500/30">
@@ -186,6 +229,75 @@ function ProductPage() {
                 </Badge>
               )}
             </div>
+
+            {/* Controles de Quantidade e Parcelamento */}
+            {product.is_open && product.stock > 0 && !onWaitlist && (
+              <Card className="mt-6 border-border/60 panel bg-muted/20">
+                <CardContent className="space-y-4 p-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Seletor de Quantidade */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold flex items-center gap-1.5">
+                        <ShoppingBag className="size-3.5 text-primary" /> Quantidade
+                      </Label>
+                      <Select
+                        value={String(quantity)}
+                        onValueChange={(val) => setQuantity(Number(val))}
+                      >
+                        <SelectTrigger className="bg-background">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: Math.min(product.stock, 10) }, (_, i) => i + 1).map((qty) => (
+                            <SelectItem key={qty} value={String(qty)}>
+                              {qty} {qty === 1 ? "unidade" : "unidades"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Seletor de Parcelamento */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold flex items-center gap-1.5">
+                        <CreditCard className="size-3.5 text-primary" /> Forma de Pagamento
+                      </Label>
+                      <Select
+                        value={String(selectedInstallment)}
+                        onValueChange={(val) => setSelectedInstallment(Number(val))}
+                      >
+                        <SelectTrigger className="bg-background">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {installmentOptions.map((opt) => (
+                            <SelectItem key={opt.value} value={String(opt.value)}>
+                              {opt.value === 1
+                                ? `À vista — ${brl(opt.totalPrice * quantity)}`
+                                : `${opt.value}x de ${brl((opt.totalPrice * quantity) / opt.value)}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Resumo Atualizado do Pedido */}
+                  <div className="rounded-lg bg-background/80 p-3 border border-border/40 text-xs space-y-1">
+                    <div className="flex justify-between items-center text-muted-foreground">
+                      <span>Total da reserva ({quantity} {quantity === 1 ? "unidade" : "unidades"}):</span>
+                      <span className="font-semibold text-foreground text-sm">{brl(totalPriceCalculated)}</span>
+                    </div>
+                    {selectedInstallment > 1 && (
+                      <div className="flex justify-between items-center text-primary font-medium">
+                        <span>Plano escolhido:</span>
+                        <span>{selectedInstallment}x de {brl(installmentValCalculated)}</span>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             <Card className="mt-6 border-border/60 panel">
               <CardContent className="space-y-3 p-5 text-sm">
@@ -214,14 +326,14 @@ function ProductPage() {
                 size="lg"
                 className="flex-1 glow"
                 onClick={handleReserve}
-                disabled={!product.is_open || onWaitlist === true}
+                disabled={!product.is_open || onWaitlist === true || reserving}
               >
                 {!product.is_open
                   ? "Pré-venda fechada"
                   : onWaitlist
                     ? "Você está na fila"
                     : product.stock > 0
-                      ? "Reservar cota"
+                      ? quantity > 1 ? `Reservar ${quantity} unidades` : "Reservar unidade"
                       : "Entrar na fila de espera"}
               </Button>
               <Button size="lg" variant="secondary" onClick={share}>

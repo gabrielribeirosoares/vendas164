@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Copy, ExternalLink, Loader2, MessageCircle, Package, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
+import { BookmarkCheck, Car, CheckCircle2, Copy, ExternalLink, Loader2, MessageCircle, Package, Search, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { AppFooter } from "@/components/AppFooter";
@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { getCustomerFromCache } from "@/lib/customerCache";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -42,6 +43,7 @@ export const Route = createFileRoute("/_authenticated/painel")({
 function CustomerDashboard() {
   const { user, loading: sessionLoading } = useSession();
   const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [garageSearchQuery, setGarageSearchQuery] = useState("");
 
   const { data: profile } = useQuery({
     queryKey: ["my-profile", user?.id],
@@ -60,6 +62,130 @@ function CustomerDashboard() {
     queryKey: ["my-orders", user?.id],
     enabled: !!user,
     queryFn: async () => {
+      // 1. Tentar auto-migrar reservas pendentes por telefone (tanto via profiles quanto via meta)
+      if (user) {
+        try {
+          const { data: currentProf } = await supabase
+            .from("profiles")
+            .select("phone, name, email")
+            .eq("id", user.id)
+            .maybeSingle();
+
+          const userEmail = (currentProf?.email || user.email || "").toLowerCase().trim();
+          const userPhone = currentProf?.phone || user.user_metadata?.phone || profile?.phone || "";
+          const userName = currentProf?.name || user.user_metadata?.name || profile?.name || "";
+          const rawPhoneDigits = userPhone ? userPhone.replace(/\D/g, "") : "";
+          const lowerName = userName.toLowerCase().trim();
+
+          let migratedCount = 0;
+
+          // 1A. Procurar perfis duplicados no Supabase com o mesmo número de telefone
+          if (rawPhoneDigits.length >= 8) {
+            const { data: allProfiles } = await supabase.from("profiles").select("id, phone").neq("id", user.id);
+            if (allProfiles && allProfiles.length > 0) {
+              const duplicateUserIds: string[] = [];
+              for (const pItem of allProfiles) {
+                if (pItem.phone) {
+                  const pDigits = String(pItem.phone).replace(/\D/g, "");
+                  if (pDigits.length >= 8 && (rawPhoneDigits.slice(-8) === pDigits.slice(-8) || rawPhoneDigits === pDigits)) {
+                    duplicateUserIds.push(pItem.id);
+                  }
+                }
+              }
+
+              if (duplicateUserIds.length > 0) {
+                const { data: ordersToMigrate } = await supabase.from("orders").select("id, store_id").in("user_id", duplicateUserIds);
+                if (ordersToMigrate && ordersToMigrate.length > 0) {
+                  const { error: migErr } = await supabase.from("orders").update({ user_id: user.id }).in("user_id", duplicateUserIds);
+                  if (!migErr) {
+                    migratedCount += ordersToMigrate.length;
+                    for (const oItem of ordersToMigrate) {
+                      if (oItem.store_id) {
+                        await supabase.from("customer_store_link").upsert({ user_id: user.id, store_id: oItem.store_id }, { onConflict: "user_id,store_id" }).catch(() => undefined);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // 1B. Buscar pedidos com metadados ou cache local
+          const { data: candidateOrders } = await supabase
+            .from("orders")
+            .select("id, pix_key, store_id, user_id")
+            .neq("user_id", user.id);
+
+          if (candidateOrders && candidateOrders.length > 0) {
+            const { getCustomerFromCache } = await import("@/lib/customerCache");
+
+            for (const orderItem of candidateOrders) {
+              let meta: any = null;
+
+              if (orderItem.pix_key && typeof orderItem.pix_key === "string") {
+                try {
+                  if (orderItem.pix_key.startsWith("GUEST:")) {
+                    meta = JSON.parse(orderItem.pix_key.replace(/^GUEST:/, ""));
+                  } else if (orderItem.pix_key.startsWith('{"manual_guest":true')) {
+                    meta = JSON.parse(orderItem.pix_key);
+                  }
+                } catch {}
+              }
+
+              // Fallback pelo customerCache
+              if (!meta) {
+                const cached = getCustomerFromCache(orderItem.id) || getCustomerFromCache(orderItem.user_id);
+                if (cached) {
+                  meta = { name: cached.name, phone: cached.phone, email: cached.email };
+                }
+              }
+
+              if (meta) {
+                const customPixKey = meta.pix || meta.custom_pix || null;
+                const metaPhoneDigits = meta.phone ? String(meta.phone).replace(/\D/g, "") : "";
+                const metaEmail = (meta.email || "").toLowerCase().trim();
+                const metaName = (meta.name || "").toLowerCase().trim();
+
+                const phoneMatch = Boolean(
+                  rawPhoneDigits && metaPhoneDigits && (
+                    (rawPhoneDigits.length >= 8 && metaPhoneDigits.length >= 8 && rawPhoneDigits.slice(-8) === metaPhoneDigits.slice(-8)) ||
+                    rawPhoneDigits === metaPhoneDigits
+                  )
+                );
+                const emailMatch = Boolean(userEmail && metaEmail && userEmail === metaEmail);
+                const nameMatch = Boolean(lowerName && metaName && lowerName.length > 2 && lowerName === metaName);
+
+                if (phoneMatch || emailMatch || nameMatch) {
+                  const { error: updateErr } = await supabase
+                    .from("orders")
+                    .update({ user_id: user.id, pix_key: customPixKey })
+                    .eq("id", orderItem.id);
+
+                  if (!updateErr) {
+                    migratedCount++;
+                    if (orderItem.store_id) {
+                      await supabase
+                        .from("customer_store_link")
+                        .upsert({ user_id: user.id, store_id: orderItem.store_id }, { onConflict: "user_id,store_id" })
+                        .then(() => undefined)
+                        .catch(() => undefined);
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          if (migratedCount > 0) {
+            const { toast } = await import("sonner");
+            toast.success(`${migratedCount} ${migratedCount === 1 ? "reserva vinculada" : "reservas vinculadas"} à sua conta!`);
+          }
+        } catch (err) {
+          console.error("Erro na auto-migração do painel:", err);
+        }
+      }
+
+      // 2. Buscar ordens atualizadas do usuário
       const { data, error } = await supabase
         .from("orders")
         .select("*, products(brand, model, image_url, release_date), stores(name, slug, whatsapp_number, pix_key)")
@@ -112,7 +238,70 @@ function CustomerDashboard() {
     },
   });
 
-  const active = (orders ?? []).filter((o) => o.payment_status !== "cancelado");
+  // Separar pedidos em andamento vs entregues/na garagem
+  const active = (orders ?? []).filter((o) => {
+    if (o.payment_status === "cancelado") return false;
+    if (o.pix_key && typeof o.pix_key === "string" && (o.pix_key.startsWith("GUEST:") || o.pix_key.startsWith('{"manual_guest":true'))) {
+      return false;
+    }
+    const cachedGuest = getCustomerFromCache(o.id);
+    if (cachedGuest && cachedGuest.phone) return false;
+    return true;
+  });
+  const pendingOrders = active.filter((o) => o.delivery_status !== "entregue");
+
+  // Agrupamento de pedidos por produto e status para exibição consolidada
+  const groupedPendingOrders = useMemo(() => {
+    const map = new Map<string, { order: (typeof pendingOrders)[0]; quantity: number }>();
+    for (const o of pendingOrders) {
+      const key = `${o.product_id}_${o.payment_status}_${o.delivery_status}`;
+      if (map.has(key)) {
+        const item = map.get(key)!;
+        item.quantity += 1;
+      } else {
+        map.set(key, { order: o, quantity: 1 });
+      }
+    }
+    return Array.from(map.values());
+  }, [pendingOrders]);
+  const deliveredOrders = active.filter((o) => o.delivery_status === "entregue");
+
+  const filteredDeliveredOrders = useMemo(() => {
+    return deliveredOrders.filter((o) => {
+      if (!garageSearchQuery.trim()) return true;
+      const q = garageSearchQuery.toLowerCase().trim();
+      const cleanQ = q.replace(/^#/, "");
+      
+      const prodModel = (o.products?.model || "").toLowerCase();
+      const prodBrand = (o.products?.brand || "").toLowerCase();
+      const storeName = (o.stores?.name || "").toLowerCase();
+      const orderId = (o.id || "").toLowerCase();
+      
+      return (
+        prodModel.includes(q) ||
+        prodBrand.includes(q) ||
+        storeName.includes(q) ||
+        orderId.includes(q) ||
+        (cleanQ.length > 0 && orderId.includes(cleanQ))
+      );
+    });
+  }, [deliveredOrders, garageSearchQuery]);
+
+  const groupedDeliveredOrders = useMemo(() => {
+    const map = new Map<string, { order: (typeof pendingOrders)[0]; quantity: number; ids: string[] }>();
+    for (const o of filteredDeliveredOrders) {
+      const key = `${o.product_id}_${o.payment_status}_${o.delivery_status}_${o.store_id}`;
+      if (map.has(key)) {
+        const item = map.get(key)!;
+        item.quantity += 1;
+        item.ids.push(o.id);
+      } else {
+        map.set(key, { order: o, quantity: 1, ids: [o.id] });
+      }
+    }
+    return Array.from(map.values());
+  }, [filteredDeliveredOrders]);
+
   const total = active.reduce((s, o) => s + Number(o.total_price), 0);
   const paid = active.reduce((s, o) => s + Number(o.down_payment), 0);
 
@@ -207,12 +396,16 @@ function CustomerDashboard() {
         <Tabs defaultValue="reservas" className="mt-8">
           <TabsList className="w-full flex overflow-x-auto justify-start sm:justify-center whitespace-nowrap p-1 max-w-full">
             <TabsTrigger value="reservas" className="text-xs sm:text-sm">Minhas reservas</TabsTrigger>
+            <TabsTrigger value="garagem" className="gap-1.5 text-xs sm:text-sm font-semibold">
+              <Car className="size-3.5 text-primary" />
+              <span>Minha Garagem ({deliveredOrders.length})</span>
+            </TabsTrigger>
             <TabsTrigger value="lojas" className="text-xs sm:text-sm">Lojas seguidas</TabsTrigger>
             <TabsTrigger value="fila" className="text-xs sm:text-sm">Fila de espera</TabsTrigger>
           </TabsList>
 
           <TabsContent value="reservas" className="mt-4 space-y-3">
-            {(orders ?? []).map((o) => (
+            {groupedPendingOrders.map(({ order: o, quantity: qty }) => (
               <Card key={o.id} className="border-border/60 panel">
                 <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -231,10 +424,20 @@ function CustomerDashboard() {
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        {o.products?.brand} · {o.stores?.name}
-                      </p>
-                      <h3 className="font-semibold">{o.products?.model}</h3>
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                        <span>{o.products?.brand} · {o.stores?.name}</span>
+                        {qty > 1 && (
+                          <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[11px] px-2 py-0 border-primary/20">
+                            {qty}x unidades acumuladas
+                          </Badge>
+                        )}
+                      </div>
+                      <h3 className="font-semibold text-base flex items-center gap-2">
+                        {o.products?.model}
+                        {qty > 1 && (
+                          <span className="text-xs font-normal text-muted-foreground font-mono">({qty} unidades)</span>
+                        )}
+                      </h3>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         {(() => {
                           const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
@@ -256,10 +459,10 @@ function CustomerDashboard() {
                       </div>
                     </div>
                     <div className="text-sm sm:text-right">
-                      <p className="text-muted-foreground">Total {brl(Number(o.total_price))}</p>
-                      <p className="text-muted-foreground">Sinal {brl(Number(o.down_payment))}</p>
+                      <p className="text-muted-foreground">Total {brl(Number(o.total_price) * qty)}</p>
+                      <p className="text-muted-foreground">Sinal {brl(Number(o.down_payment) * qty)}</p>
                       <p className="font-semibold text-primary">
-                        Saldo {brl(Number(o.remaining_balance))}
+                        Saldo {brl(Number(o.remaining_balance) * qty)}
                       </p>
                     </div>
                     {o.stores?.whatsapp_number && o.payment_status !== "cancelado" && (
@@ -268,8 +471,8 @@ function CustomerDashboard() {
                           href={whatsappLink(
                             o.stores.whatsapp_number,
                             o.payment_status === "sem_sinal"
-                              ? `Olá, gostaria de acompanhar minha reserva #${o.id.slice(0, 8)} da miniatura ${o.products?.brand} ${o.products?.model}.`
-                              : `Olá, segue o comprovante do pedido #${o.id.slice(0, 8)} da miniatura ${o.products?.brand} ${o.products?.model}.`,
+                              ? `Olá, gostaria de acompanhar minha reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`
+                              : `Olá, segue o comprovante da reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`,
                           )}
                           target="_blank"
                           rel="noreferrer"
@@ -343,8 +546,86 @@ function CustomerDashboard() {
                 </CardContent>
               </Card>
             ))}
-            {orders && orders.length === 0 && (
-              <p className="text-sm text-muted-foreground">Você ainda não tem reservas.</p>
+            {pendingOrders.length === 0 && (
+              <p className="text-sm text-muted-foreground py-6 text-center border border-dashed rounded-xl">
+                Você não possui reservas em andamento no momento.
+              </p>
+            )}
+          </TabsContent>
+
+          {/* ABA GARAGEM (COLEÇÃO ENTREGUE) */}
+          <TabsContent value="garagem" className="mt-4 space-y-4">
+            {deliveredOrders.length > 0 && (
+              <div className="relative mb-4">
+                <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar na garagem por modelo, marca, loja ou #id..."
+                  value={garageSearchQuery}
+                  onChange={(e) => setGarageSearchQuery(e.target.value)}
+                  className="pl-9 h-9 text-sm w-full md:max-w-md bg-card border-border/60"
+                />
+              </div>
+            )}
+            
+            {groupedDeliveredOrders.length === 0 ? (
+              <Card className="panel border-dashed border-border/60 mt-4">
+                <CardContent className="p-8 text-center space-y-2">
+                  <Car className="mx-auto size-10 text-muted-foreground/40" />
+                  <h3 className="font-bold text-base">
+                    {deliveredOrders.length > 0 ? "Nenhuma miniatura encontrada" : "Sua garagem está vazia"}
+                  </h3>
+                  <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                    {deliveredOrders.length > 0 
+                      ? "Tente buscar por outro termo."
+                      : "Assim que suas reservas forem quitadas ou entregues pelo lojista, as miniaturas aparecerão automaticamente aqui na sua Garagem Colecionável!"}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {groupedDeliveredOrders.map((item) => {
+                  const { order: o, quantity: qty, ids } = item;
+                  return (
+                    <Card key={ids[0]} className="panel border-emerald-500/30 bg-emerald-500/5 overflow-hidden">
+                      <div className="aspect-video w-full overflow-hidden bg-muted relative">
+                        {o.products?.image_url ? (
+                          <img
+                            src={o.products.image_url}
+                            alt={o.products.model}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-muted-foreground">
+                            <Package className="size-10" />
+                          </div>
+                        )}
+                        <div className="absolute top-2 right-2">
+                          <Badge className="bg-emerald-600 text-white font-semibold text-[10px] gap-1 shadow-sm">
+                            <CheckCircle2 className="size-3" /> Na Garagem
+                          </Badge>
+                        </div>
+                      </div>
+                      <CardContent className="p-4 space-y-1.5">
+                        <p className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider flex items-center gap-1.5">
+                          <span>{o.products?.brand} · {o.stores?.name}</span>
+                          {qty > 1 && (
+                            <Badge className="bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 font-bold text-[9px] px-1.5 py-0 border-emerald-500/30 shadow-none">
+                              {qty}x
+                            </Badge>
+                          )}
+                        </p>
+                        <h4 className="font-bold text-base text-foreground leading-snug flex items-center gap-1">
+                          {o.products?.model}
+                        </h4>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/40">
+                          <span>Valor pago: <strong>{brl(Number(o.total_price) * qty)}</strong></span>
+                          <span className="font-mono text-[10px]">#{ids[0].slice(0, 6)}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
             )}
           </TabsContent>
 
@@ -406,7 +687,7 @@ function CustomerDashboard() {
                           >
                             {brl(Number(p.price))}
                           </span>
-                          <Badge variant="outline">{p.stock} cotas</Badge>
+                          <Badge variant="outline">{p.stock} {p.stock === 1 ? "unidade" : "unidades"}</Badge>
                         </div>
 
                         <Button
@@ -415,7 +696,7 @@ function CustomerDashboard() {
                           style={{ backgroundColor: p.stores?.primary_color || "#e11d48", color: "#fff" }}
                         >
                           <BookmarkCheck className="size-4 shrink-0" />
-                          Reservar cota
+                          Reservar unidade
                         </Button>
                       </div>
                     </CardContent>

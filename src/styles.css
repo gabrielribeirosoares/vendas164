@@ -139,6 +139,31 @@
     border-color: var(--color-border);
   }
 
+  /* Custom Smooth Scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.35 0.014 260 / 0.6);
+    border-radius: 9999px;
+    transition: background 0.2s ease;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.5 0.02 260);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.35 0.014 260 / 0.6) transparent;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);

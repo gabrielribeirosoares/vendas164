@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, CheckCircle2, Clock, Copy, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Plus, Search, Share2, ShieldAlert, ShieldCheck, Trash2, Truck, XCircle } from "lucide-react";
+import { BookmarkCheck, CheckCircle2, Clock, Copy, Download, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Plus, Search, Share2, ShieldAlert, ShieldCheck, Trash2, Truck, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { PhoneInput, parsePhoneWithFlag } from "@/components/PhoneInput";
@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, formatDeadlineHours, getProductInstallmentInfo, slugify, whatsappLink } from "@/lib/format";
+import { brl, formatDeadlineHours, formatOrderPaymentCondition, getInstallmentOptions, getProductInstallmentInfo, slugify, whatsappLink } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { uploadImage } from "@/lib/upload";
 import { reserveQuota, reservationErrorMessage } from "@/lib/reservations";
@@ -52,7 +52,7 @@ export const Route = createFileRoute("/_authenticated/vendedor")({
       {
         name: "description",
         content:
-          "Gerencie pré-vendas, cotas, sinais recebidos, saldo a receber e a identidade da sua loja.",
+          "Gerencie pré-vendas, unidades, sinais recebidos, saldo a receber e a identidade da sua loja.",
       },
       { property: "og:title", content: "Painel do lojista" },
       { property: "og:description", content: "Gestão completa de pré-vendas de miniaturas." },
@@ -536,9 +536,9 @@ function ProductsTab({
   const brandList = Object.keys(brandsMap).sort((a, b) => a.localeCompare(b));
   const filteredBrands = selectedBrand === "all" ? brandList : brandList.filter((b) => b === selectedBrand);
 
-  function handleReserveCota(p: Product) {
+  function handleReserveUnidade(p: Product) {
     if (!p.is_open) return toast.error("Esta pré-venda está fechada.");
-    if (p.stock <= 0) return toast.error("Não há cotas disponíveis para esta miniatura.");
+    if (p.stock <= 0) return toast.error("Não há unidades disponíveis para esta miniatura.");
 
     setManualReservationProduct(p);
     setManualDialogOpen(true);
@@ -739,7 +739,7 @@ function ProductsTab({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="stock">Cotas</Label>
+                  <Label htmlFor="stock">Unidades</Label>
                   <Input
                     id="stock"
                     type="number"
@@ -935,7 +935,7 @@ function ProductsTab({
                                   Sinal: {brl(Number((p as any).down_payment_amount))}
                                 </Badge>
                               )}
-                              <Badge variant="outline">{p.stock} cotas</Badge>
+                              <Badge variant="outline">{p.stock} {p.stock === 1 ? "unidade" : "unidades"}</Badge>
                             </div>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
@@ -943,9 +943,9 @@ function ProductsTab({
                               variant="default"
                               size="sm"
                               disabled={!p.is_open || p.stock <= 0}
-                              onClick={() => handleReserveCota(p)}
+                              onClick={() => handleReserveUnidade(p)}
                               className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold"
-                              title="Fazer reserva para cliente nesta cota"
+                              title="Fazer reserva para cliente nesta unidade"
                             >
                               <BookmarkCheck className="size-3.5" />
                               <span>Reservar para cliente</span>
@@ -1129,26 +1129,34 @@ function EditProductDialog({
       .update(payload)
       .eq("id", product.id);
 
-    // Se a tabela remota do Supabase ainda não tiver as novas colunas
-    if (error) {
+    // Fallbacks para bancos do Supabase que ainda não possuem todas as colunas de parcelamento/sinal
+    if (error && (error.code === "PGRST204" || error.message?.includes("max_installments") || error.message?.includes("has_installment_surcharge") || (error as any).status === 400)) {
       delete payload.max_installments;
       delete payload.price_2x;
       delete payload.installment_price;
       delete payload.has_installment_surcharge;
-      delete payload.payment_deadline_date;
 
       const retry1 = await supabase.from("products").update(payload).eq("id", product.id);
       error = retry1.error;
+    }
 
-      if (error) {
-        delete payload.down_payment_amount;
-        const retry2 = await supabase.from("products").update(payload).eq("id", product.id);
-        error = retry2.error;
-      }
+    if (error && (error.code === "PGRST204" || error.message?.includes("payment_deadline_date") || (error as any).status === 400)) {
+      delete payload.payment_deadline_date;
+      const retry2 = await supabase.from("products").update(payload).eq("id", product.id);
+      error = retry2.error;
+    }
+
+    if (error && (error.code === "PGRST204" || error.message?.includes("down_payment_amount") || (error as any).status === 400)) {
+      delete payload.down_payment_amount;
+      const retry3 = await supabase.from("products").update(payload).eq("id", product.id);
+      error = retry3.error;
     }
 
     setSaving(false);
-    if (error) return toast.error("Não foi possível salvar as alterações.");
+    if (error) {
+      console.error("Erro ao editar miniatura:", error);
+      return toast.error(`Não foi possível salvar as alterações: ${error.message || "Erro de permissão"}`);
+    }
     queryClient.invalidateQueries();
     toast.success("Miniatura atualizada com sucesso!");
     onClose();
@@ -1263,7 +1271,7 @@ function EditProductDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="edit-stock">Cotas</Label>
+              <Label htmlFor="edit-stock">Unidades</Label>
               <Input
                 id="edit-stock"
                 type="number"
@@ -1442,9 +1450,11 @@ function ManualReservationDialog({
   const [clientPhone, setClientPhone] = useState("");
   const [pixKey, setPixKey] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("aguardando_sinal");
+  const [installmentCount, setInstallmentCount] = useState(1);
   const [saving, setSaving] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
+
 
   // Buscar dados da loja para extrair a Chave PIX cadastrada
   const { data: storeInfo } = useQuery({
@@ -1526,6 +1536,8 @@ function ManualReservationDialog({
     },
   });
 
+  const [manualQuantity, setManualQuantity] = useState<number>(1);
+
   useEffect(() => {
     if (preSelectedProduct) {
       setSelectedProductId(preSelectedProduct.id);
@@ -1548,41 +1560,64 @@ function ManualReservationDialog({
       return toast.error("Você é o dono da loja e não pode criar reservas em seu próprio nome. Escolha ou informe os dados de um cliente.");
     }
 
-    // Se o lojista não selecionou da lista, tenta encontrar o cadastro do cliente pelo telefone
+    // Se o lojista não selecionou da lista, tenta encontrar o cadastro do cliente pelo telefone ou email
     if (!clientId) {
+      const cleanPhoneDigits = cleanPhone.replace(/\D/g, "");
       const { data: foundProf } = await supabase
         .from("profiles")
-        .select("id")
-        .eq("phone", cleanPhone)
+        .select("id, phone")
+        .or(`phone.eq.${cleanPhone},phone.eq.55${cleanPhoneDigits},phone.eq.${cleanPhoneDigits}`)
         .maybeSingle();
 
       if (foundProf) {
         clientId = foundProf.id;
       } else {
-        clientId = crypto.randomUUID();
+        const { data: profilesList } = await supabase
+          .from("profiles")
+          .select("id, phone")
+          .not("phone", "is", null);
+
+        if (profilesList && profilesList.length > 0) {
+          const found = profilesList.find((p) => {
+            if (!p.phone) return false;
+            const pDigits = p.phone.replace(/\D/g, "");
+            return cleanPhoneDigits.length >= 8 && pDigits.length >= 8 &&
+              (cleanPhoneDigits.slice(-8) === pDigits.slice(-8) || cleanPhoneDigits === pDigits);
+          });
+          if (found) {
+            clientId = found.id;
+          }
+        }
+      }
+
+      // Se ainda não existir perfil cadastrado, insere um perfil convidado temporário na tabela profiles
+      if (!clientId) {
+        const guestId = crypto.randomUUID();
+        const { error: profErr } = await supabase.from("profiles").insert({
+          id: guestId,
+          name: cleanName,
+          phone: cleanPhone,
+        });
+
+        if (!profErr) {
+          clientId = guestId;
+        }
       }
     }
 
     const product = products.find((p) => p.id === selectedProductId);
     if (!product) return toast.error("Pré-venda não encontrada.");
-    if (product.stock <= 0) return toast.error("Cotas esgotadas para esta pré-venda.");
+    if (product.stock <= 0) return toast.error("Unidades esgotadas para esta pré-venda.");
+
+    const qtyToCreate = Math.min(manualQuantity, product.stock);
+    if (qtyToCreate <= 0) return toast.error("Quantidade inválida.");
 
     setSaving(true);
     try {
       // 1. Salvar os dados do cliente no cache local da loja
       saveCustomerToCache({ id: clientId, name: cleanName, phone: cleanPhone });
 
-      // 2. Vincular o cliente à loja em customer_store_link (sem travar se RLS negar)
-      try {
-        await supabase
-          .from("customer_store_link")
-          .upsert(
-            { user_id: clientId, store_id: storeId },
-            { onConflict: "user_id,store_id" }
-          );
-      } catch {
-        // Ignora erros de RLS
-      }
+
 
       // 3. Atualizar perfil do cliente no Supabase se existir (sem travar se RLS negar)
       try {
@@ -1602,67 +1637,97 @@ function ManualReservationDialog({
         // Ignora erros de RLS
       }
 
-      // 4. Calcular valores
-      const totalPrice = Number(product.price || 0);
+      // 4. Calcular preços unitários
+      const cashPrice = Number(product.price);
+      const instOptions = getInstallmentOptions(product);
+      const chosenOption = instOptions.find((o) => o.value === installmentCount) ?? instOptions[0];
+      const totalPrice = installmentCount > 1 ? chosenOption.totalPrice : cashPrice;
+      
       const customSignal = Number((product as any).down_payment_amount || 0);
       let downPayment = 0;
 
       if (paymentStatus === "sinal_pago") {
-        downPayment = customSignal > 0 ? customSignal : Math.round(totalPrice * 0.2 * 100) / 100;
+        downPayment = customSignal > 0 ? customSignal : Math.round(cashPrice * 0.2 * 100) / 100;
       } else if (paymentStatus === "quitado") {
         downPayment = totalPrice;
       } else if (paymentStatus === "sem_sinal") {
         downPayment = 0;
       }
 
-      // 5. Inserir a reserva no banco atribuída ao ID DO CLIENTE (clientId)
-      const orderPayload: any = {
-        store_id: storeId,
-        product_id: product.id,
-        user_id: clientId,
-        total_price: totalPrice,
-        down_payment: downPayment,
-        payment_status: paymentStatus,
-        reservation_expires_at: paymentStatus === "sem_sinal" ? null : undefined,
-      };
-      if (pixKey.trim()) {
-        orderPayload.pix_key = pixKey.trim();
+      // 5. Inserir as reservas no banco
+      const isRegisteredUser = Boolean(clientId && clientId !== currentUser?.id);
+      const effectiveUserId = clientId || currentUser!.id;
+      const guestKeyString = !isRegisteredUser
+        ? `GUEST:${JSON.stringify({ name: cleanName, phone: cleanPhone, pix: pixKey.trim() || null })}`
+        : (pixKey.trim() || null);
+
+      for (let i = 0; i < qtyToCreate; i++) {
+        const orderPayload: any = {
+          store_id: storeId,
+          product_id: product.id,
+          user_id: effectiveUserId,
+          total_price: totalPrice,
+          down_payment: downPayment,
+          payment_status: paymentStatus,
+        };
+
+        if (installmentCount > 1) {
+          orderPayload.installment_count = installmentCount;
+        }
+        if (paymentStatus === "sem_sinal") {
+          orderPayload.reservation_expires_at = null;
+        }
+        if (guestKeyString) {
+          orderPayload.pix_key = guestKeyString;
+        }
+
+        let { data: insertedOrder, error: orderErr } = await supabase
+          .from("orders")
+          .insert(orderPayload)
+          .select("id")
+          .single();
+
+        // Fallback se .select().single() não retornar ou se houver erro pontual de coluna
+        if (orderErr) {
+          if (orderErr.message?.includes("installment_count") || orderErr.code === "PGRST204") {
+            delete orderPayload.installment_count;
+          }
+          const retry = await supabase.from("orders").insert(orderPayload).select("id").maybeSingle();
+          orderErr = retry.error;
+          if (retry.data?.id) {
+            saveCustomerToCache({ id: retry.data.id, name: cleanName, phone: cleanPhone });
+          }
+        } else if (insertedOrder?.id) {
+          saveCustomerToCache({ id: insertedOrder.id, name: cleanName, phone: cleanPhone });
+        }
+
+        if (orderErr) throw orderErr;
       }
 
-      let { error: orderErr } = await supabase.from("orders").insert(orderPayload);
-
-      if (orderErr && (orderErr.code === "PGRST204" || orderErr.message?.includes("pix_key") || (orderErr as any).status === 400)) {
-        delete orderPayload.pix_key;
-        const retry = await supabase.from("orders").insert(orderPayload);
-        orderErr = retry.error;
-      }
-
-      // Se a RLS do Supabase negar o user_id do cliente por falta da política no banco, faz fallback para o id do lojista
-      if (orderErr && (orderErr.code === "42501" || (orderErr as any).status === 403 || orderErr.message?.includes("row-level security"))) {
-        console.warn("RLS bloqueou user_id do cliente. Salvando com user_id do lojista...");
-        orderPayload.user_id = currentUser?.id;
-        const retry = await supabase.from("orders").insert(orderPayload);
-        orderErr = retry.error;
-      }
-
-      if (orderErr) throw orderErr;
-
-      // 5. Atualizar estoque
+      // 6. Atualizar estoque e vincular loja ao cliente
       await supabase
         .from("products")
-        .update({ stock: Math.max(0, product.stock - 1) })
+        .update({ stock: Math.max(0, product.stock - qtyToCreate) })
         .eq("id", product.id);
 
-      await supabase
-        .from("customer_store_link")
-        .upsert({ user_id: clientId, store_id: storeId }, { onConflict: "user_id,store_id" });
+      if (effectiveUserId) {
+        try {
+          await supabase
+            .from("customer_store_link")
+            .upsert({ user_id: effectiveUserId, store_id: storeId }, { onConflict: "user_id,store_id" });
+        } catch {
+          // Ignora se RLS ou constraint negar o vinculo
+        }
+      }
 
       queryClient.invalidateQueries();
-      toast.success(`Reserva vinculada ao cliente ${cleanName}!`);
+      toast.success(qtyToCreate > 1 ? `${qtyToCreate} unidades vinculadas ao cliente ${cleanName}!` : `Reserva vinculada ao cliente ${cleanName}!`);
       
       setClientName("");
       setClientPhone("");
       setSelectedUserId("");
+      setInstallmentCount(1);
+      setManualQuantity(1);
       onClose();
     } catch (err: any) {
       console.error("Erro ao criar reserva manual:", err);
@@ -1674,14 +1739,20 @@ function ManualReservationDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-md panel border-border/60 p-4 sm:p-6 overflow-hidden rounded-2xl">
-        <DialogHeader>
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-md panel border-border/60 p-4 sm:p-6 overflow-hidden rounded-2xl flex flex-col max-h-[90vh]">
+        <DialogHeader className="shrink-0 pb-2 border-b border-border/40">
           <DialogTitle className="text-lg sm:text-xl">Nova Reserva para Cliente</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2 min-w-0">
+        <form onSubmit={handleSubmit} className="space-y-4 pt-4 min-w-0 overflow-y-auto pr-2.5 flex-1">
           <div className="space-y-2 min-w-0">
             <Label>Pré-venda / Miniatura</Label>
-            <Select value={selectedProductId} onValueChange={setSelectedProductId}>
+            <Select
+              value={selectedProductId}
+              onValueChange={(id) => {
+                setSelectedProductId(id);
+                setManualQuantity(1);
+              }}
+            >
               <SelectTrigger className="w-full text-xs sm:text-sm truncate">
                 <SelectValue placeholder="Selecione a miniatura" className="truncate" />
               </SelectTrigger>
@@ -1689,13 +1760,52 @@ function ManualReservationDialog({
                 {products.map((p) => (
                   <SelectItem key={p.id} value={p.id} disabled={p.stock <= 0} className="text-xs sm:text-sm">
                     <span className="truncate block">
-                      {p.brand} {p.model} ({p.stock} cotas - {brl(Number(p.price))})
+                      {p.brand} {p.model} ({p.stock} {p.stock === 1 ? "unidade" : "unidades"} em estoque — {brl(Number(p.price))})
                     </span>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+
+          {/* Quantidade e Resumo de Valor */}
+          {(() => {
+            const selProd = products.find((p) => p.id === selectedProductId);
+            if (!selProd) return null;
+            const maxStock = Math.min(selProd.stock, 20);
+            const unitPrice = Number(selProd.price || 0);
+            const totalPrice = unitPrice * manualQuantity;
+
+            return (
+              <div className="grid grid-cols-2 gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs">
+                <div className="space-y-1">
+                  <Label htmlFor="manual-qty" className="text-xs font-semibold">Quantidade de Unidades</Label>
+                  <Select
+                    value={String(manualQuantity)}
+                    onValueChange={(v) => setManualQuantity(Number(v))}
+                  >
+                    <SelectTrigger id="manual-qty" className="h-8 bg-background text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: maxStock }, (_, i) => i + 1).map((q) => (
+                        <SelectItem key={q} value={String(q)} className="text-xs">
+                          {q} {q === 1 ? "unidade" : "unidades"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col justify-center text-right">
+                  <span className="text-[11px] text-muted-foreground">Valor Total da Reserva</span>
+                  <span className="text-base font-bold text-primary">{brl(totalPrice)}</span>
+                  {manualQuantity > 1 && (
+                    <span className="text-[10px] text-muted-foreground font-mono">({manualQuantity}x {brl(unitPrice)})</span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Seleção do Cliente (Já cadastrado vs Novo) */}
           <div className="space-y-2 min-w-0">
@@ -1910,7 +2020,41 @@ function ManualReservationDialog({
             </Select>
           </div>
 
-          <div className="flex justify-end gap-2 pt-3">
+          {/* Seleção de Parcelamento */}
+          {(() => {
+            const selectedProduct = products.find((p) => p.id === selectedProductId);
+            const instOptions = selectedProduct ? getInstallmentOptions(selectedProduct, manualQuantity) : [];
+            if (instOptions.length <= 1) return null;
+            const chosenOption = instOptions.find((o) => o.value === installmentCount) ?? instOptions[0];
+            return (
+              <div className="space-y-2 min-w-0">
+                <Label>Condição de Pagamento</Label>
+                <Select
+                  value={String(installmentCount)}
+                  onValueChange={(v) => setInstallmentCount(Number(v))}
+                >
+                  <SelectTrigger className="w-full text-xs sm:text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-w-[calc(100vw-3rem)]">
+                    {instOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={String(opt.value)} className="text-xs sm:text-sm">
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {installmentCount > 1 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Total da reserva: <strong className="text-foreground">{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(chosenOption.totalPrice)}</strong>
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
+
+          <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm flex justify-end gap-2 pt-3 pb-1 border-t border-border/40 mt-4 shrink-0">
             <Button type="button" variant="outline" size="sm" onClick={onClose}>
               Cancelar
             </Button>
@@ -1950,11 +2094,11 @@ function OrdersTab({
   const [trackingDrafts, setTrackingDrafts] = useState<Record<string, string>>({});
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
 
-  async function handleTrackingSave(id: string, code: string) {
+  async function handleTrackingSave(ids: string[], code: string) {
     const { error } = await supabase
       .from("orders")
       .update({ tracking_code: code.trim() || null })
-      .eq("id", id);
+      .in("id", ids);
 
     if (error) {
       console.error("Erro ao salvar rastreio:", error);
@@ -1975,11 +2119,9 @@ function OrdersTab({
       const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
       const effectiveStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
 
-      // Filtro por status
       if (statusFilter !== "todos" && effectiveStatus !== statusFilter) {
         return false;
       }
-      // Filtro por termo de busca
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase().trim();
       const cleanQ = q.replace(/^#/, "");
@@ -2005,10 +2147,44 @@ function OrdersTab({
     });
   }, [orders, searchQuery, statusFilter]);
 
-  const pages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
-  const rows = filteredOrders.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  type GroupedOrderRow = { order: OrderRow; quantity: number; ids: string[] };
 
-  async function adjustStockOnCancel(productId: string, isCancelling: boolean) {
+  const groupedOrders = useMemo(() => {
+    const map = new Map<string, GroupedOrderRow>();
+    for (const o of filteredOrders) {
+      const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
+      const effectiveStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
+
+      let guestMeta: any = null;
+      if (o.pix_key && typeof o.pix_key === "string") {
+        if (o.pix_key.startsWith("GUEST:")) {
+          try { guestMeta = JSON.parse(o.pix_key.replace(/^GUEST:/, "")); } catch {}
+        } else if (o.pix_key.startsWith('{"manual_guest":true')) {
+          try { guestMeta = JSON.parse(o.pix_key); } catch {}
+        }
+      }
+
+      const clientPhone = guestMeta?.phone || o.profiles?.phone || "";
+      const effectiveUserId = o.user_id + "_" + clientPhone;
+      const tracking = o.tracking_code || "";
+
+      const key = `${o.product_id}_${effectiveUserId}_${effectiveStatus}_${o.delivery_status}_${tracking}`;
+
+      if (map.has(key)) {
+        const item = map.get(key)!;
+        item.quantity += 1;
+        item.ids.push(o.id);
+      } else {
+        map.set(key, { order: o, quantity: 1, ids: [o.id] });
+      }
+    }
+    return Array.from(map.values());
+  }, [filteredOrders]);
+
+  const pages = Math.max(1, Math.ceil(groupedOrders.length / PAGE_SIZE));
+  const rows = groupedOrders.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+
+  async function adjustStockOnCancel(productId: string, isCancelling: boolean, quantity: number) {
     if (!productId) return;
     const { data: product } = await supabase
       .from("products")
@@ -2019,13 +2195,13 @@ function OrdersTab({
     if (!product) return;
 
     if (isCancelling) {
-      const newStock = (product.stock ?? 0) + 1;
+      const newStock = (product.stock ?? 0) + quantity;
       await supabase
         .from("products")
         .update({ stock: newStock, is_open: true })
         .eq("id", productId);
     } else {
-      const newStock = Math.max(0, (product.stock ?? 0) - 1);
+      const newStock = Math.max(0, (product.stock ?? 0) - quantity);
       await supabase
         .from("products")
         .update({ stock: newStock })
@@ -2033,18 +2209,20 @@ function OrdersTab({
     }
   }
 
-  async function update(
-    id: string,
+  async function updateGroup(
+    ids: string[],
     patch: Partial<Pick<Tables<"orders">, "down_payment" | "payment_status" | "delivery_status">>,
   ) {
-    const { error } = await supabase.from("orders").update(patch).eq("id", id);
+    const { error } = await supabase.from("orders").update(patch).in("id", ids);
 
     if (error) return toast.error("Não foi possível atualizar a reserva.");
     queryClient.invalidateQueries();
   }
 
-  async function handlePaymentStatusChange(o: OrderRow, newStatus: string) {
-    let downPayment = Number(drafts[o.id] ?? o.down_payment);
+  async function handlePaymentStatusChange(item: GroupedOrderRow, newStatus: string) {
+    const { order: o, quantity, ids } = item;
+    const groupId = ids[0];
+    let downPayment = Number(drafts[groupId] ?? o.down_payment);
     const totalPrice = Number(o.total_price);
     const customSignal = Number((o.products as any)?.down_payment_amount || 0);
 
@@ -2052,9 +2230,9 @@ function OrdersTab({
     const isNowCancelled = newStatus === "cancelado";
 
     if (!wasCancelled && isNowCancelled) {
-      await adjustStockOnCancel(o.product_id, true);
+      await adjustStockOnCancel(o.product_id, true, quantity);
     } else if (wasCancelled && !isNowCancelled) {
-      await adjustStockOnCancel(o.product_id, false);
+      await adjustStockOnCancel(o.product_id, false, quantity);
     }
 
     if (newStatus === "sinal_pago") {
@@ -2069,30 +2247,31 @@ function OrdersTab({
       downPayment = 0;
     }
 
-    setDrafts((prev) => ({ ...prev, [o.id]: String(downPayment) }));
-    await update(o.id, { payment_status: newStatus, down_payment: downPayment });
+    setDrafts((prev) => ({ ...prev, [groupId]: String(downPayment) }));
+    await updateGroup(ids, { payment_status: newStatus, down_payment: downPayment });
 
     if (!wasCancelled && isNowCancelled) {
-      toast.success("Reserva cancelada! +1 cota devolvida ao estoque.");
+      toast.success(`Reserva cancelada! +${quantity} unidade(s) devolvida(s) ao estoque.`);
     } else {
       toast.success("Reserva atualizada.");
     }
   }
 
-  async function handleDeliveryStatusChange(o: OrderRow, newStatus: string) {
+  async function handleDeliveryStatusChange(item: GroupedOrderRow, newStatus: string) {
+    const { order: o, quantity, ids } = item;
     const wasCancelled = o.payment_status === "cancelado" || o.delivery_status === "cancelado";
     const isNowCancelled = newStatus === "cancelado";
 
     if (!wasCancelled && isNowCancelled) {
-      await adjustStockOnCancel(o.product_id, true);
+      await adjustStockOnCancel(o.product_id, true, quantity);
     } else if (wasCancelled && !isNowCancelled) {
-      await adjustStockOnCancel(o.product_id, false);
+      await adjustStockOnCancel(o.product_id, false, quantity);
     }
 
-    await update(o.id, { delivery_status: newStatus });
+    await updateGroup(ids, { delivery_status: newStatus });
 
     if (!wasCancelled && isNowCancelled) {
-      toast.success("Reserva cancelada! +1 cota devolvida ao estoque.");
+      toast.success(`Reserva cancelada! +${quantity} unidade(s) devolvida(s) ao estoque.`);
     } else {
       toast.success("Reserva atualizada.");
     }
@@ -2115,6 +2294,36 @@ function OrdersTab({
           />
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const csvRows = [
+                ["ID Pedido", "Cliente", "WhatsApp", "Miniatura", "Marca", "Total (R$)", "Sinal (R$)", "Status Pagamento", "Status Entrega", "Data"].join(";"),
+                ...filteredOrders.map((o) => {
+                  const name = o.profiles?.name || "Cliente";
+                  const phone = o.profiles?.phone || "";
+                  const model = o.products?.model || "";
+                  const brand = o.products?.brand || "";
+                  const date = new Date(o.created_at).toLocaleDateString("pt-BR");
+                  return [o.id, `"${name}"`, `"${phone}"`, `"${model}"`, `"${brand}"`, o.total_price, o.down_payment, o.payment_status, o.delivery_status, date].join(";");
+                }),
+              ];
+              const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `pedidos-loja-${new Date().toISOString().slice(0, 10)}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+              toast.success("Relatório de pedidos exportado com sucesso!");
+            }}
+            className="h-9 text-xs gap-1.5 border-border/80"
+          >
+            <Download className="size-3.5 text-primary" />
+            <span>Exportar CSV</span>
+          </Button>
+
           {storeId && (
             <Button
               size="sm"
@@ -2151,36 +2360,50 @@ function OrdersTab({
       <CardContent className="p-0">
         {/* VISÃO PARA CELULAR (CARDS INDIVIDUAIS COM ESPAÇAMENTO CLARO) */}
         <div className="md:hidden space-y-4 p-4 bg-muted/20">
-          {rows.map((o) => {
+          {rows.map((item) => {
+            const { order: o, quantity, ids } = item;
+            const groupId = ids[0];
+            let guestMeta: { name?: string; phone?: string } | null = null;
+            if (o.pix_key && typeof o.pix_key === "string") {
+              if (o.pix_key.startsWith("GUEST:")) {
+                try { guestMeta = JSON.parse(o.pix_key.replace(/^GUEST:/, "")); } catch {}
+              } else if (o.pix_key.startsWith('{"manual_guest":true')) {
+                try { guestMeta = JSON.parse(o.pix_key); } catch {}
+              }
+            }
+            const cached = getCustomerFromCache(o.id) || getCustomerFromCache(o.user_id);
             const displayName =
-              o.profiles?.name && o.profiles.name !== "Cliente"
+              guestMeta?.name ||
+              (o.profiles?.name && o.profiles.name !== "Cliente" && o.profiles.name !== "Cliente cadastrado"
                 ? o.profiles.name
-                : o.profiles?.email
-                  ? o.profiles.email.split("@")[0]
-                  : "Cliente";
+                : cached?.name) ||
+              (o.profiles?.email ? o.profiles.email.split("@")[0] : null) ||
+              (guestMeta?.phone || o.profiles?.phone || cached?.phone ? `Cliente (${guestMeta?.phone || o.profiles?.phone || cached?.phone})` : "Cliente sem nome");
+
+            const clientPhone = guestMeta?.phone || o.profiles?.phone || cached?.phone;
 
             return (
-              <div key={o.id} className="rounded-2xl border border-border/70 bg-card p-4 space-y-3.5 shadow-sm">
+              <div key={groupId} className="rounded-2xl border border-border/70 bg-card p-4 space-y-3.5 shadow-sm">
                 {/* Cliente e WhatsApp */}
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-semibold text-base">{displayName}</p>
-                    {o.profiles?.email && (
+                    {o.profiles?.email && !guestMeta && (
                       <p className="text-xs text-muted-foreground">{o.profiles.email}</p>
                     )}
-                    <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{o.id.slice(0, 8)}</p>
+                    <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{groupId.slice(0, 8)}</p>
                   </div>
-                  {o.profiles?.phone ? (() => {
-                    const parsed = parsePhoneWithFlag(o.profiles.phone);
+                  {clientPhone ? (() => {
+                    const parsed = parsePhoneWithFlag(clientPhone);
                     return (
                       <a
-                        href={whatsappLink(o.profiles.phone, `Olá ${displayName}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
+                        href={whatsappLink(clientPhone, `Olá ${displayName}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-1 text-xs text-success font-medium font-mono border border-success/30"
                       >
                         <MessageCircle className="size-3.5" />
-                        {parsed?.display || o.profiles.phone}
+                        {parsed?.display || clientPhone}
                       </a>
                     );
                   })() : (
@@ -2205,8 +2428,17 @@ function OrdersTab({
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wide">{o.products?.brand}</p>
-                    <p className="font-semibold text-sm truncate">{o.products?.model || "Miniatura"}</p>
+                    <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wide flex items-center gap-1.5">
+                      <span>{o.products?.brand}</span>
+                      {quantity > 1 && (
+                        <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[10px] px-1.5 py-0 border-primary/20">
+                          {quantity}x
+                        </Badge>
+                      )}
+                    </p>
+                    <p className="font-semibold text-sm truncate flex items-center gap-1">
+                      {o.products?.model || "Miniatura"}
+                    </p>
                   </div>
                 </div>
 
@@ -2214,24 +2446,24 @@ function OrdersTab({
                 <div className="grid grid-cols-3 gap-2 rounded-xl bg-muted/20 p-2.5 text-center text-xs border border-border/30">
                   <div>
                     <p className="text-muted-foreground">Total</p>
-                    <p className="font-semibold text-sm">{brl(Number(o.total_price))}</p>
+                    <p className="font-semibold text-sm">{brl(Number(o.total_price) * quantity)}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Sinal (R$)</p>
+                    <p className="text-muted-foreground">Sinal (un.)</p>
                     <div className="flex items-center justify-center gap-1 mt-0.5">
                       <Input
                         className="h-7 w-16 text-center text-xs px-1"
                         type="number"
                         min="0"
                         step="0.01"
-                        value={drafts[o.id] ?? String(o.down_payment)}
-                        onChange={(e) => setDrafts({ ...drafts, [o.id]: e.target.value })}
+                        value={drafts[groupId] ?? String(o.down_payment)}
+                        onChange={(e) => setDrafts({ ...drafts, [groupId]: e.target.value })}
                       />
                       <Button
                         size="icon"
                         variant="secondary"
                         className="size-7 text-[10px]"
-                        onClick={() => update(o.id, { down_payment: Number(drafts[o.id] ?? o.down_payment) })}
+                        onClick={() => updateGroup(ids, { down_payment: Number(drafts[groupId] ?? o.down_payment) })}
                       >
                         OK
                       </Button>
@@ -2239,7 +2471,7 @@ function OrdersTab({
                   </div>
                   <div>
                     <p className="text-muted-foreground">Saldo</p>
-                    <p className="font-bold text-sm text-primary">{brl(Number(o.remaining_balance))}</p>
+                    <p className="font-bold text-sm text-primary">{brl(Number(o.remaining_balance) * quantity)}</p>
                   </div>
                 </div>
 
@@ -2253,7 +2485,7 @@ function OrdersTab({
                         <PaymentBadge status={currentPaymentStatus} />
                         <Select
                           value={currentPaymentStatus}
-                          onValueChange={(v) => handlePaymentStatusChange(o, v)}
+                          onValueChange={(v) => handlePaymentStatusChange(item, v)}
                         >
                           <SelectTrigger className="h-8 text-xs w-36">
                             <SelectValue />
@@ -2268,7 +2500,7 @@ function OrdersTab({
                         </Select>
                         <Select
                           value={o.delivery_status}
-                          onValueChange={(v) => handleDeliveryStatusChange(o, v)}
+                          onValueChange={(v) => handleDeliveryStatusChange(item, v)}
                         >
                           <SelectTrigger className="h-8 text-xs w-32">
                             <SelectValue />
@@ -2304,14 +2536,14 @@ function OrdersTab({
                   <Input
                     className="h-8 text-xs font-mono flex-1"
                     placeholder="Cód. Rastreio (Ex: AA123456789BR)"
-                    value={trackingDrafts[o.id] ?? o.tracking_code ?? ""}
-                    onChange={(e) => setTrackingDrafts({ ...trackingDrafts, [o.id]: e.target.value })}
+                    value={trackingDrafts[groupId] ?? o.tracking_code ?? ""}
+                    onChange={(e) => setTrackingDrafts({ ...trackingDrafts, [groupId]: e.target.value })}
                   />
                   <Button
                     size="sm"
                     variant="secondary"
                     className="h-8 px-3 text-xs font-medium"
-                    onClick={() => handleTrackingSave(o.id, trackingDrafts[o.id] ?? o.tracking_code ?? "")}
+                    onClick={() => handleTrackingSave(ids, trackingDrafts[groupId] ?? o.tracking_code ?? "")}
                   >
                     Salvar
                   </Button>
@@ -2333,48 +2565,64 @@ function OrdersTab({
                 <TableHead>Cliente</TableHead>
                 <TableHead>Miniatura</TableHead>
                 <TableHead>Total</TableHead>
-                <TableHead>Sinal</TableHead>
+                <TableHead>Sinal (un.)</TableHead>
                 <TableHead>Saldo</TableHead>
                 <TableHead>Status & Rastreio</TableHead>
                 <TableHead>Prazo</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((o) => {
+              {rows.map((item) => {
+                const { order: o, quantity, ids } = item;
+                const groupId = ids[0];
+                let guestMeta: { name?: string; phone?: string } | null = null;
+                if (o.pix_key && typeof o.pix_key === "string") {
+                  if (o.pix_key.startsWith("GUEST:")) {
+                    try { guestMeta = JSON.parse(o.pix_key.replace(/^GUEST:/, "")); } catch {}
+                  } else if (o.pix_key.startsWith('{"manual_guest":true')) {
+                    try { guestMeta = JSON.parse(o.pix_key); } catch {}
+                  }
+                }
+                const cached = getCustomerFromCache(o.id) || getCustomerFromCache(o.user_id);
                 const displayName =
-                  o.profiles?.name && o.profiles.name !== "Cliente"
+                  guestMeta?.name ||
+                  (o.profiles?.name && o.profiles.name !== "Cliente" && o.profiles.name !== "Cliente cadastrado"
                     ? o.profiles.name
-                    : o.profiles?.email
-                      ? o.profiles.email.split("@")[0]
-                      : "Cliente";
+                    : cached?.name) ||
+                  (o.profiles?.email ? o.profiles.email.split("@")[0] : null) ||
+                  (guestMeta?.phone || o.profiles?.phone || cached?.phone ? `Cliente (${guestMeta?.phone || o.profiles?.phone || cached?.phone})` : "Cliente sem nome");
+
+                const clientPhone = guestMeta?.phone || o.profiles?.phone || cached?.phone;
+                const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
+                const currentPaymentStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
 
                 const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
                 const currentPaymentStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
 
                 return (
-                  <TableRow key={o.id}>
+                  <TableRow key={groupId}>
                     <TableCell className="whitespace-nowrap">
                       <p className="font-medium">{displayName}</p>
-                      {o.profiles?.email && (
+                      {o.profiles?.email && !guestMeta && (
                         <p className="text-[11px] text-muted-foreground">{o.profiles.email}</p>
                       )}
-                      {o.profiles?.phone ? (() => {
-                        const parsed = parsePhoneWithFlag(o.profiles.phone);
+                      {clientPhone ? (() => {
+                        const parsed = parsePhoneWithFlag(clientPhone);
                         return (
                           <a
-                            href={whatsappLink(o.profiles.phone, `Olá ${displayName}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
+                            href={whatsappLink(clientPhone, `Olá ${displayName}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
                             target="_blank"
                             rel="noreferrer"
                             className="mt-0.5 flex items-center gap-1 text-xs text-success hover:underline font-mono"
                           >
                             <MessageCircle className="size-3" />
-                            {parsed?.display || o.profiles.phone}
+                            {parsed?.display || clientPhone}
                           </a>
                         );
                       })() : (
                         <span className="text-[11px] text-muted-foreground/60 italic block">Sem WhatsApp</span>
                       )}
-                      <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{o.id.slice(0, 8)}</p>
+                      <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{groupId.slice(0, 8)}</p>
                     </TableCell>
                   <TableCell className="whitespace-nowrap">
                     <div className="flex items-center gap-3">
@@ -2393,14 +2641,24 @@ function OrdersTab({
                         )}
                       </div>
                       <div>
-                        <p className="font-semibold text-sm">{o.products?.model || "Miniatura"}</p>
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                          {o.products?.brand}
+                        <p className="font-semibold text-sm flex items-center gap-1">
+                          {o.products?.model || "Miniatura"}
+                        </p>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                          <span>{o.products?.brand}</span>
+                          {quantity > 1 && (
+                            <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[10px] px-1.5 py-0 border-primary/20">
+                              {quantity}x
+                            </Badge>
+                          )}
                         </p>
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>{brl(Number(o.total_price))}</TableCell>
+                  <TableCell>
+                    {brl(Number(o.total_price) * quantity)}
+                    {quantity > 1 && <span className="block text-[10px] text-muted-foreground font-mono">({quantity}x {brl(Number(o.total_price))})</span>}
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5">
                       <Input
@@ -2408,14 +2666,14 @@ function OrdersTab({
                         type="number"
                         min="0"
                         step="0.01"
-                        value={drafts[o.id] ?? String(o.down_payment)}
-                        onChange={(e) => setDrafts({ ...drafts, [o.id]: e.target.value })}
+                        value={drafts[groupId] ?? String(o.down_payment)}
+                        onChange={(e) => setDrafts({ ...drafts, [groupId]: e.target.value })}
                       />
                       <Button
                         size="sm"
                         variant="secondary"
                         onClick={() =>
-                          update(o.id, { down_payment: Number(drafts[o.id] ?? o.down_payment) })
+                          updateGroup(ids, { down_payment: Number(drafts[groupId] ?? o.down_payment) })
                         }
                       >
                         OK
@@ -2423,14 +2681,14 @@ function OrdersTab({
                     </div>
                   </TableCell>
                   <TableCell className="font-medium text-primary">
-                    {brl(Number(o.remaining_balance))}
+                    {brl(Number(o.remaining_balance) * quantity)}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1.5 min-w-[155px]">
                       <PaymentBadge status={currentPaymentStatus} />
                       <Select
                         value={currentPaymentStatus}
-                        onValueChange={(v) => handlePaymentStatusChange(o, v)}
+                        onValueChange={(v) => handlePaymentStatusChange(item, v)}
                       >
                         <SelectTrigger className="h-7 text-xs w-36">
                           <SelectValue />
@@ -2445,7 +2703,7 @@ function OrdersTab({
                       </Select>
                       <Select
                         value={o.delivery_status}
-                        onValueChange={(v) => handleDeliveryStatusChange(o, v)}
+                        onValueChange={(v) => handleDeliveryStatusChange(item, v)}
                       >
                         <SelectTrigger className="h-7 text-xs w-36">
                           <SelectValue />
@@ -2462,15 +2720,15 @@ function OrdersTab({
                         <Input
                           className="h-7 text-[11px] font-mono px-2 w-28"
                           placeholder="Cód. Rastreio"
-                          value={trackingDrafts[o.id] ?? o.tracking_code ?? ""}
-                          onChange={(e) => setTrackingDrafts({ ...trackingDrafts, [o.id]: e.target.value })}
+                          value={trackingDrafts[groupId] ?? o.tracking_code ?? ""}
+                          onChange={(e) => setTrackingDrafts({ ...trackingDrafts, [groupId]: e.target.value })}
                         />
                         <Button
                           size="sm"
                           variant="secondary"
                           className="h-7 px-2 text-[11px] font-semibold"
                           title="Salvar rastreio"
-                          onClick={() => handleTrackingSave(o.id, trackingDrafts[o.id] ?? o.tracking_code ?? "")}
+                          onClick={() => handleTrackingSave(ids, trackingDrafts[groupId] ?? o.tracking_code ?? "")}
                         >
                           OK
                         </Button>
@@ -2945,27 +3203,51 @@ function AdminModerationPanel() {
 
   async function updateStoreStatus(storeId: string, status: "active" | "rejected", rejectionReason?: string) {
     setSubmitting(true);
-    const { error } = await supabase
+
+    const updatePayload: any = { status };
+    if (rejectionReason) {
+      updatePayload.rejection_reason = rejectionReason;
+    }
+
+    let { error, data } = await supabase
       .from("stores")
-      .update({
-        status,
-        rejection_reason: rejectionReason || null,
-      } as any)
-      .eq("id", storeId);
+      .update(updatePayload)
+      .eq("id", storeId)
+      .select();
+
+    // Se falhar porque a coluna rejection_reason não existe na tabela stores remota:
+    if (error && (error.code === "PGRST204" || error.message?.includes("rejection_reason"))) {
+      delete updatePayload.rejection_reason;
+      const retry = await supabase
+        .from("stores")
+        .update(updatePayload)
+        .eq("id", storeId)
+        .select();
+      error = retry.error;
+      data = retry.data;
+    }
 
     setSubmitting(false);
+
     if (error) {
-      toast.error("Erro ao atualizar status da loja.");
+      console.error("Erro detalhado do Supabase:", error);
+      toast.error(`Não foi possível atualizar a loja: ${error.message || "Erro de permissão no Supabase"}`);
       return;
     }
+
+    if (!data || data.length === 0) {
+      toast.error("A alteração foi bloqueada pelas políticas de segurança (RLS) do Supabase.");
+      return;
+    }
+
     toast.success(status === "active" ? "Loja APROVADA com sucesso!" : "Solicitação RECUSADA.");
     setRejectingStore(null);
     setReason("");
     queryClient.invalidateQueries();
   }
 
-  const pendingStores = (allStores ?? []).filter((s: any) => s.status === "pending");
-  const activeStores = (allStores ?? []).filter((s: any) => s.status === "active" || !s.status);
+  const pendingStores = (allStores ?? []).filter((s: any) => s.status === "pending" || !s.status);
+  const activeStores = (allStores ?? []).filter((s: any) => s.status === "active");
   const rejectedStores = (allStores ?? []).filter((s: any) => s.status === "rejected");
 
   if (isLoading) {
@@ -2980,6 +3262,27 @@ function AdminModerationPanel() {
 
   return (
     <div className="space-y-6">
+      {/* METRICAS GLOBAIS DA PLATAFORMA */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card className="panel border-primary/30 bg-primary/5 p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase">Total de Lojas</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{(allStores ?? []).length}</p>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            {activeStores.length} ativas · {pendingStores.length} pendentes · {rejectedStores.length} suspensas
+          </p>
+        </Card>
+        <Card className="panel border-emerald-500/30 bg-emerald-500/5 p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase">Lojas Ativas</p>
+          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{activeStores.length}</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Visíveis e com catálogo liberado</p>
+        </Card>
+        <Card className="panel border-amber-500/30 bg-amber-500/5 p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase">Solicitações Pendentes</p>
+          <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{pendingStores.length}</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Aguardando autorização</p>
+        </Card>
+      </div>
+
       <Card className="panel border-amber-500/40 bg-amber-500/5">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -3060,30 +3363,80 @@ function AdminModerationPanel() {
           <CardTitle className="text-lg font-bold">Lojas Ativas e Aprovadas ({activeStores.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            {activeStores.map((st: any) => (
-              <div key={st.id} className="flex items-center justify-between border-b border-border/40 pb-2 pt-1 text-xs">
-                <div>
-                  <span className="font-bold text-foreground">{st.name}</span>{" "}
-                  <span className="text-muted-foreground">(/loja/{st.slug})</span>
-                  <div className="text-muted-foreground">Dono: {st.owner?.name || "N/A"} ({st.owner?.email})</div>
+          {activeStores.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-4 text-center border border-dashed rounded-xl">
+              Nenhuma loja ativa no momento.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {activeStores.map((st: any) => (
+                <div key={st.id} className="flex items-center justify-between border-b border-border/40 pb-2 pt-1 text-xs">
+                  <div>
+                    <span className="font-bold text-foreground">{st.name}</span>{" "}
+                    <span className="text-muted-foreground">(/loja/{st.slug})</span>
+                    <div className="text-muted-foreground">Dono: {st.owner?.name || "N/A"} ({st.owner?.email})</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 bg-emerald-500/10">
+                      Ativa
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-xs text-destructive hover:bg-destructive/10"
+                      onClick={() => updateStoreStatus(st.id, "rejected", "Loja suspensa pelo administrador.")}
+                    >
+                      Suspender
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 bg-emerald-500/10">
-                    Ativa
-                  </Badge>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-xs text-destructive hover:bg-destructive/10"
-                    onClick={() => updateStoreStatus(st.id, "rejected", "Loja suspensa pelo administrador.")}
-                  >
-                    Suspender
-                  </Button>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* LOJAS SUSPENSAS OU RECUSADAS */}
+      <Card className="panel border-destructive/40 bg-destructive/5">
+        <CardHeader>
+          <CardTitle className="text-lg font-bold flex items-center gap-2 text-destructive">
+            <XCircle className="size-5" /> Lojas Suspensas / Recusadas ({rejectedStores.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {rejectedStores.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-4 text-center border border-dashed rounded-xl">
+              Nenhuma loja suspensa ou recusada.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {rejectedStores.map((st: any) => (
+                <div key={st.id} className="flex items-center justify-between border-b border-border/40 pb-2 pt-1 text-xs">
+                  <div>
+                    <span className="font-bold text-foreground">{st.name}</span>{" "}
+                    <span className="text-muted-foreground">(/loja/{st.slug})</span>
+                    <div className="text-muted-foreground">Dono: {st.owner?.name || "N/A"} ({st.owner?.email})</div>
+                    {st.rejection_reason && (
+                      <p className="text-[11px] text-destructive mt-0.5">Motivo: {st.rejection_reason}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="border-destructive/40 text-destructive bg-destructive/10">
+                      Suspensa
+                    </Badge>
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1"
+                      disabled={submitting}
+                      onClick={() => updateStoreStatus(st.id, "active")}
+                    >
+                      <CheckCircle2 className="size-3.5" /> Reativar Loja
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
