@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, CheckCircle2, Clock, Copy, Download, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Plus, Search, Share2, ShieldAlert, ShieldCheck, Trash2, Truck, XCircle } from "lucide-react";
+import { BookmarkCheck, CheckCircle2, Clock, Copy, Download, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Plus, Search, Share2, ShieldAlert, ShieldCheck, Trash2, Truck, XCircle, Users, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { PhoneInput, parsePhoneWithFlag } from "@/components/PhoneInput";
@@ -3509,37 +3509,119 @@ function AdminModerationPanel() {
 }
 
 function ClientsTab({ orders }: { orders: OrderRow[] }) {
-  const clientsMap = new Map<string, { profile: any, orders: OrderRow[], totalSpent: number }>();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+
+  const clientsMap = new Map<string, { profile: any, orders: OrderRow[], totalSpent: number, firstOrderDate: Date }>();
+  const brandCountMap = new Map<string, number>();
 
   for (const order of orders) {
     const userId = order.user_id;
+    const orderDate = new Date(order.created_at);
+
     if (!clientsMap.has(userId)) {
       clientsMap.set(userId, {
         profile: order.profiles || { name: 'Desconhecido', email: '', phone: '' },
         orders: [],
-        totalSpent: 0
+        totalSpent: 0,
+        firstOrderDate: orderDate
       });
     }
     const client = clientsMap.get(userId)!;
     client.orders.push(order);
+    
+    if (orderDate < client.firstOrderDate) {
+      client.firstOrderDate = orderDate;
+    }
+
     if (order.payment_status !== 'cancelado') {
       client.totalSpent += Number(order.total_price || 0);
+      
+      const brand = order.products?.brand;
+      if (brand) {
+        brandCountMap.set(brand, (brandCountMap.get(brand) || 0) + 1);
+      }
     }
   }
 
-  const clients = Array.from(clientsMap.values()).sort((a, b) => b.totalSpent - a.totalSpent);
-  const [selectedClient, setSelectedClient] = useState<any>(null);
+  let topBrand = "Nenhuma venda";
+  let topBrandCount = 0;
+  for (const [brand, count] of brandCountMap.entries()) {
+    if (count > topBrandCount) {
+      topBrand = brand;
+      topBrandCount = count;
+    }
+  }
+
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  let newClientsThisMonth = 0;
+
+  const allClients = Array.from(clientsMap.values()).sort((a, b) => b.totalSpent - a.totalSpent);
+  
+  for (const client of allClients) {
+    if (client.firstOrderDate.getMonth() === currentMonth && client.firstOrderDate.getFullYear() === currentYear) {
+      newClientsThisMonth++;
+    }
+  }
+  
+  const clients = allClients.filter(c => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    const name = (c.profile.name || '').toLowerCase();
+    const email = (c.profile.email || '').toLowerCase();
+    const phone = (c.profile.phone || '').toLowerCase();
+    return name.includes(q) || email.includes(q) || phone.includes(q);
+  });
 
   return (
     <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2 mb-2">
+        <Card className="panel border-border/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Trophy className="size-4 text-amber-500" /> Marca Mais Vendida
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="font-display text-2xl font-bold">{topBrand}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {topBrandCount === 0 ? "Nenhuma reserva confirmada" : `${topBrandCount} reservas no total`}
+            </p>
+          </CardContent>
+        </Card>
+        
+        <Card className="panel border-border/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Users className="size-4 text-blue-500" /> Novos Clientes (Este Mês)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="font-display text-2xl font-bold text-emerald-600 dark:text-emerald-500">+{newClientsThisMonth}</p>
+            <p className="text-xs text-muted-foreground mt-1">cadastros realizados recentemente</p>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card className="panel border-border/60">
-        <CardHeader>
-          <CardTitle className="text-lg">Meus Clientes ({clients.length})</CardTitle>
+        <CardHeader className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between">
+          <CardTitle className="text-lg">Meus Clientes ({allClients.length})</CardTitle>
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar cliente..."
+              className="pl-9"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </CardHeader>
         <CardContent>
           {clients.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
-              Nenhum cliente encontrado ainda.
+              {searchQuery ? "Nenhum cliente encontrado para essa busca." : "Nenhum cliente encontrado ainda."}
             </div>
           ) : (
             <div className="rounded-md border overflow-x-auto">
