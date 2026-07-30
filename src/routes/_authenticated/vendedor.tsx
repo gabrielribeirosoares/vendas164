@@ -64,6 +64,82 @@ export const Route = createFileRoute("/_authenticated/vendedor")({
 type Store = Tables<"stores">;
 type Product = Tables<"products">;
 
+type OrderRow = Tables<"orders"> & {
+  products: { brand: string; model: string; image_url?: string | null } | null;
+  profiles: { name: string | null; email: string | null; phone: string | null } | null;
+};
+
+function SmartNotifications({ products, orders }: { products: Product[]; orders: OrderRow[] }) {
+  const outOfStock = products.filter(p => p.stock === 0 && p.is_open);
+  
+  const now = new Date();
+  const lateOrders = orders.filter(o => {
+    if (o.payment_status === "cancelado") return false;
+    const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
+    const effectiveStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
+    if (effectiveStatus !== "aguardando_sinal") return false;
+    if (!o.reservation_expires_at) return false;
+    return new Date(o.reservation_expires_at) < now;
+  });
+
+  const pendingShipping = orders.filter(o => o.payment_status === "quitado" && o.delivery_status !== "enviado" && o.delivery_status !== "cancelado" && o.delivery_status !== "entregue");
+
+  if (outOfStock.length === 0 && lateOrders.length === 0 && pendingShipping.length === 0) return null;
+
+  return (
+    <div className="mb-6 grid gap-3 sm:grid-cols-3">
+      {lateOrders.length > 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+          <ShieldAlert className="size-5 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="font-semibold text-sm">Sinais Atrasados</h4>
+            <p className="text-xs mt-0.5">{lateOrders.length} {lateOrders.length === 1 ? "reserva passou" : "reservas passaram"} do prazo.</p>
+          </div>
+        </div>
+      )}
+      {outOfStock.length > 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-amber-600 dark:text-amber-400">
+          <AlertTriangle className="size-5 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="font-semibold text-sm">Estoque Esgotado</h4>
+            <p className="text-xs mt-0.5">{outOfStock.length} {outOfStock.length === 1 ? "miniatura zerou" : "miniaturas zeraram"}.</p>
+          </div>
+        </div>
+      )}
+      {pendingShipping.length > 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-blue-500/40 bg-blue-500/10 p-3 text-blue-600 dark:text-blue-400">
+          <Package className="size-5 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="font-semibold text-sm">Envios Pendentes</h4>
+            <p className="text-xs mt-0.5">{pendingShipping.length} {pendingShipping.length === 1 ? "pedido aguarda" : "pedidos aguardam"} envio.</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: string) {
+  const modelName = `${o.products?.brand || ''} ${o.products?.model || 'Miniatura'}`.trim();
+  const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
+  const total = Number(o.total_price) * quantity;
+  const signal = Number(o.down_payment) * quantity;
+  const isPaid = o.payment_status === "sinal_pago" || o.payment_status === "quitado";
+
+  let msg = `Olá ${displayName},\n\nAqui é o resumo da sua reserva:\n- Miniatura: *${modelName}*\n`;
+  if (quantity > 1) msg += `- Quantidade: ${quantity}x\n`;
+  msg += `- Valor Total: *${brl(total)}*\n`;
+  
+  if (!isPaid && signal > 0) {
+    msg += `- Sinal a pagar: *${brl(signal)}*\n`;
+  } else if (!isPaid && isNoSignalOrder) {
+    msg += `- Pagamento na chegada do produto.\n`;
+  }
+  
+  msg += `\nAgradecemos a preferência!`;
+  return msg;
+}
+
 function SellerDashboard() {
   const { user, loading: sessionLoading } = useSession();
   const queryClient = useQueryClient();
@@ -332,6 +408,7 @@ function SellerDashboard() {
           </div>
         </div>
 
+        <SmartNotifications products={products ?? []} orders={orders ?? []} />
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
           <Stat label="Valor total projetado" value={brl(totals.projected)} />
           <Stat label="Sinal recebido" value={brl(totals.received)} accent="text-success" />
@@ -496,6 +573,7 @@ const emptyProduct = {
   model: "",
   scale: "1:64",
   price: "",
+  cost_price: "",
   max_installments: "1",
   has_surcharge: "false",
   installment_price: "",
@@ -574,6 +652,7 @@ function ProductsTab({
       model: form.model.trim(),
       scale: form.scale,
       price: Number(form.price || 0),
+      cost_price: form.cost_price ? Number(form.cost_price) : null,
       max_installments: maxInst,
       has_installment_surcharge: hasSurcharge,
       installment_price: instPrice,
@@ -598,6 +677,7 @@ function ProductsTab({
       delete payload.installment_price;
       delete payload.has_installment_surcharge;
       delete payload.payment_deadline_date;
+      delete payload.cost_price;
 
       const retry1 = await supabase.from("products").insert(payload);
       error = retry1.error;
@@ -717,9 +797,21 @@ function ProductsTab({
                   onChange={(e) => setForm({ ...form, model: e.target.value })}
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="price">Valor À vista (R$)</Label>
+                  <Label htmlFor="cost_price">Custo (R$) <span className="text-[10px] text-muted-foreground font-normal">(Opcional)</span></Label>
+                  <Input
+                    id="cost_price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="150"
+                    value={form.cost_price}
+                    onChange={(e) => setForm({ ...form, cost_price: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="price">Venda À vista (R$)</Label>
                   <Input
                     id="price"
                     type="number"
@@ -940,6 +1032,11 @@ function ProductsTab({
                                   Sinal: {brl(Number((p as any).down_payment_amount))}
                                 </Badge>
                               )}
+                              {Number((p as any).cost_price) > 0 && (
+                                <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 font-medium">
+                                  Lucro: {brl(Number(p.price) - Number((p as any).cost_price))}
+                                </Badge>
+                              )}
                               <Badge variant="outline">{p.stock} {p.stock === 1 ? "unidade" : "unidades"}</Badge>
                               {p.stock === 0 ? (
                                 <Badge variant="destructive" className="flex items-center gap-1"><AlertTriangle className="size-3" /> Esgotado</Badge>
@@ -1042,6 +1139,7 @@ function EditProductDialog({
     model: "",
     scale: "1:64",
     price: "",
+    cost_price: "",
     max_installments: "1",
     has_surcharge: "false",
     installment_price: "",
@@ -1076,6 +1174,7 @@ function EditProductDialog({
         model: product.model ?? "",
         scale: product.scale ?? "1:64",
         price: product.price != null ? String(product.price) : "",
+        cost_price: (product as any).cost_price != null ? String((product as any).cost_price) : "",
         max_installments: rawMaxInst != null ? String(rawMaxInst) : "1",
         has_surcharge: rawHasSurcharge ? "true" : "false",
         installment_price: rawInstPrice != null ? String(rawInstPrice) : "",
@@ -1118,6 +1217,7 @@ function EditProductDialog({
       model: form.model.trim(),
       scale: form.scale,
       price: Number(form.price || 0),
+      cost_price: form.cost_price ? Number(form.cost_price) : null,
       max_installments: maxInst,
       has_installment_surcharge: hasSurcharge,
       installment_price: instPrice,
@@ -1145,6 +1245,7 @@ function EditProductDialog({
       delete payload.price_2x;
       delete payload.installment_price;
       delete payload.has_installment_surcharge;
+      delete payload.cost_price;
 
       const retry1 = await supabase.from("products").update(payload).eq("id", product.id);
       error = retry1.error;
@@ -1255,9 +1356,21 @@ function EditProductDialog({
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-price">À vista (R$)</Label>
+              <Label htmlFor="edit-cost-price">Custo (R$)</Label>
+              <Input
+                id="edit-cost-price"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Ex: 150"
+                value={form.cost_price}
+                onChange={(e) => setForm({ ...form, cost_price: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-price">Venda (R$)</Label>
               <Input
                 id="edit-price"
                 type="number"
@@ -2078,10 +2191,7 @@ function ManualReservationDialog({
   );
 }
 
-type OrderRow = Tables<"orders"> & {
-  products: { brand: string; model: string; image_url?: string | null } | null;
-  profiles: { name: string | null; email: string | null; phone: string | null } | null;
-};
+
 
 const PAGE_SIZE = 8;
 
@@ -2099,7 +2209,8 @@ function OrdersTab({
   const queryClient = useQueryClient();
   const [page, setPage] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("todos");
+  const [paymentFilter, setPaymentFilter] = useState<string>("todos");
+  const [deliveryFilter, setDeliveryFilter] = useState<string>("todos");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [trackingDrafts, setTrackingDrafts] = useState<Record<string, string>>({});
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
@@ -2129,11 +2240,15 @@ function OrdersTab({
       const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
       const effectiveStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
 
-      if (statusFilter === "atrasado") {
-        if (effectiveStatus !== "aguardando_sinal") return false;
-        if (!o.reservation_expires_at) return false;
-        return new Date(o.reservation_expires_at) < new Date();
-      } else if (statusFilter !== "todos" && effectiveStatus !== statusFilter) {
+      if (paymentFilter === "atrasado") {
+        if (effectiveStatus !== "aguardando_sinal" || !o.reservation_expires_at || new Date(o.reservation_expires_at) >= new Date()) {
+          return false;
+        }
+      } else if (paymentFilter !== "todos" && effectiveStatus !== paymentFilter) {
+        return false;
+      }
+
+      if (deliveryFilter !== "todos" && o.delivery_status !== deliveryFilter) {
         return false;
       }
       if (!searchQuery.trim()) return true;
@@ -2159,7 +2274,7 @@ function OrdersTab({
         trackingCode.includes(q)
       );
     });
-  }, [orders, searchQuery, statusFilter]);
+  }, [orders, searchQuery, paymentFilter, deliveryFilter]);
 
   type GroupedOrderRow = { order: OrderRow; quantity: number; ids: string[] };
 
@@ -2350,23 +2465,42 @@ function OrdersTab({
           )}
           <Filter className="size-4 text-muted-foreground" />
           <Select
-            value={statusFilter}
+            value={paymentFilter}
             onValueChange={(v) => {
-              setStatusFilter(v);
+              setPaymentFilter(v);
               setPage(0);
             }}
           >
-            <SelectTrigger className="h-9 w-44 text-xs">
-              <SelectValue placeholder="Filtrar status" />
+            <SelectTrigger className="h-9 w-[160px] text-xs">
+              <SelectValue placeholder="Pagamento" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos os status</SelectItem>
-              <SelectItem value="sem_sinal">Sem sinal / Pagar na chegada</SelectItem>
+              <SelectItem value="todos">Qualquer pagamento</SelectItem>
+              <SelectItem value="sem_sinal">Sem sinal</SelectItem>
               <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
               <SelectItem value="atrasado">Sinal Atrasado</SelectItem>
               <SelectItem value="sinal_pago">Sinal pago</SelectItem>
               <SelectItem value="quitado">Quitado</SelectItem>
               <SelectItem value="cancelado">Cancelados</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={deliveryFilter}
+            onValueChange={(v) => {
+              setDeliveryFilter(v);
+              setPage(0);
+            }}
+          >
+            <SelectTrigger className="h-9 w-[130px] text-xs">
+              <SelectValue placeholder="Envio" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Qualquer envio</SelectItem>
+              <SelectItem value="pendente">Pendente</SelectItem>
+              <SelectItem value="enviado">Enviado</SelectItem>
+              <SelectItem value="entregue">Entregue</SelectItem>
+              <SelectItem value="cancelado">Cancelado</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -2412,13 +2546,13 @@ function OrdersTab({
                     const parsed = parsePhoneWithFlag(clientPhone);
                     return (
                       <a
-                        href={whatsappLink(clientPhone, `Olá ${displayName}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
+                        href={whatsappLink(clientPhone, getOrderSummaryMessage(o, quantity, displayName))}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-1 text-xs text-success font-medium font-mono border border-success/30"
                       >
                         <MessageCircle className="size-3.5" />
-                        {parsed?.display || clientPhone}
+                        Resumo / Cobrar
                       </a>
                     );
                   })() : (
@@ -2622,13 +2756,14 @@ function OrdersTab({
                         const parsed = parsePhoneWithFlag(clientPhone);
                         return (
                           <a
-                            href={whatsappLink(clientPhone, `Olá ${displayName}, tudo bem? Estou entrando em contato sobre sua reserva!`)}
+                            href={whatsappLink(clientPhone, getOrderSummaryMessage(o, quantity, displayName))}
                             target="_blank"
                             rel="noreferrer"
-                            className="mt-0.5 flex items-center gap-1 text-xs text-success hover:underline font-mono"
+                            className="mt-0.5 flex items-center gap-1 text-[11px] text-success hover:underline font-mono bg-success/10 px-1.5 py-0.5 rounded-sm w-fit border border-success/20"
+                            title="Enviar Resumo / Cobrar"
                           >
                             <MessageCircle className="size-3" />
-                            {parsed?.display || clientPhone}
+                            Cobrar ({parsed?.display || clientPhone})
                           </a>
                         );
                       })() : (
@@ -3208,14 +3343,21 @@ function AdminModerationPanel() {
       // Buscar pedidos para calcular vendas
       const storeIds = (data ?? []).map(s => s.id);
       const { data: orders } = storeIds.length
-        ? await supabase.from("orders").select("store_id, total_price, payment_status").in("store_id", storeIds)
+        ? await supabase.from("orders").select("store_id, total_price, payment_status, products(*)").in("store_id", storeIds)
         : { data: [] };
       
       const salesMap = new Map();
       orders?.forEach(order => {
-         const current = salesMap.get(order.store_id) || { total_amount: 0, total_orders: 0 };
+         const current = salesMap.get(order.store_id) || { total_amount: 0, total_orders: 0, total_profit: 0, has_cost: false };
          current.total_orders += 1;
          current.total_amount += order.total_price || 0;
+         
+         const cost = (order.products as any)?.cost_price;
+         if (cost != null && Number(cost) > 0) {
+           current.has_cost = true;
+           current.total_profit += (order.total_price || 0) - Number(cost);
+         }
+         
          salesMap.set(order.store_id, current);
       });
       
@@ -3413,7 +3555,7 @@ function AdminModerationPanel() {
                         {st.sales?.total_orders || 0} negociações
                       </Badge>
                       <Badge variant="secondary" className="text-[10px] py-0 text-emerald-600">
-                        {brl(st.sales?.total_amount || 0)}
+                        {st.sales?.has_cost ? `Lucro: ${brl(st.sales.total_profit)}` : `Vendas: ${brl(st.sales?.total_amount || 0)}`}
                       </Badge>
                     </div>
                   </div>
