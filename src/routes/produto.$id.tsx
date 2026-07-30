@@ -52,19 +52,25 @@ function ProductPage() {
     },
   });
 
-  const { data: onWaitlist } = useQuery({
-    queryKey: ["waitlist", id, user?.id],
-    enabled: !!user,
+  const { data: waitlistData } = useQuery({
+    queryKey: ["waitlist", id],
     queryFn: async () => {
       const { data } = await supabase
         .from("waitlist")
-        .select("id")
+        .select("user_id")
         .eq("product_id", id)
-        .eq("user_id", user!.id)
-        .maybeSingle();
-      return !!data;
+        .order("created_at", { ascending: true });
+      return data || [];
     },
   });
+
+  const waitlistCount = waitlistData?.length || 0;
+  const userWaitlistIndex = user && waitlistData ? waitlistData.findIndex(w => w.user_id === user.id) : -1;
+  const isOnWaitlist = userWaitlistIndex !== -1;
+  
+  const isEligibleToBuyWaitlist = 
+    (product && product.stock > waitlistCount) || 
+    (isOnWaitlist && product && userWaitlistIndex < product.stock);
 
   async function handleReserve() {
     if (!product) return;
@@ -105,6 +111,14 @@ function ProductPage() {
               .from("orders")
               .update(updatePayload)
               .in("id", orderIds);
+          }
+
+          if (isOnWaitlist) {
+            await supabase
+              .from("waitlist")
+              .delete()
+              .eq("product_id", product.id)
+              .eq("user_id", user.id);
           }
         }
 
@@ -231,7 +245,7 @@ function ProductPage() {
             </div>
 
             {/* Controles de Quantidade e Parcelamento */}
-            {product.is_open && product.stock > 0 && !onWaitlist && (
+            {product.is_open && product.stock > 0 && isEligibleToBuyWaitlist && (
               <Card className="mt-6 border-border/60 panel bg-muted/20">
                 <CardContent className="space-y-4 p-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -326,14 +340,21 @@ function ProductPage() {
                 size="lg"
                 className="flex-1 glow"
                 onClick={handleReserve}
-                disabled={!product.is_open || onWaitlist === true || reserving}
+                disabled={
+                  !product.is_open || 
+                  reserving || 
+                  (product.stock > 0 && !isEligibleToBuyWaitlist) || 
+                  (product.stock === 0 && isOnWaitlist)
+                }
               >
                 {!product.is_open
                   ? "Pré-venda fechada"
-                  : onWaitlist
-                    ? "Você está na fila"
-                    : product.stock > 0
+                  : product.stock > 0
+                    ? isEligibleToBuyWaitlist
                       ? quantity > 1 ? `Reservar ${quantity} unidades` : "Reservar unidade"
+                      : "Estoque reservado p/ fila"
+                    : isOnWaitlist
+                      ? `Você é o ${userWaitlistIndex + 1}º na fila`
                       : "Entrar na fila de espera"}
               </Button>
               <Button size="lg" variant="secondary" onClick={share}>
