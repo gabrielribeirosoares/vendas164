@@ -3189,11 +3189,26 @@ function AdminModerationPanel() {
       const { data: profiles } = ownerIds.length
         ? await supabase.from("profiles").select("id, name, email, phone").in("id", ownerIds)
         : { data: [] };
+        
+      // Buscar pedidos para calcular vendas
+      const storeIds = (data ?? []).map(s => s.id);
+      const { data: orders } = storeIds.length
+        ? await supabase.from("orders").select("store_id, total_price, payment_status").in("store_id", storeIds)
+        : { data: [] };
+      
+      const salesMap = new Map();
+      orders?.forEach(order => {
+         const current = salesMap.get(order.store_id) || { total_amount: 0, total_orders: 0 };
+         current.total_orders += 1;
+         current.total_amount += order.total_price || 0;
+         salesMap.set(order.store_id, current);
+      });
       
       const profilesMap = new Map((profiles ?? []).map((p) => [p.id, p]));
       return (data ?? []).map((s) => ({
         ...s,
         owner: profilesMap.get(s.owner_id) ?? null,
+        sales: salesMap.get(s.id) ?? { total_amount: 0, total_orders: 0 }
       }));
     },
   });
@@ -3371,7 +3386,21 @@ function AdminModerationPanel() {
                   <div>
                     <span className="font-bold text-foreground">{st.name}</span>{" "}
                     <span className="text-muted-foreground">(/loja/{st.slug})</span>
-                    <div className="text-muted-foreground">Dono: {st.owner?.name || "N/A"} ({st.owner?.email})</div>
+                    <div className="text-muted-foreground mt-0.5">
+                      Dono: {st.owner?.name || "N/A"} ({st.owner?.email || "Sem e-mail"})
+                      {st.owner?.phone && <span className="ml-2 text-emerald-600 font-medium">📱 Whats: {st.owner.phone}</span>}
+                    </div>
+                    <div className="text-muted-foreground mt-0.5 mb-1 flex flex-col gap-1">
+                      <span className="font-mono text-[10px] break-all">ID Dono: {st.owner_id}</span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <Badge variant="secondary" className="text-[10px] py-0">
+                        {st.sales?.total_orders || 0} negociações
+                      </Badge>
+                      <Badge variant="secondary" className="text-[10px] py-0 text-emerald-600">
+                        {brl(st.sales?.total_amount || 0)}
+                      </Badge>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 bg-emerald-500/10">
