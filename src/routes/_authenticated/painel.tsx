@@ -101,7 +101,7 @@ function CustomerDashboard() {
                     migratedCount += ordersToMigrate.length;
                     for (const oItem of ordersToMigrate) {
                       if (oItem.store_id) {
-                        await supabase.from("customer_store_link").upsert({ user_id: user.id, store_id: oItem.store_id }, { onConflict: "user_id,store_id" }).catch(() => undefined);
+                        await supabase.from("customer_store_link").upsert({ user_id: user.id, store_id: oItem.store_id }, { onConflict: "user_id,store_id" });
                       }
                     }
                   }
@@ -168,7 +168,7 @@ function CustomerDashboard() {
                         .from("customer_store_link")
                         .upsert({ user_id: user.id, store_id: orderItem.store_id }, { onConflict: "user_id,store_id" })
                         .then(() => undefined)
-                        .catch(() => undefined);
+                        .then(() => undefined);
                     }
                   }
                 }
@@ -606,14 +606,14 @@ function CustomerDashboard() {
                         </div>
                       </div>
                       <CardContent className="p-4 space-y-1.5">
-                        <p className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider flex items-center gap-1.5">
+                        <div className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider flex items-center gap-1.5">
                           <span>{o.products?.brand} · {o.stores?.name}</span>
                           {qty > 1 && (
                             <Badge className="bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 font-bold text-[9px] px-1.5 py-0 border-emerald-500/30 shadow-none">
                               {qty}x
                             </Badge>
                           )}
-                        </p>
+                        </div>
                         <h4 className="font-bold text-base text-foreground leading-snug flex items-center gap-1">
                           {o.products?.model}
                         </h4>

@@ -2428,14 +2428,14 @@ function OrdersTab({
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wide flex items-center gap-1.5">
+                    <div className="text-xs text-muted-foreground uppercase font-semibold tracking-wide flex items-center gap-1.5">
                       <span>{o.products?.brand}</span>
                       {quantity > 1 && (
                         <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[10px] px-1.5 py-0 border-primary/20">
                           {quantity}x
                         </Badge>
                       )}
-                    </p>
+                    </div>
                     <p className="font-semibold text-sm truncate flex items-center gap-1">
                       {o.products?.model || "Miniatura"}
                     </p>
@@ -2596,9 +2596,6 @@ function OrdersTab({
                 const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
                 const currentPaymentStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
 
-                const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
-                const currentPaymentStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
-
                 return (
                   <TableRow key={groupId}>
                     <TableCell className="whitespace-nowrap">
@@ -2644,14 +2641,14 @@ function OrdersTab({
                         <p className="font-semibold text-sm flex items-center gap-1">
                           {o.products?.model || "Miniatura"}
                         </p>
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                        <div className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                           <span>{o.products?.brand}</span>
                           {quantity > 1 && (
                             <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[10px] px-1.5 py-0 border-primary/20">
                               {quantity}x
                             </Badge>
                           )}
-                        </p>
+                        </div>
                       </div>
                     </div>
                   </TableCell>
