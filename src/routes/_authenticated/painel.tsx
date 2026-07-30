@@ -61,60 +61,123 @@ function CustomerDashboard() {
     queryKey: ["my-orders", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      // 1. Tentar auto-migrar reservas pendentes criadas com este e-mail/telefone/nome
+      // 1. Tentar auto-migrar reservas pendentes por telefone (tanto via profiles quanto via meta)
       if (user) {
         try {
-          const userEmail = (user.email || "").toLowerCase().trim();
-          const userPhone = user.user_metadata?.phone || profile?.phone || "";
-          const userName = user.user_metadata?.name || profile?.name || "";
+          const { data: currentProf } = await supabase
+            .from("profiles")
+            .select("phone, name, email")
+            .eq("id", user.id)
+            .maybeSingle();
+
+          const userEmail = (currentProf?.email || user.email || "").toLowerCase().trim();
+          const userPhone = currentProf?.phone || user.user_metadata?.phone || profile?.phone || "";
+          const userName = currentProf?.name || user.user_metadata?.name || profile?.name || "";
           const rawPhoneDigits = userPhone ? userPhone.replace(/\D/g, "") : "";
           const lowerName = userName.toLowerCase().trim();
 
-          const { data: guestOrders } = await supabase
-            .from("orders")
-            .select("id, pix_key, store_id")
-            .not("pix_key", "is", null);
+          let migratedCount = 0;
 
-          if (guestOrders && guestOrders.length > 0) {
-            for (const orderItem of guestOrders) {
+          // 1A. Procurar perfis duplicados no Supabase com o mesmo número de telefone
+          if (rawPhoneDigits.length >= 8) {
+            const { data: allProfiles } = await supabase.from("profiles").select("id, phone").neq("id", user.id);
+            if (allProfiles && allProfiles.length > 0) {
+              const duplicateUserIds: string[] = [];
+              for (const pItem of allProfiles) {
+                if (pItem.phone) {
+                  const pDigits = String(pItem.phone).replace(/\D/g, "");
+                  if (pDigits.length >= 8 && (rawPhoneDigits.slice(-8) === pDigits.slice(-8) || rawPhoneDigits === pDigits)) {
+                    duplicateUserIds.push(pItem.id);
+                  }
+                }
+              }
+
+              if (duplicateUserIds.length > 0) {
+                const { data: ordersToMigrate } = await supabase.from("orders").select("id, store_id").in("user_id", duplicateUserIds);
+                if (ordersToMigrate && ordersToMigrate.length > 0) {
+                  const { error: migErr } = await supabase.from("orders").update({ user_id: user.id }).in("user_id", duplicateUserIds);
+                  if (!migErr) {
+                    migratedCount += ordersToMigrate.length;
+                    for (const oItem of ordersToMigrate) {
+                      if (oItem.store_id) {
+                        await supabase.from("customer_store_link").upsert({ user_id: user.id, store_id: oItem.store_id }, { onConflict: "user_id,store_id" }).catch(() => undefined);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // 1B. Buscar pedidos com metadados ou cache local
+          const { data: candidateOrders } = await supabase
+            .from("orders")
+            .select("id, pix_key, store_id, user_id")
+            .neq("user_id", user.id);
+
+          if (candidateOrders && candidateOrders.length > 0) {
+            const { getCustomerFromCache } = await import("@/lib/customerCache");
+
+            for (const orderItem of candidateOrders) {
+              let meta: any = null;
+
               if (orderItem.pix_key && typeof orderItem.pix_key === "string") {
                 try {
-                  let meta: any = null;
                   if (orderItem.pix_key.startsWith("GUEST:")) {
                     meta = JSON.parse(orderItem.pix_key.replace(/^GUEST:/, ""));
                   } else if (orderItem.pix_key.startsWith('{"manual_guest":true')) {
                     meta = JSON.parse(orderItem.pix_key);
                   }
-
-                  if (meta) {
-                    const customPixKey = meta.pix || meta.custom_pix || null;
-                    const metaPhoneDigits = meta.phone ? meta.phone.replace(/\D/g, "") : "";
-                    const metaEmail = (meta.email || "").toLowerCase().trim();
-                    const metaName = (meta.name || "").toLowerCase().trim();
-
-                    const phoneMatch = rawPhoneDigits.length >= 8 && metaPhoneDigits.length >= 8 &&
-                      (rawPhoneDigits.endsWith(metaPhoneDigits) || metaPhoneDigits.endsWith(rawPhoneDigits));
-                    const emailMatch = userEmail && metaEmail && userEmail === metaEmail;
-                    const nameMatch = lowerName && metaName && lowerName.length > 2 && lowerName === metaName;
-
-                    if (phoneMatch || emailMatch || nameMatch) {
-                      await supabase
-                        .from("orders")
-                        .update({ user_id: user.id, pix_key: customPixKey })
-                        .eq("id", orderItem.id);
-
-                      if (orderItem.store_id) {
-                        await supabase
-                          .from("customer_store_link")
-                          .upsert({ user_id: user.id, store_id: orderItem.store_id }, { onConflict: "user_id,store_id" })
-                          .then(() => undefined)
-                          .catch(() => undefined);
-                      }
-                    }
-                  }
                 } catch {}
               }
+
+              // Fallback pelo customerCache
+              if (!meta) {
+                const cached = getCustomerFromCache(orderItem.id) || getCustomerFromCache(orderItem.user_id);
+                if (cached) {
+                  meta = { name: cached.name, phone: cached.phone, email: cached.email };
+                }
+              }
+
+              if (meta) {
+                const customPixKey = meta.pix || meta.custom_pix || null;
+                const metaPhoneDigits = meta.phone ? String(meta.phone).replace(/\D/g, "") : "";
+                const metaEmail = (meta.email || "").toLowerCase().trim();
+                const metaName = (meta.name || "").toLowerCase().trim();
+
+                const phoneMatch = Boolean(
+                  rawPhoneDigits && metaPhoneDigits && (
+                    (rawPhoneDigits.length >= 8 && metaPhoneDigits.length >= 8 && rawPhoneDigits.slice(-8) === metaPhoneDigits.slice(-8)) ||
+                    rawPhoneDigits === metaPhoneDigits
+                  )
+                );
+                const emailMatch = Boolean(userEmail && metaEmail && userEmail === metaEmail);
+                const nameMatch = Boolean(lowerName && metaName && lowerName.length > 2 && lowerName === metaName);
+
+                if (phoneMatch || emailMatch || nameMatch) {
+                  const { error: updateErr } = await supabase
+                    .from("orders")
+                    .update({ user_id: user.id, pix_key: customPixKey })
+                    .eq("id", orderItem.id);
+
+                  if (!updateErr) {
+                    migratedCount++;
+                    if (orderItem.store_id) {
+                      await supabase
+                        .from("customer_store_link")
+                        .upsert({ user_id: user.id, store_id: orderItem.store_id }, { onConflict: "user_id,store_id" })
+                        .then(() => undefined)
+                        .catch(() => undefined);
+                    }
+                  }
+                }
+              }
             }
+          }
+
+          if (migratedCount > 0) {
+            const { toast } = await import("sonner");
+            toast.success(`${migratedCount} ${migratedCount === 1 ? "reserva vinculada" : "reservas vinculadas"} à sua conta!`);
           }
         } catch (err) {
           console.error("Erro na auto-migração do painel:", err);

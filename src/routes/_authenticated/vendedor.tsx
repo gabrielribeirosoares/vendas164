@@ -1560,18 +1560,48 @@ function ManualReservationDialog({
       return toast.error("Você é o dono da loja e não pode criar reservas em seu próprio nome. Escolha ou informe os dados de um cliente.");
     }
 
-    // Se o lojista não selecionou da lista, tenta encontrar o cadastro do cliente pelo telefone
+    // Se o lojista não selecionou da lista, tenta encontrar o cadastro do cliente pelo telefone ou email
     if (!clientId) {
+      const cleanPhoneDigits = cleanPhone.replace(/\D/g, "");
       const { data: foundProf } = await supabase
         .from("profiles")
-        .select("id")
-        .eq("phone", cleanPhone)
+        .select("id, phone")
+        .or(`phone.eq.${cleanPhone},phone.eq.55${cleanPhoneDigits},phone.eq.${cleanPhoneDigits}`)
         .maybeSingle();
 
       if (foundProf) {
         clientId = foundProf.id;
       } else {
-        clientId = crypto.randomUUID();
+        const { data: profilesList } = await supabase
+          .from("profiles")
+          .select("id, phone")
+          .not("phone", "is", null);
+
+        if (profilesList && profilesList.length > 0) {
+          const found = profilesList.find((p) => {
+            if (!p.phone) return false;
+            const pDigits = p.phone.replace(/\D/g, "");
+            return cleanPhoneDigits.length >= 8 && pDigits.length >= 8 &&
+              (cleanPhoneDigits.slice(-8) === pDigits.slice(-8) || cleanPhoneDigits === pDigits);
+          });
+          if (found) {
+            clientId = found.id;
+          }
+        }
+      }
+
+      // Se ainda não existir perfil cadastrado, insere um perfil convidado temporário na tabela profiles
+      if (!clientId) {
+        const guestId = crypto.randomUUID();
+        const { error: profErr } = await supabase.from("profiles").insert({
+          id: guestId,
+          name: cleanName,
+          phone: cleanPhone,
+        });
+
+        if (!profErr) {
+          clientId = guestId;
+        }
       }
     }
 
@@ -1625,8 +1655,8 @@ function ManualReservationDialog({
       }
 
       // 5. Inserir as reservas no banco
-      const isRegisteredUser = !!selectedUserId;
-      const effectiveUserId = isRegisteredUser ? selectedUserId : currentUser!.id;
+      const isRegisteredUser = Boolean(clientId && clientId !== currentUser?.id);
+      const effectiveUserId = clientId || currentUser!.id;
       const guestKeyString = !isRegisteredUser
         ? `GUEST:${JSON.stringify({ name: cleanName, phone: cleanPhone, pix: pixKey.trim() || null })}`
         : (pixKey.trim() || null);
@@ -1674,11 +1704,21 @@ function ManualReservationDialog({
         if (orderErr) throw orderErr;
       }
 
-      // 6. Atualizar estoque
+      // 6. Atualizar estoque e vincular loja ao cliente
       await supabase
         .from("products")
         .update({ stock: Math.max(0, product.stock - qtyToCreate) })
         .eq("id", product.id);
+
+      if (effectiveUserId) {
+        try {
+          await supabase
+            .from("customer_store_link")
+            .upsert({ user_id: effectiveUserId, store_id: storeId }, { onConflict: "user_id,store_id" });
+        } catch {
+          // Ignora se RLS ou constraint negar o vinculo
+        }
+      }
 
       queryClient.invalidateQueries();
       toast.success(qtyToCreate > 1 ? `${qtyToCreate} unidades vinculadas ao cliente ${cleanName}!` : `Reserva vinculada ao cliente ${cleanName}!`);

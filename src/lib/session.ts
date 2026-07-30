@@ -32,20 +32,45 @@ export function useSession() {
         if (Object.keys(updates).length > 0) {
           await supabase.from("profiles").update(updates).eq("id", u.id);
         }
-        return;
+      } else {
+        // Se não existe registro ainda, cria o registro inicial
+        const emailPrefix = u.email ? u.email.split("@")[0] : null;
+        const metaName = u.user_metadata?.name || u.user_metadata?.full_name;
+        const fallbackName = metaName && metaName.trim() ? metaName.trim() : (u.email || emailPrefix || "Cliente");
+
+        await supabase.from("profiles").insert({
+          id: u.id,
+          name: fallbackName,
+          email: u.email || null,
+          phone: u.user_metadata?.phone || null,
+        });
       }
 
-      // Se não existe registro ainda, cria o registro inicial
-      const emailPrefix = u.email ? u.email.split("@")[0] : null;
-      const metaName = u.user_metadata?.name || u.user_metadata?.full_name;
-      const fallbackName = metaName && metaName.trim() ? metaName.trim() : (u.email || emailPrefix || "Cliente");
-
-      await supabase.from("profiles").insert({
-        id: u.id,
-        name: fallbackName,
-        email: u.email || null,
-        phone: u.user_metadata?.phone || null,
-      });
+      // Migração automática de reservas anteriores pelo telefone (Tudo via RPC para contornar RLS)
+      const effectivePhone = existing?.phone || u.user_metadata?.phone;
+      if (effectivePhone) {
+        try {
+          const { error: rpcError } = await supabase.rpc("migrate_reservations_by_phone", {
+            p_new_user_id: u.id,
+            p_phone: effectivePhone,
+          });
+          if (rpcError) {
+            console.error("Erro ao rodar RPC de mesclagem:", rpcError);
+            if (typeof window !== "undefined") {
+              const { toast } = await import("sonner");
+              toast.error("Erro ao tentar migrar reservas antigas. Verifique a função no Supabase.");
+            }
+          } else {
+            console.log("Reservas sincronizadas com sucesso via RPC.");
+            if (typeof window !== "undefined") {
+              const { toast } = await import("sonner");
+              toast.success("Migração de reservas concluída com sucesso!");
+            }
+          }
+        } catch (e) {
+          console.error("Erro de exceção na RPC:", e);
+        }
+      }
     }
 
     supabase.auth.getSession().then(({ data }) => {
