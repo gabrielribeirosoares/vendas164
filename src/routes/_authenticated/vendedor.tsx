@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, CheckCircle2, Clock, Copy, Download, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Plus, Search, Share2, ShieldAlert, ShieldCheck, Trash2, Truck, XCircle, Users, Trophy } from "lucide-react";
+import { BookmarkCheck, CheckCircle2, Clock, Copy, Download, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Plus, Search, Share2, ShieldAlert, ShieldCheck, Trash2, Truck, XCircle, Users, Trophy, Star, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { PhoneInput, parsePhoneWithFlag } from "@/components/PhoneInput";
@@ -941,6 +941,11 @@ function ProductsTab({
                                 </Badge>
                               )}
                               <Badge variant="outline">{p.stock} {p.stock === 1 ? "unidade" : "unidades"}</Badge>
+                              {p.stock === 0 ? (
+                                <Badge variant="destructive" className="flex items-center gap-1"><AlertTriangle className="size-3" /> Esgotado</Badge>
+                              ) : p.stock <= 2 ? (
+                                <Badge variant="outline" className="border-red-500/50 text-red-600 bg-red-500/10 flex items-center gap-1"><Clock className="size-3" /> Últimas unidades!</Badge>
+                              ) : null}
                             </div>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
@@ -2124,7 +2129,11 @@ function OrdersTab({
       const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
       const effectiveStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
 
-      if (statusFilter !== "todos" && effectiveStatus !== statusFilter) {
+      if (statusFilter === "atrasado") {
+        if (effectiveStatus !== "aguardando_sinal") return false;
+        if (!o.reservation_expires_at) return false;
+        return new Date(o.reservation_expires_at) < new Date();
+      } else if (statusFilter !== "todos" && effectiveStatus !== statusFilter) {
         return false;
       }
       if (!searchQuery.trim()) return true;
@@ -2354,6 +2363,7 @@ function OrdersTab({
               <SelectItem value="todos">Todos os status</SelectItem>
               <SelectItem value="sem_sinal">Sem sinal / Pagar na chegada</SelectItem>
               <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
+              <SelectItem value="atrasado">Sinal Atrasado</SelectItem>
               <SelectItem value="sinal_pago">Sinal pago</SelectItem>
               <SelectItem value="quitado">Quitado</SelectItem>
               <SelectItem value="cancelado">Cancelados</SelectItem>
@@ -3512,6 +3522,19 @@ function ClientsTab({ orders }: { orders: OrderRow[] }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedClient, setSelectedClient] = useState<any>(null);
 
+  const [waTemplate, setWaTemplate] = useState(() => {
+    return localStorage.getItem("wa_template") || "Olá {{nome}}, tudo bem?";
+  });
+  const [configOpen, setConfigOpen] = useState(false);
+  const [tempWaTemplate, setTempWaTemplate] = useState(waTemplate);
+
+  function saveWaTemplate() {
+    setWaTemplate(tempWaTemplate);
+    localStorage.setItem("wa_template", tempWaTemplate);
+    setConfigOpen(false);
+    toast.success("Mensagem padrão salva!");
+  }
+
   const clientsMap = new Map<string, { profile: any, orders: OrderRow[], totalSpent: number, firstOrderDate: Date }>();
   const brandCountMap = new Map<string, number>();
 
@@ -3577,7 +3600,7 @@ function ClientsTab({ orders }: { orders: OrderRow[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2 mb-2">
+      <div className="grid gap-4 sm:grid-cols-3 mb-2">
         <Card className="panel border-border/60">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -3603,19 +3626,41 @@ function ClientsTab({ orders }: { orders: OrderRow[] }) {
             <p className="text-xs text-muted-foreground mt-1">cadastros realizados recentemente</p>
           </CardContent>
         </Card>
+
+        <Card className="panel border-border/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Star className="size-4 text-yellow-500" /> Top 3 Clientes
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5 mt-1">
+            {allClients.slice(0, 3).map((c, i) => (
+              <div key={c.orders[0].user_id} className="flex justify-between items-center text-xs">
+                <span className="truncate max-w-[120px] font-medium">{i+1}. {c.profile.name || 'Desconhecido'}</span>
+                <span className="text-green-600 dark:text-green-500 font-semibold">{brl(c.totalSpent)}</span>
+              </div>
+            ))}
+            {allClients.length === 0 && <p className="text-xs text-muted-foreground">Nenhum cliente ainda</p>}
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="panel border-border/60">
         <CardHeader className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between">
           <CardTitle className="text-lg">Meus Clientes ({allClients.length})</CardTitle>
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar cliente..."
-              className="pl-9"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          <div className="flex gap-2 w-full sm:w-auto">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar cliente..."
+                className="pl-9"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <Button variant="outline" onClick={() => { setTempWaTemplate(waTemplate); setConfigOpen(true); }} title="Configurar Mensagem WhatsApp" className="shrink-0 px-3">
+              <MessageCircle className="size-4 text-emerald-500" />
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -3644,7 +3689,20 @@ function ClientsTab({ orders }: { orders: OrderRow[] }) {
                       <TableCell>
                         <div className="flex flex-col text-xs text-muted-foreground">
                           <span>{c.profile.email || '-'}</span>
-                          <span>{c.profile.phone || '-'}</span>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span>{c.profile.phone || '-'}</span>
+                            {c.profile.phone && (
+                              <a 
+                                href={whatsappLink(c.profile.phone, waTemplate.replace(/\{\{nome\}\}/g, c.profile.name || 'Cliente'))} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                className="text-emerald-600 hover:text-emerald-700 hover:scale-110 transition-transform bg-emerald-500/10 p-1 rounded-md flex-shrink-0"
+                                title="Chamar no WhatsApp"
+                              >
+                                <MessageCircle className="size-3.5" />
+                              </a>
+                            )}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
@@ -3709,6 +3767,32 @@ function ClientsTab({ orders }: { orders: OrderRow[] }) {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={configOpen} onOpenChange={setConfigOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mensagem Padrão do WhatsApp</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Texto da Mensagem</Label>
+              <Textarea 
+                value={tempWaTemplate}
+                onChange={(e) => setTempWaTemplate(e.target.value)}
+                placeholder="Olá {{nome}}, tudo bem?"
+                rows={4}
+              />
+              <p className="text-xs text-muted-foreground">
+                Use <strong>{`{{nome}}`}</strong> para inserir o nome do cliente automaticamente na mensagem.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setConfigOpen(false)}>Cancelar</Button>
+              <Button onClick={saveWaTemplate}>Salvar</Button>
             </div>
           </div>
         </DialogContent>
