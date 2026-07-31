@@ -304,6 +304,9 @@ function AuthPage() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                     />
+                    <p className="text-[11px] text-muted-foreground leading-tight">
+                      A senha deve conter no mínimo 6 caracteres, incluindo letras maiúsculas, minúsculas e números.
+                    </p>
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
                     Criar conta
