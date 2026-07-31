@@ -583,6 +583,10 @@ const emptyProduct = {
   payment_deadline_date: "",
   payment_deadline_hours: "24",
   image_url: "",
+  bulk_discount_threshold: "",
+  bulk_discount_price: "",
+  bulk_has_installment_surcharge: "false",
+  bulk_installment_price: "",
 };
 
 function ProductsTab({
@@ -662,6 +666,10 @@ function ProductsTab({
       payment_deadline_hours: computedHours,
       stock: Number(form.stock || 0),
       image_url: form.image_url || null,
+      bulk_discount_threshold: (form as any).bulk_discount_threshold ? Number((form as any).bulk_discount_threshold) : null,
+      bulk_discount_price: (form as any).bulk_discount_price ? Number((form as any).bulk_discount_price) : null,
+      bulk_has_installment_surcharge: (form as any).bulk_has_installment_surcharge === "true",
+      bulk_installment_price: (form as any).bulk_has_installment_surcharge === "true" && (form as any).bulk_installment_price ? Number((form as any).bulk_installment_price) : null,
     };
 
     if (form.down_payment_amount !== "") {
@@ -670,15 +678,33 @@ function ProductsTab({
 
     let { error } = await supabase.from("products").insert(payload);
 
-    // Se a tabela remota do Supabase ainda não tiver as novas colunas
-    if (error) {
+    // Fallbacks progressivos para lidar com colunas ausentes no banco
+    if (error && (error.code === "PGRST204" || error.message?.includes("bulk_discount") || error.message?.includes("bulk_has_installment_surcharge") || error.message?.includes("bulk_installment_price") || (error as any).status === 400)) {
+      delete payload.bulk_discount_threshold;
+      delete payload.bulk_discount_price;
+      delete payload.bulk_has_installment_surcharge;
+      delete payload.bulk_installment_price;
+      const retry = await supabase.from("products").insert(payload);
+      error = retry.error;
+    }
+
+    if (error && (error.code === "PGRST204" || error.message?.includes("cost_price") || (error as any).status === 400)) {
+      delete payload.cost_price;
+      const retry = await supabase.from("products").insert(payload);
+      error = retry.error;
+    }
+
+    if (error && (error.code === "PGRST204" || error.message?.includes("max_installments") || error.message?.includes("has_installment_surcharge") || (error as any).status === 400)) {
       delete payload.max_installments;
       delete payload.price_2x;
       delete payload.installment_price;
       delete payload.has_installment_surcharge;
-      delete payload.payment_deadline_date;
-      delete payload.cost_price;
+      const retry = await supabase.from("products").insert(payload);
+      error = retry.error;
+    }
 
+    if (error) {
+      delete payload.payment_deadline_date;
       const retry1 = await supabase.from("products").insert(payload);
       error = retry1.error;
 
@@ -846,6 +872,71 @@ function ProductsTab({
                     onChange={(e) => setForm({ ...form, stock: e.target.value })}
                   />
                 </div>
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-border/60 bg-amber-500/5 p-3">
+                <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Desconto por Quantidade (Atacado)</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="bulk_threshold">A partir de (unidades)</Label>
+                    <Input
+                      id="bulk_threshold"
+                      type="number"
+                      min="2"
+                      placeholder="Ex: 3"
+                      value={(form as any).bulk_discount_threshold}
+                      onChange={(e) => setForm({ ...form, bulk_discount_threshold: e.target.value } as any)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="bulk_price">Novo Valor Unitário (R$)</Label>
+                    <Input
+                      id="bulk_price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Ex: 180"
+                      value={(form as any).bulk_discount_price}
+                      onChange={(e) => setForm({ ...form, bulk_discount_price: e.target.value } as any)}
+                    />
+                  </div>
+                </div>
+
+                {Number(form.max_installments) > 1 && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                      <div className="space-y-1.5">
+                        <Label>Condição de parcelamento (Atacado)</Label>
+                        <Select
+                          value={(form as any).bulk_has_installment_surcharge}
+                          onValueChange={(val) => setForm({ ...form, bulk_has_installment_surcharge: val } as any)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="false">Sem acréscimo (Mesmo valor)</SelectItem>
+                            <SelectItem value="true">Com acréscimo (Valor customizado)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    {(form as any).bulk_has_installment_surcharge === "true" && (
+                      <div className="space-y-1.5 pt-1 mt-3">
+                        <Label htmlFor="bulk_inst_price">Valor Total Parcelado no Atacado (R$)</Label>
+                        <Input
+                          id="bulk_inst_price"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="Ex: 200"
+                          value={(form as any).bulk_installment_price}
+                          onChange={(e) => setForm({ ...form, bulk_installment_price: e.target.value } as any)}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
               <div className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-3">
@@ -1150,6 +1241,10 @@ function EditProductDialog({
     payment_deadline_hours: "24",
     is_open: true,
     image_url: "",
+    bulk_discount_threshold: "",
+    bulk_discount_price: "",
+    bulk_has_installment_surcharge: "false",
+    bulk_installment_price: "",
   });
   const [saving, setSaving] = useState(false);
   const [isCustomBrand, setIsCustomBrand] = useState(false);
@@ -1185,6 +1280,10 @@ function EditProductDialog({
         payment_deadline_hours: product.payment_deadline_hours != null ? String(product.payment_deadline_hours) : "24",
         is_open: product.is_open ?? true,
         image_url: product.image_url ?? "",
+        bulk_discount_threshold: (product as any).bulk_discount_threshold != null ? String((product as any).bulk_discount_threshold) : "",
+        bulk_discount_price: (product as any).bulk_discount_price != null ? String((product as any).bulk_discount_price) : "",
+        bulk_has_installment_surcharge: (product as any).bulk_has_installment_surcharge ? "true" : "false",
+        bulk_installment_price: (product as any).bulk_installment_price != null ? String((product as any).bulk_installment_price) : "",
       });
       setIsCustomBrand(false);
     }
@@ -1228,6 +1327,10 @@ function EditProductDialog({
       stock: Number(form.stock || 0),
       is_open: form.is_open,
       image_url: form.image_url || null,
+      bulk_discount_threshold: (form as any).bulk_discount_threshold ? Number((form as any).bulk_discount_threshold) : null,
+      bulk_discount_price: (form as any).bulk_discount_price ? Number((form as any).bulk_discount_price) : null,
+      bulk_has_installment_surcharge: (form as any).bulk_has_installment_surcharge === "true",
+      bulk_installment_price: (form as any).bulk_has_installment_surcharge === "true" && (form as any).bulk_installment_price ? Number((form as any).bulk_installment_price) : null,
     };
 
     if (form.down_payment_amount !== "") {
@@ -1239,14 +1342,27 @@ function EditProductDialog({
       .update(payload)
       .eq("id", product.id);
 
-    // Fallbacks para bancos do Supabase que ainda não possuem todas as colunas de parcelamento/sinal
+    // Fallbacks progressivos para lidar com colunas ausentes no banco
+    if (error && (error.code === "PGRST204" || error.message?.includes("bulk_discount") || error.message?.includes("bulk_has_installment_surcharge") || error.message?.includes("bulk_installment_price") || (error as any).status === 400)) {
+      delete payload.bulk_discount_threshold;
+      delete payload.bulk_discount_price;
+      delete payload.bulk_has_installment_surcharge;
+      delete payload.bulk_installment_price;
+      const retry = await supabase.from("products").update(payload).eq("id", product.id);
+      error = retry.error;
+    }
+
+    if (error && (error.code === "PGRST204" || error.message?.includes("cost_price") || (error as any).status === 400)) {
+      delete payload.cost_price;
+      const retry = await supabase.from("products").update(payload).eq("id", product.id);
+      error = retry.error;
+    }
+
     if (error && (error.code === "PGRST204" || error.message?.includes("max_installments") || error.message?.includes("has_installment_surcharge") || (error as any).status === 400)) {
       delete payload.max_installments;
       delete payload.price_2x;
       delete payload.installment_price;
       delete payload.has_installment_surcharge;
-      delete payload.cost_price;
-
       const retry1 = await supabase.from("products").update(payload).eq("id", product.id);
       error = retry1.error;
     }
@@ -1404,6 +1520,71 @@ function EditProductDialog({
                 onChange={(e) => setForm({ ...form, stock: e.target.value })}
               />
             </div>
+          </div>
+
+          <div className="space-y-3 rounded-lg border border-border/60 bg-amber-500/5 p-3">
+            <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Desconto por Quantidade (Atacado)</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit_bulk_threshold">A partir de (unidades)</Label>
+                <Input
+                  id="edit_bulk_threshold"
+                  type="number"
+                  min="2"
+                  placeholder="Ex: 3"
+                  value={(form as any).bulk_discount_threshold}
+                  onChange={(e) => setForm({ ...form, bulk_discount_threshold: e.target.value } as any)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit_bulk_price">Novo Valor Unitário (R$)</Label>
+                <Input
+                  id="edit_bulk_price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Ex: 180"
+                  value={(form as any).bulk_discount_price}
+                  onChange={(e) => setForm({ ...form, bulk_discount_price: e.target.value } as any)}
+                />
+              </div>
+            </div>
+
+            {Number(form.max_installments) > 1 && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  <div className="space-y-1.5">
+                    <Label>Condição de parcelamento (Atacado)</Label>
+                    <Select
+                      value={(form as any).bulk_has_installment_surcharge}
+                      onValueChange={(val) => setForm({ ...form, bulk_has_installment_surcharge: val } as any)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="false">Sem acréscimo (Mesmo valor)</SelectItem>
+                        <SelectItem value="true">Com acréscimo (Valor customizado)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {(form as any).bulk_has_installment_surcharge === "true" && (
+                  <div className="space-y-1.5 pt-1 mt-3">
+                    <Label htmlFor="edit_bulk_inst_price">Valor Total Parcelado no Atacado (R$)</Label>
+                    <Input
+                      id="edit_bulk_inst_price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Ex: 200"
+                      value={(form as any).bulk_installment_price}
+                      onChange={(e) => setForm({ ...form, bulk_installment_price: e.target.value } as any)}
+                    />
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           <div className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-3">

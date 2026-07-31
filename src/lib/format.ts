@@ -42,14 +42,23 @@ export function formatDeadlineHours(hours: number | null | undefined): string {
   return `${days} ${days === 1 ? "dia" : "dias"} e ${remaining}h`;
 }
 
-export function getProductInstallmentInfo(product: any) {
+export function getProductInstallmentInfo(product: any, quantity: number = 1) {
   const maxInst = Number(product?.max_installments ?? 1);
   if (maxInst <= 1) return null;
 
-  const cashPrice = Number(product?.price ?? 0);
-  const instPriceRaw = product?.installment_price ?? product?.price_2x;
+  let cashPrice = Number(product?.price ?? 0);
+  let instPriceRaw = product?.installment_price ?? product?.price_2x;
+  let hasSurchargeFlag = product?.has_installment_surcharge === true;
+
+  const threshold = Number(product?.bulk_discount_threshold ?? 0);
+  if (threshold > 0 && quantity >= threshold && product?.bulk_discount_price != null) {
+    cashPrice = Number(product.bulk_discount_price);
+    instPriceRaw = product?.bulk_installment_price ?? null;
+    hasSurchargeFlag = product?.bulk_has_installment_surcharge === true;
+  }
+
   const hasSurcharge =
-    product?.has_installment_surcharge === true ||
+    hasSurchargeFlag ||
     (instPriceRaw != null && Number(instPriceRaw) > cashPrice);
 
   const totalPrice = hasSurcharge && instPriceRaw != null && Number(instPriceRaw) > 0
@@ -70,12 +79,20 @@ export function getProductInstallmentInfo(product: any) {
  * Ex: [{ value: 1, label: "À vista — R$ 100,00" }, { value: 2, label: "2x de R$ 51,00 (Total R$ 102,00)" }, ...]
  */
 export function getInstallmentOptions(product: any, quantity: number = 1): { value: number; label: string; totalPrice: number }[] {
-  const unitCashPrice = Number(product?.price ?? 0);
+  let unitCashPrice = Number(product?.price ?? 0);
   const maxInst = Number(product?.max_installments && Number(product.max_installments) > 0 ? product.max_installments : 12);
-  const instPriceRaw = product?.installment_price ?? product?.price_2x;
+  let instPriceRaw = product?.installment_price ?? product?.price_2x;
+  let hasSurchargeFlag = product?.has_installment_surcharge === true;
   
+  const threshold = Number(product?.bulk_discount_threshold ?? 0);
+  if (threshold > 0 && quantity >= threshold && product?.bulk_discount_price != null) {
+    unitCashPrice = Number(product.bulk_discount_price);
+    instPriceRaw = product?.bulk_installment_price ?? null;
+    hasSurchargeFlag = product?.bulk_has_installment_surcharge === true;
+  }
+
   const hasSurcharge =
-    product?.has_installment_surcharge === true ||
+    hasSurchargeFlag ||
     (instPriceRaw != null && Number(instPriceRaw) > unitCashPrice);
     
   const unitInstPrice = hasSurcharge && instPriceRaw != null && Number(instPriceRaw) > 0

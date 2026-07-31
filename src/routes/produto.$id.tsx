@@ -97,7 +97,9 @@ function ProductPage() {
         
         // Atualizar pedidos com número de parcelas escolhido e status se sem sinal
         if (orderIds.length > 0) {
-          const updatePayload: any = {};
+          const updatePayload: any = {
+            total_price: unitPriceForChosenOption
+          };
           if (selectedInstallment > 1) {
             updatePayload.installment_count = selectedInstallment;
           }
@@ -166,10 +168,10 @@ function ProductPage() {
   const isNoSignal = product.payment_deadline_hours === 0 || Number((product as any).down_payment_amount) === 0;
 
   // Cálculo de parcelamento e total com base no produto e quantidade selecionada
-  const installmentOptions = getInstallmentOptions(product);
+  const installmentOptions = getInstallmentOptions(product, quantity);
   const chosenInstallmentObj = installmentOptions.find((o) => o.value === selectedInstallment) ?? installmentOptions[0];
-  const unitPriceForChosenOption = chosenInstallmentObj.totalPrice;
-  const totalPriceCalculated = unitPriceForChosenOption * quantity;
+  const totalPriceCalculated = chosenInstallmentObj.totalPrice;
+  const unitPriceForChosenOption = totalPriceCalculated / quantity;
   const installmentValCalculated = selectedInstallment > 1 ? totalPriceCalculated / selectedInstallment : totalPriceCalculated;
 
   return (
@@ -210,14 +212,14 @@ function ProductPage() {
               <div className="flex items-baseline gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">À vista:</span>
                 <span className="font-display text-4xl font-bold text-primary">
-                  {brl(Number(product.price) * quantity)}
+                  {brl(installmentOptions[0].totalPrice)}
                 </span>
                 {quantity > 1 && (
-                  <span className="text-xs text-muted-foreground">({quantity}x {brl(Number(product.price))})</span>
+                  <span className="text-xs text-muted-foreground">({quantity}x {brl(installmentOptions[0].totalPrice / quantity)})</span>
                 )}
               </div>
               {(() => {
-                const inst = getProductInstallmentInfo(product);
+                const inst = getProductInstallmentInfo(product, quantity);
                 if (!inst) return null;
                 return (
                   <div className="flex flex-wrap items-center gap-2 pt-1 text-sm text-muted-foreground">
@@ -269,6 +271,16 @@ function ProductPage() {
                           ))}
                         </SelectContent>
                       </Select>
+                      {(product as any).bulk_discount_threshold > 0 && quantity < (product as any).bulk_discount_threshold && (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold pt-1">
+                          Desconto a partir de {(product as any).bulk_discount_threshold} unidades!
+                        </p>
+                      )}
+                      {(product as any).bulk_discount_threshold > 0 && quantity >= (product as any).bulk_discount_threshold && (
+                        <p className="text-[11px] text-green-600 dark:text-green-500 font-semibold pt-1">
+                          Desconto de atacado aplicado!
+                        </p>
+                      )}
                     </div>
 
                     {/* Seletor de Parcelamento */}
@@ -287,8 +299,8 @@ function ProductPage() {
                           {installmentOptions.map((opt) => (
                             <SelectItem key={opt.value} value={String(opt.value)}>
                               {opt.value === 1
-                                ? `À vista — ${brl(opt.totalPrice * quantity)}`
-                                : `${opt.value}x de ${brl((opt.totalPrice * quantity) / opt.value)}`}
+                                ? `À vista — ${brl(opt.totalPrice)}`
+                                : `${opt.value}x de ${brl(opt.totalPrice / opt.value)}`}
                             </SelectItem>
                           ))}
                         </SelectContent>

@@ -124,6 +124,10 @@ export type Database = {
           release_date: string | null
           scale: string
           stock: number
+          bulk_discount_threshold?: number | null
+          bulk_discount_price?: number | null
+          bulk_has_installment_surcharge?: boolean | null
+          bulk_installment_price?: number | null
           store_id: string
         }
         Insert: {
@@ -143,6 +147,10 @@ export type Database = {
           release_date?: string | null
           scale?: string
           stock?: number
+          bulk_discount_threshold?: number | null
+          bulk_discount_price?: number | null
+          bulk_has_installment_surcharge?: boolean | null
+          bulk_installment_price?: number | null
           store_id: string
         }
         Update: {
@@ -162,6 +170,10 @@ export type Database = {
           release_date?: string | null
           scale?: string
           stock?: number
+          bulk_discount_threshold?: number | null
+          bulk_discount_price?: number | null
+          bulk_has_installment_surcharge?: boolean | null
+          bulk_installment_price?: number | null
           store_id?: string
         }
         Relationships: [
