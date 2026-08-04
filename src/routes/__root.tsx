@@ -79,13 +79,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "MiniPré — Pré-vendas de miniaturas" },
+      { title: "Vendas 1:64 — Pré-vendas de miniaturas" },
       {
         name: "description",
         content: "Plataforma de pré-vendas, estoque e financeiro para lojas de miniaturas.",
       },
       { property: "og:type", content: "website" },
-      { property: "og:title", content: "MiniPré — Pré-vendas de miniaturas" },
+      { property: "og:title", content: "Vendas 1:64 — Pré-vendas de miniaturas" },
       { property: "og:description", content: "Plataforma de pré-vendas, estoque e financeiro para lojas de miniaturas." },
       { property: "og:image", content: "https://vendas164.com.br/og-image.png" },
       { property: "og:image:width", content: "1200" },

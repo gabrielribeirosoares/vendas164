@@ -450,7 +450,7 @@ function CustomerDashboard() {
                                 <Countdown expiresAt={o.reservation_expires_at} />
                               ) : (currentPaymentStatus === "sem_sinal" || currentPaymentStatus === "pagar_na_chegada") && (o.products as any)?.release_date ? (
                                 <span className="text-xs text-muted-foreground font-mono">
-                                  Pagar na chegada ({new Date((o.products as any).release_date + "T00:00:00").toLocaleDateString("pt-BR")})
+                                  Pagar na chegada ({new Date((o.products as any).release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })})
                                 </span>
                               ) : null}
                             </>

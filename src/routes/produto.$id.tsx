@@ -17,12 +17,12 @@ import { joinWaitlist, reservationErrorMessage, reserveQuota } from "@/lib/reser
 export const Route = createFileRoute("/produto/$id")({
   head: () => ({
     meta: [
-      { title: "Pré-venda de miniatura — MiniPré" },
+      { title: "Pré-venda de miniatura — Vendas 1:64" },
       {
         name: "description",
         content: "Detalhes da pré-venda: preço, unidades disponíveis, prazo do sinal e reserva.",
       },
-      { property: "og:title", content: "Pré-venda de miniatura — MiniPré" },
+      { property: "og:title", content: "Pré-venda de miniatura — Vendas 1:64" },
       { property: "og:description", content: "Reserve sua unidade desta miniatura colecionável." },
     ],
   }),
@@ -341,7 +341,7 @@ function ProductPage() {
                   <CalendarDays className="size-4 text-primary" />
                   Previsão de chegada:{" "}
                   {product.release_date
-                    ? new Date(product.release_date + "T00:00:00").toLocaleDateString("pt-BR")
+                    ? new Date(product.release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })
                     : "a definir"}
                 </p>
               </CardContent>

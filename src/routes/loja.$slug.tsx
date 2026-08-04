@@ -15,12 +15,12 @@ import { saveCustomerToCache } from "@/lib/customerCache";
 export const Route = createFileRoute("/loja/$slug")({
   head: ({ params }) => ({
     meta: [
-      { title: `Loja ${params.slug} — pré-vendas de miniaturas | MiniPré` },
+      { title: `Loja ${params.slug} — pré-vendas de miniaturas | Vendas 1:64` },
       {
         name: "description",
         content: `Veja as pré-vendas abertas e reserve sua cota na loja ${params.slug}.`,
       },
-      { property: "og:title", content: `Loja ${params.slug} — MiniPré` },
+      { property: "og:title", content: `Loja ${params.slug} — Vendas 1:64` },
       { property: "og:description", content: "Pré-vendas abertas de miniaturas colecionáveis." },
     ],
   }),

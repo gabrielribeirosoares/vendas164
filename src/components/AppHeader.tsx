@@ -125,7 +125,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                 <span className="flex size-8 sm:size-9 items-center justify-center rounded-xl bg-primary/15 text-primary shrink-0">
                   <Car className="size-4 sm:size-5" />
                 </span>
-                <span className="font-display text-base sm:text-lg font-bold tracking-tight">MiniPré</span>
+                <span className="font-display text-base sm:text-lg font-bold tracking-tight">Vendas 1:64</span>
               </>
             )}
           </Link>

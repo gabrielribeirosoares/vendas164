@@ -661,7 +661,7 @@ function ProductsTab({
       has_installment_surcharge: hasSurcharge,
       installment_price: instPrice,
       price_2x: maxInst === 2 ? instPrice : null,
-      release_date: form.release_date || null,
+      release_date: form.release_date ? (form.release_date.length === 7 ? form.release_date + "-01" : form.release_date) : null,
       payment_deadline_date: form.payment_deadline_date || null,
       payment_deadline_hours: computedHours,
       stock: Number(form.stock || 0),
@@ -1017,7 +1017,7 @@ function ProductsTab({
                   <Label htmlFor="release">Data estimada</Label>
                   <Input
                     id="release"
-                    type="date"
+                    type="month"
                     value={form.release_date}
                     onChange={(e) => setForm({ ...form, release_date: e.target.value })}
                   />
@@ -1274,7 +1274,7 @@ function EditProductDialog({
         has_surcharge: rawHasSurcharge ? "true" : "false",
         installment_price: rawInstPrice != null ? String(rawInstPrice) : "",
         down_payment_amount: rawVal != null ? String(rawVal) : "",
-        release_date: product.release_date ?? "",
+        release_date: product.release_date ? product.release_date.substring(0, 7) : "",
         stock: product.stock != null ? String(product.stock) : "1",
         payment_deadline_date: rawDeadlineDate ?? "",
         payment_deadline_hours: product.payment_deadline_hours != null ? String(product.payment_deadline_hours) : "24",
@@ -1321,7 +1321,7 @@ function EditProductDialog({
       has_installment_surcharge: hasSurcharge,
       installment_price: instPrice,
       price_2x: maxInst === 2 ? instPrice : null,
-      release_date: form.release_date || null,
+      release_date: form.release_date ? (form.release_date.length === 7 ? form.release_date + "-01" : form.release_date) : null,
       payment_deadline_date: form.payment_deadline_date || null,
       payment_deadline_hours: computedHours,
       stock: Number(form.stock || 0),
@@ -1666,7 +1666,7 @@ function EditProductDialog({
               <Label htmlFor="edit-release">Data estimada</Label>
               <Input
                 id="edit-release"
-                type="date"
+                type="month"
                 value={form.release_date}
                 onChange={(e) => setForm({ ...form, release_date: e.target.value })}
               />
@@ -2852,7 +2852,7 @@ function OrdersTab({
                         <div className="text-xs text-right">
                           <span className="font-semibold text-purple-600 dark:text-purple-400 block text-[11px]">Pagar na chegada</span>
                           <span className="text-muted-foreground font-mono text-[10px]">
-                            {new Date((o.products as any).release_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                            {new Date((o.products as any).release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}
                           </span>
                         </div>
                       ) : null}
@@ -3070,7 +3070,7 @@ function OrdersTab({
                       <div className="flex flex-col text-xs">
                         <span className="font-semibold text-purple-600 dark:text-purple-400">Na chegada</span>
                         <span className="text-muted-foreground font-mono">
-                          {new Date((o.products as any).release_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                          {new Date((o.products as any).release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}
                         </span>
                       </div>
                     ) : (

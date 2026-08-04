@@ -218,7 +218,7 @@ function AuthPage() {
         <Card className="w-full max-w-md panel border-border/60">
           <CardHeader>
             <CardTitle className="text-2xl">
-              {invitedStore?.name ? `Acesse ${invitedStore.name}` : "Acesse a MiniPré"}
+              {invitedStore?.name ? `Acesse ${invitedStore.name}` : "Acesse Vendas 1:64"}
             </CardTitle>
             <CardDescription>
               {invitedStore?.name
