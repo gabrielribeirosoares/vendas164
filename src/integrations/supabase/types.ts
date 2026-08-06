@@ -129,6 +129,7 @@ export type Database = {
           bulk_has_installment_surcharge?: boolean | null
           bulk_installment_price?: number | null
           store_id: string
+          slug: string | null
         }
         Insert: {
           brand: string
@@ -152,6 +153,7 @@ export type Database = {
           bulk_has_installment_surcharge?: boolean | null
           bulk_installment_price?: number | null
           store_id: string
+          slug?: string | null
         }
         Update: {
           brand?: string
@@ -175,6 +177,7 @@ export type Database = {
           bulk_has_installment_surcharge?: boolean | null
           bulk_installment_price?: number | null
           store_id?: string
+          slug?: string | null
         }
         Relationships: [
           {

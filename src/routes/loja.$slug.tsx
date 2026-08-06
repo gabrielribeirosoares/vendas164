@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, Outlet, useMatchRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookmarkCheck, Check, Copy, Package, Store as StoreIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -30,9 +30,12 @@ export const Route = createFileRoute("/loja/$slug")({
 });
 
 function StorePage() {
+  const matchRoute = useMatchRoute();
+  const isProductPage = matchRoute({ to: "/loja/$slug/$itemSlug", fuzzy: true });
+
   return (
     <ErrorBoundary>
-      <StorePageContent />
+      {isProductPage ? <Outlet /> : <StorePageContent />}
     </ErrorBoundary>
   );
 }
@@ -149,6 +152,40 @@ function StorePageContent() {
     toast.success("Link de convite copiado!");
   }
 
+  const store = data?.store;
+  const products = data?.products ?? [];
+  const isOwner = !!(user && store?.owner_id === user.id);
+  const storeStatus = (store as any)?.status || "active";
+
+  // Extração de marcas e escalas disponíveis
+  const availableScales = useMemo(() =>
+    Array.from(
+      new Set(products.map((p) => p.scale).filter(Boolean)),
+    ).sort(),
+    [products]);
+
+  const filteredProducts = useMemo(() => products.filter((p) => {
+    if (!p.is_open) return false;
+    const matchBrand = selectedBrand === "all" || (p.brand || "Outros").trim() === selectedBrand;
+    const matchScale = selectedScale === "all" || p.scale === selectedScale;
+    return matchBrand && matchScale;
+  }), [products, selectedBrand, selectedScale]);
+
+  // Agrupamento por marca
+  const brandsMap = useMemo(() => {
+    const map: Record<string, typeof products> = {};
+    for (const p of filteredProducts) {
+      const brandName = (p.brand || "Outros").trim();
+      if (!map[brandName]) map[brandName] = [];
+      map[brandName].push(p);
+    }
+    return map;
+  }, [filteredProducts]);
+
+  const brandList = useMemo(() => Object.keys(brandsMap).sort((a, b) => a.localeCompare(b)), [brandsMap]);
+  const filteredBrands = useMemo(() => selectedBrand === "all" ? brandList : brandList.filter((b) => b === selectedBrand), [brandList, selectedBrand]);
+
+
   if (isLoading) {
     return (
       <div className="min-h-screen">
@@ -171,7 +208,7 @@ function StorePageContent() {
     );
   }
 
-  if (!data?.store) {
+  if (!store) {
     return (
       <div className="min-h-screen">
         <AppHeader />
@@ -179,10 +216,6 @@ function StorePageContent() {
       </div>
     );
   }
-
-  const { store, products } = data;
-  const isOwner = !!(user && store.owner_id === user.id);
-  const storeStatus = (store as any).status || "active";
 
   // Se a loja ainda estiver pendente ou tiver sido recusada (e quem está vendo não é o próprio dono da loja)
   if (storeStatus !== "active" && !isOwner) {
@@ -206,32 +239,6 @@ function StorePageContent() {
     );
   }
 
-  // Extração de marcas e escalas disponíveis
-  const availableScales = useMemo(() =>
-    Array.from(
-      new Set((products ?? []).map((p) => p.scale).filter(Boolean)),
-    ).sort(),
-    [products]);
-
-  const filteredProducts = useMemo(() => (products ?? []).filter((p) => {
-    const matchBrand = selectedBrand === "all" || (p.brand || "Outros").trim() === selectedBrand;
-    const matchScale = selectedScale === "all" || p.scale === selectedScale;
-    return matchBrand && matchScale;
-  }), [products, selectedBrand, selectedScale]);
-
-  // Agrupamento por marca
-  const brandsMap = useMemo(() => {
-    const map: Record<string, typeof products> = {};
-    for (const p of filteredProducts) {
-      const brandName = (p.brand || "Outros").trim();
-      if (!map[brandName]) map[brandName] = [];
-      map[brandName].push(p);
-    }
-    return map;
-  }, [filteredProducts]);
-
-  const brandList = useMemo(() => Object.keys(brandsMap).sort((a, b) => a.localeCompare(b)), [brandsMap]);
-  const filteredBrands = useMemo(() => selectedBrand === "all" ? brandList : brandList.filter((b) => b === selectedBrand), [brandList, selectedBrand]);
 
   return (
     <div className="min-h-screen">
@@ -383,7 +390,7 @@ className={`rounded-full px-4 py-2 text-xs font-semibold transition-all ${
 
 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                    {brandProducts.map((p) => (
-                     <Link key={p.id} to="/produto/$id" params={{ id: p.id }} className="group">
+                     <Link key={p.id} to="/loja/$slug/$itemSlug" params={{ slug: p.stores?.slug ?? slug ?? "loja", itemSlug: p.slug || p.id }} className="group">
                        <Card className="flex h-full flex-col overflow-hidden border-border/60 panel transition-transform group-hover:-translate-y-1">
                          <div className="relative aspect-video w-full overflow-hidden bg-muted">
                            {p.image_url ? (

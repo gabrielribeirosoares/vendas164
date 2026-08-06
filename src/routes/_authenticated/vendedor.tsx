@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookmarkCheck, CheckCircle2, Clock, Copy, Download, Filter, Loader2, MessageCircle, Package, Palette, Pencil, Plus, Search, Share2, ShieldAlert, ShieldCheck, Trash2, Truck, XCircle, Users, Trophy, Star, AlertTriangle } from "lucide-react";
@@ -38,10 +38,10 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, formatDeadlineHours, formatOrderPaymentCondition, getInstallmentOptions, getProductInstallmentInfo, slugify, whatsappLink } from "@/lib/format";
+import { brl, formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo, slugify, whatsappLink } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { uploadImage } from "@/lib/upload";
-import { reserveQuota, reservationErrorMessage } from "@/lib/reservations";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { DEFAULT_PRESET_BRANDS, getStoreBrands, saveStoreBrands } from "@/lib/brands";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -377,7 +377,7 @@ function SellerDashboard() {
             <h1 className="text-2xl font-bold">{store.name}</h1>
             <p className="text-sm text-muted-foreground">/loja/{store.slug}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             {isAdmin && (
               <Button
                 variant={activeTab === "admin_moderation" ? "default" : "outline"}
@@ -666,6 +666,7 @@ function ProductsTab({
       payment_deadline_hours: computedHours,
       stock: Number(form.stock || 0),
       image_url: form.image_url || null,
+      slug: slugify(form.model.trim()),
       bulk_discount_threshold: (form as any).bulk_discount_threshold ? Number((form as any).bulk_discount_threshold) : null,
       bulk_discount_price: (form as any).bulk_discount_price ? Number((form as any).bulk_discount_price) : null,
       bulk_has_installment_surcharge: (form as any).bulk_has_installment_surcharge === "true",
@@ -1327,6 +1328,7 @@ function EditProductDialog({
       stock: Number(form.stock || 0),
       is_open: form.is_open,
       image_url: form.image_url || null,
+      slug: slugify(form.model.trim()),
       bulk_discount_threshold: (form as any).bulk_discount_threshold ? Number((form as any).bulk_discount_threshold) : null,
       bulk_discount_price: (form as any).bulk_discount_price ? Number((form as any).bulk_discount_price) : null,
       bulk_has_installment_surcharge: (form as any).bulk_has_installment_surcharge === "true",
@@ -2392,6 +2394,9 @@ function OrdersTab({
   const [searchQuery, setSearchQuery] = useState("");
   const [paymentFilter, setPaymentFilter] = useState<string>("todos");
   const [deliveryFilter, setDeliveryFilter] = useState<string>("todos");
+
+  const parentRef = useRef<HTMLDivElement>(null);
+
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [trackingDrafts, setTrackingDrafts] = useState<Record<string, string>>({});
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
@@ -2587,11 +2592,18 @@ function OrdersTab({
     }
   }
 
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 350,
+    overscan: 5,
+  });
+
   return (
     <Card className="border-border/60 panel">
       {/* BARRA DE PESQUISA E FILTROS DE CLIENTE / WHATSAPP / STATUS */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 p-4">
-        <div className="relative flex-1 min-w-[240px]">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border/60 p-4">
+        <div className="relative w-full sm:flex-1 sm:min-w-[240px]">
           <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por cliente, Nº do pedido (#id), WhatsApp, miniatura..."
@@ -2603,7 +2615,7 @@ function OrdersTab({
             className="pl-9 h-9 text-sm"
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button
             size="sm"
             variant="outline"
@@ -2689,8 +2701,17 @@ function OrdersTab({
 
       <CardContent className="p-0">
         {/* VISÃO PARA CELULAR (CARDS INDIVIDUAIS COM ESPAÇAMENTO CLARO) */}
-        <div className="md:hidden space-y-4 p-4 bg-muted/20">
-          {rows.map((item) => {
+        <div ref={parentRef} className="md:hidden bg-muted/20 h-[65dvh] overflow-y-auto px-4">
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize() + 32}px`,
+              width: '100%',
+              position: 'relative',
+              marginTop: '16px'
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const item = rows[virtualRow.index];
             const { order: o, quantity, ids } = item;
             const groupId = ids[0];
             let guestMeta: { name?: string; phone?: string } | null = null;
@@ -2713,7 +2734,14 @@ function OrdersTab({
             const clientPhone = guestMeta?.phone || o.profiles?.phone || cached?.phone;
 
             return (
-              <div key={groupId} className="rounded-2xl border border-border/70 bg-card p-4 space-y-3.5 shadow-sm">
+              <div 
+                key={virtualRow.key} 
+                data-index={virtualRow.index}
+                ref={rowVirtualizer.measureElement}
+                className="pb-4"
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${virtualRow.start}px)` }}
+              >
+                <div className="rounded-2xl border border-border/70 bg-card p-4 space-y-3.5 shadow-sm">
                 {/* Cliente e WhatsApp */}
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -2724,7 +2752,6 @@ function OrdersTab({
                     <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{groupId.slice(0, 8)}</p>
                   </div>
                   {clientPhone ? (() => {
-                    const parsed = parsePhoneWithFlag(clientPhone);
                     return (
                       <a
                         href={whatsappLink(clientPhone, getOrderSummaryMessage(o, quantity, displayName))}
@@ -2879,8 +2906,10 @@ function OrdersTab({
                   </Button>
                 </div>
               </div>
+              </div>
             );
           })}
+          </div>
 
           {rows.length === 0 && (
             <p className="p-8 text-center text-sm text-muted-foreground">Nenhuma reserva encontrada.</p>
@@ -4066,7 +4095,7 @@ function ClientsTab({ orders }: { orders: OrderRow[] }) {
             <div className="space-y-3">
               {(() => {
                 const grouped = new Map<string, { order: OrderRow; quantity: number }>();
-                selectedClient?.orders.forEach(order => {
+                selectedClient?.orders.forEach((order: OrderRow) => {
                   const key = `${order.product_id}_${order.payment_status}`;
                   if (grouped.has(key)) {
                     grouped.get(key)!.quantity += 1;

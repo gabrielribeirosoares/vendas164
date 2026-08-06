@@ -691,7 +691,7 @@ function CustomerDashboardContent() {
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {(feed?.products ?? []).map((p: any) => (
-                <Link key={p.id} to="/produto/$id" params={{ id: p.id }} className="group">
+                <Link key={p.id} to="/loja/$slug/$itemSlug" params={{ slug: p.stores?.slug ?? "loja", itemSlug: p.slug || p.id }} className="group">
                   <Card className="flex h-full flex-col overflow-hidden border-border/60 panel transition-transform group-hover:-translate-y-1">
                     <div className="relative aspect-video w-full overflow-hidden bg-muted">
                       {p.image_url ? (

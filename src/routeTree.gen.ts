@@ -19,6 +19,7 @@ import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedVendedorRouteImport } from './routes/_authenticated/vendedor'
 import { Route as LojaSlugRouteImport } from './routes/loja.$slug'
 import { Route as ProdutoIdRouteImport } from './routes/produto.$id'
+import { Route as LojaSlugItemSlugRouteImport } from './routes/loja.$slug.$itemSlug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -69,6 +70,11 @@ const ProdutoIdRoute = ProdutoIdRouteImport.update({
   path: '/produto/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LojaSlugItemSlugRoute = LojaSlugItemSlugRouteImport.update({
+  id: '/$itemSlug',
+  path: '/$itemSlug',
+  getParentRoute: () => LojaSlugRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -78,8 +84,9 @@ export interface FileRoutesByFullPath {
   '/termos': typeof TermosRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/vendedor': typeof AuthenticatedVendedorRoute
-  '/loja/$slug': typeof LojaSlugRoute
+  '/loja/$slug': typeof LojaSlugRouteWithChildren
   '/produto/$id': typeof ProdutoIdRoute
+  '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -89,8 +96,9 @@ export interface FileRoutesByTo {
   '/termos': typeof TermosRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/vendedor': typeof AuthenticatedVendedorRoute
-  '/loja/$slug': typeof LojaSlugRoute
+  '/loja/$slug': typeof LojaSlugRouteWithChildren
   '/produto/$id': typeof ProdutoIdRoute
+  '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -102,8 +110,9 @@ export interface FileRoutesById {
   '/termos': typeof TermosRoute
   '/_authenticated/painel': typeof AuthenticatedPainelRoute
   '/_authenticated/vendedor': typeof AuthenticatedVendedorRoute
-  '/loja/$slug': typeof LojaSlugRoute
+  '/loja/$slug': typeof LojaSlugRouteWithChildren
   '/produto/$id': typeof ProdutoIdRoute
+  '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/vendedor'
     | '/loja/$slug'
     | '/produto/$id'
+    | '/loja/$slug/$itemSlug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -128,6 +138,7 @@ export interface FileRouteTypes {
     | '/vendedor'
     | '/loja/$slug'
     | '/produto/$id'
+    | '/loja/$slug/$itemSlug'
   id:
     | '__root__'
     | '/'
@@ -140,6 +151,7 @@ export interface FileRouteTypes {
     | '/_authenticated/vendedor'
     | '/loja/$slug'
     | '/produto/$id'
+    | '/loja/$slug/$itemSlug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -149,7 +161,7 @@ export interface RootRouteChildren {
   PrivacidadeRoute: typeof PrivacidadeRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermosRoute: typeof TermosRoute
-  LojaSlugRoute: typeof LojaSlugRoute
+  LojaSlugRoute: typeof LojaSlugRouteWithChildren
   ProdutoIdRoute: typeof ProdutoIdRoute
 }
 
@@ -225,6 +237,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProdutoIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/loja/$slug/$itemSlug': {
+      id: '/loja/$slug/$itemSlug'
+      path: '/$itemSlug'
+      fullPath: '/loja/$slug/$itemSlug'
+      preLoaderRoute: typeof LojaSlugItemSlugRouteImport
+      parentRoute: typeof LojaSlugRoute
+    }
   }
 }
 
@@ -241,6 +260,18 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
+interface LojaSlugRouteChildren {
+  LojaSlugItemSlugRoute: typeof LojaSlugItemSlugRoute
+}
+
+const LojaSlugRouteChildren: LojaSlugRouteChildren = {
+  LojaSlugItemSlugRoute: LojaSlugItemSlugRoute,
+}
+
+const LojaSlugRouteWithChildren = LojaSlugRoute._addFileChildren(
+  LojaSlugRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
@@ -248,7 +279,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacidadeRoute: PrivacidadeRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermosRoute: TermosRoute,
-  LojaSlugRoute: LojaSlugRoute,
+  LojaSlugRoute: LojaSlugRouteWithChildren,
   ProdutoIdRoute: ProdutoIdRoute,
 }
 export const routeTree = rootRouteImport

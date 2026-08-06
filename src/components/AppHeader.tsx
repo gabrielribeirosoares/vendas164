@@ -137,7 +137,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
             {!loading && user ? (
               <>
                 <Button asChild variant="ghost" size="sm" data-tour="header-reservas" className="px-2 sm:px-3 text-xs sm:text-sm">
-                  <Link to="/painel">
+                  <Link to="/painel" preload="intent">
                     <span className="hidden sm:inline">Minhas reservas</span>
                     <span className="sm:hidden">Reservas</span>
                   </Link>
@@ -172,7 +172,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                 )}
 
                 <Button asChild variant="secondary" size="sm" data-tour="header-minha-loja" className="px-2 sm:px-3 text-xs sm:text-sm">
-                  <Link to="/vendedor">
+                  <Link to="/vendedor" preload="intent">
                     <span className="hidden sm:inline">Minha loja</span>
                     <span className="sm:hidden">Loja</span>
                   </Link>
@@ -205,7 +205,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
               <div className="flex items-center gap-2">
                 <TourTriggerButton />
                 <Button asChild size="sm">
-                  <Link to="/auth">Entrar</Link>
+                  <Link to="/auth" preload="intent">Entrar</Link>
                 </Button>
               </div>
             )}
