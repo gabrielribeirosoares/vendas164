@@ -308,7 +308,7 @@ function StorePageContent() {
               <button
                 type="button"
                 onClick={() => setSelectedScale("all")}
-                className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all border ${
+                className={`rounded-lg px-3 py-2 text-xs font-semibold transition-all border ${
                   selectedScale === "all"
                     ? "bg-primary text-primary-foreground border-primary shadow-sm"
                     : "bg-muted/40 text-muted-foreground border-border/60 hover:bg-muted"
@@ -321,7 +321,7 @@ function StorePageContent() {
                   type="button"
                   key={scale}
                   onClick={() => setSelectedScale(scale)}
-                  className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all border ${
+                  className={`rounded-lg px-3 py-2 text-xs font-semibold transition-all border ${
                     selectedScale === scale
                       ? "bg-primary text-primary-foreground border-primary shadow-sm"
                       : "bg-muted/40 text-muted-foreground border-border/60 hover:bg-muted"
@@ -340,11 +340,11 @@ function StorePageContent() {
               <button
                 type="button"
                 onClick={() => setSelectedBrand("all")}
-                className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
-                  selectedBrand === "all"
-                    ? "text-white shadow-md scale-105"
-                    : "bg-muted/70 text-muted-foreground hover:bg-muted"
-                }`}
+className={`rounded-full px-4 py-2 text-xs font-semibold transition-all ${
+                   selectedBrand === "all"
+                     ? "text-white shadow-md scale-105"
+                     : "bg-muted/70 text-muted-foreground hover:bg-muted"
+                 }`}
                 style={selectedBrand === "all" ? { backgroundColor: store.primary_color } : undefined}
               >
                 Todas ({filteredProducts.length})
@@ -354,11 +354,11 @@ function StorePageContent() {
                   type="button"
                   key={brand}
                   onClick={() => setSelectedBrand(brand)}
-                  className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
-                    selectedBrand === brand
-                      ? "text-white shadow-md scale-105"
-                      : "bg-muted/70 text-muted-foreground hover:bg-muted"
-                  }`}
+className={`rounded-full px-4 py-2 text-xs font-semibold transition-all ${
+                     selectedBrand === brand
+                       ? "text-white shadow-md scale-105"
+                       : "bg-muted/70 text-muted-foreground hover:bg-muted"
+                   }`}
                   style={selectedBrand === brand ? { backgroundColor: store.primary_color } : undefined}
                 >
                   {brand} ({brandsMap[brand].length})

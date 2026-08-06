@@ -759,7 +759,7 @@ function ProductsTab({
           </CardHeader>
           <CardContent>
             <form onSubmit={submit} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="brand">Marca</Label>
                   <Select
@@ -1012,7 +1012,7 @@ function ProductsTab({
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="release">Data estimada</Label>
                   <Input
@@ -1406,7 +1406,7 @@ function EditProductDialog({
           <DialogTitle>Editar pré-venda</DialogTitle>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3 pt-2">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="edit-brand">Marca</Label>
               <Select
@@ -1661,7 +1661,7 @@ function EditProductDialog({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="edit-release">Data estimada</Label>
               <Input
@@ -2081,7 +2081,7 @@ function ManualReservationDialog({
             const totalPrice = unitPrice * manualQuantity;
 
             return (
-              <div className="grid grid-cols-2 gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs">
                 <div className="space-y-1">
                   <Label htmlFor="manual-qty" className="text-xs font-semibold">Quantidade de Unidades</Label>
                   <Select

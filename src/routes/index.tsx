@@ -35,7 +35,7 @@ function Home() {
 
         <main className="flex-1">
           <section className="hero-surface border-b border-border/60">
-            <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 md:grid-cols-2 md:items-center md:py-20">
+            <div className="mx-auto grid max-w-6xl gap-6 px-4 py-10 md:grid-cols-2 md:items-center md:py-20">
               <div>
                 <Badge variant="outline" className="border-primary/40 text-primary">
                   Plataforma 1/64
@@ -69,7 +69,7 @@ function Home() {
             </div>
           </section>
 
-          <section className="mx-auto max-w-6xl px-4 py-14 pb-20">
+          <section className="mx-auto max-w-6xl px-4 py-10 pb-16">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 { icon: Package, title: "Cotas e estoque", text: "Controle quantas peças restam em cada pré-venda." },

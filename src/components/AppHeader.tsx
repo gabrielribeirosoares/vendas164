@@ -119,7 +119,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                     {currentStore.name ? currentStore.name[0].toUpperCase() : "L"}
                   </span>
                 )}
-                <span className="font-display text-sm sm:text-lg font-bold tracking-tight truncate max-w-[90px] xs:max-w-[120px] sm:max-w-xs">
+                <span className="font-display text-sm sm:text-lg font-bold tracking-tight truncate max-w-[140px] sm:max-w-xs">
                   {currentStore.name}
                 </span>
               </>
@@ -133,10 +133,10 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
             )}
           </Link>
 
-          <nav className="flex items-center gap-0.5 sm:gap-1.5 shrink-0">
+          <nav className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {!loading && user ? (
               <>
-                <Button asChild variant="ghost" size="sm" data-tour="header-reservas" className="px-1.5 sm:px-3 text-xs sm:text-sm">
+                <Button asChild variant="ghost" size="sm" data-tour="header-reservas" className="px-2 sm:px-3 text-xs sm:text-sm">
                   <Link to="/painel">
                     <span className="hidden sm:inline">Minhas reservas</span>
                     <span className="sm:hidden">Reservas</span>
@@ -146,7 +146,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                 {myLinkedStores && myLinkedStores.length > 0 && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" data-tour="header-lojas" className="gap-1 px-1.5 sm:px-3 text-xs sm:text-sm">
+                      <Button variant="ghost" size="sm" data-tour="header-lojas" className="gap-1 px-2 sm:px-3 text-xs sm:text-sm">
                         <StoreIcon className="size-3.5 sm:size-4 text-primary" />
                         <span>Lojas</span>
                         <ChevronDown className="size-3 opacity-60" />
@@ -171,7 +171,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                   </DropdownMenu>
                 )}
 
-                <Button asChild variant="secondary" size="sm" data-tour="header-minha-loja" className="px-1.5 sm:px-3 text-xs sm:text-sm">
+                <Button asChild variant="secondary" size="sm" data-tour="header-minha-loja" className="px-2 sm:px-3 text-xs sm:text-sm">
                   <Link to="/vendedor">
                     <span className="hidden sm:inline">Minha loja</span>
                     <span className="sm:hidden">Loja</span>
@@ -183,7 +183,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                   size="sm"
                   data-tour="header-perfil"
                   onClick={() => setProfileOpen(true)}
-                  className="gap-1 px-1.5 sm:px-3 text-xs sm:text-sm"
+                  className="gap-1 px-2 sm:px-3 text-xs sm:text-sm"
                 >
                   <User className="size-3.5 sm:size-4 text-primary" />
                   <span className="hidden sm:inline">Perfil</span>
@@ -191,7 +191,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
 
                 <TourTriggerButton />
 
-                <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sair" className="size-8 sm:size-9">
+                <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sair" className="size-9 sm:size-9">
                   <LogOut className="size-4" />
                 </Button>
 
