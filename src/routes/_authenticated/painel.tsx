@@ -5,12 +5,14 @@ import { BookmarkCheck, Car, CheckCircle2, Copy, ExternalLink, Loader2, MessageC
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { AppFooter } from "@/components/AppFooter";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PhoneInput } from "@/components/PhoneInput";
 import { Countdown } from "@/components/Countdown";
 import { DeliveryBadge, PaymentBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -40,14 +42,27 @@ export const Route = createFileRoute("/_authenticated/painel")({
   component: CustomerDashboard,
 });
 
+const PAGE_SIZE = 10;
+
 function CustomerDashboard() {
+  return (
+    <ErrorBoundary>
+      <CustomerDashboardContent />
+    </ErrorBoundary>
+  );
+}
+
+function CustomerDashboardContent() {
   const { user, loading: sessionLoading } = useSession();
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [garageSearchQuery, setGarageSearchQuery] = useState("");
+  const [ordersPage, setOrdersPage] = useState(0);
+  const [waitlistPage, setWaitlistPage] = useState(0);
 
   const { data: profile } = useQuery({
     queryKey: ["my-profile", user?.id],
     enabled: !!user,
+    retry: 2,
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
@@ -61,6 +76,7 @@ function CustomerDashboard() {
   const { data: orders, isLoading: ordersLoading } = useQuery({
     queryKey: ["my-orders", user?.id],
     enabled: !!user,
+    retry: 2,
     queryFn: async () => {
       // 1. Tentar auto-migrar reservas pendentes por telefone (tanto via profiles quanto via meta)
       if (user) {
@@ -190,7 +206,9 @@ function CustomerDashboard() {
         .from("orders")
         .select("*, products(brand, model, image_url, release_date), stores(name, slug, whatsapp_number, pix_key)")
         .eq("user_id", user!.id)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(PAGE_SIZE)
+        .range(ordersPage * PAGE_SIZE, (ordersPage + 1) * PAGE_SIZE - 1);
       if (error) throw error;
       return data ?? [];
     },
@@ -208,6 +226,7 @@ function CustomerDashboard() {
   const { data: feed } = useQuery({
     queryKey: ["followed-feed", user?.id],
     enabled: !!user,
+    retry: 2,
     queryFn: async () => {
       const { data: links } = await supabase
         .from("customer_store_link")
@@ -227,19 +246,23 @@ function CustomerDashboard() {
   });
 
   const { data: waitlist } = useQuery({
-    queryKey: ["my-waitlist", user?.id],
+    queryKey: ["my-waitlist", user?.id, waitlistPage],
     enabled: !!user,
+    retry: 2,
     queryFn: async () => {
       const { data } = await supabase
         .from("waitlist")
         .select("id, created_at, products(brand, model), stores(name)")
-        .eq("user_id", user!.id);
+        .eq("user_id", user!.id)
+        .order("created_at", { ascending: false })
+        .limit(PAGE_SIZE)
+        .range(waitlistPage * PAGE_SIZE, (waitlistPage + 1) * PAGE_SIZE - 1);
       return data ?? [];
     },
   });
 
   // Separar pedidos em andamento vs entregues/na garagem
-  const active = (orders ?? []).filter((o) => {
+  const active = useMemo(() => (orders ?? []).filter((o) => {
     if (o.payment_status === "cancelado") return false;
     if (o.pix_key && typeof o.pix_key === "string" && (o.pix_key.startsWith("GUEST:") || o.pix_key.startsWith('{"manual_guest":true'))) {
       return false;
@@ -247,8 +270,8 @@ function CustomerDashboard() {
     const cachedGuest = getCustomerFromCache(o.id);
     if (cachedGuest && cachedGuest.phone) return false;
     return true;
-  });
-  const pendingOrders = active.filter((o) => o.delivery_status !== "entregue");
+  }), [orders]);
+  const pendingOrders = useMemo(() => active.filter((o) => o.delivery_status !== "entregue"), [active]);
 
   // Agrupamento de pedidos por produto e status para exibição consolidada
   const groupedPendingOrders = useMemo(() => {
@@ -264,7 +287,7 @@ function CustomerDashboard() {
     }
     return Array.from(map.values());
   }, [pendingOrders]);
-  const deliveredOrders = active.filter((o) => o.delivery_status === "entregue");
+  const deliveredOrders = useMemo(() => active.filter((o) => o.delivery_status === "entregue"), [active]);
 
   const filteredDeliveredOrders = useMemo(() => {
     return deliveredOrders.filter((o) => {
@@ -302,14 +325,26 @@ function CustomerDashboard() {
     return Array.from(map.values());
   }, [filteredDeliveredOrders]);
 
-  const total = active.reduce((s, o) => s + Number(o.total_price), 0);
-  const paid = active.reduce((s, o) => s + Number(o.down_payment), 0);
+  const total = useMemo(() => active.reduce((s, o) => s + Number(o.total_price), 0), [active]);
+  const paid = useMemo(() => active.reduce((s, o) => s + Number(o.down_payment), 0), [active]);
 
   if (sessionLoading || ordersLoading) {
     return (
       <div className="min-h-screen">
         <AppHeader />
-        <p className="p-8 text-center text-sm text-muted-foreground">Carregando…</p>
+        <main className="mx-auto max-w-6xl px-4 py-8">
+          <Skeleton className="h-8 w-48 mb-4" />
+          <div className="grid gap-4 sm:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i} className="border-border/60 panel">
+                <CardContent className="p-4">
+                  <Skeleton className="h-4 w-24 mb-2" />
+                  <Skeleton className="h-8 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </main>
       </div>
     );
   }
@@ -375,6 +410,7 @@ function CustomerDashboard() {
                           src={l.stores.logo_url}
                           alt={l.stores.name}
                           className="size-8 rounded-lg object-cover border border-border/40"
+                          loading="lazy"
                         />
                       ) : (
                         <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
@@ -551,6 +587,13 @@ function CustomerDashboard() {
                 Você não possui reservas em andamento no momento.
               </p>
             )}
+            {(orders ?? []).length >= PAGE_SIZE && (
+              <div className="flex justify-center pt-4">
+                <Button variant="outline" size="sm" onClick={() => setOrdersPage((p) => p + 1)}>
+                  Carregar mais reservas
+                </Button>
+              </div>
+            )}
           </TabsContent>
 
           {/* ABA GARAGEM (COLEÇÃO ENTREGUE) */}
@@ -593,6 +636,7 @@ function CustomerDashboard() {
                             src={o.products.image_url}
                             alt={o.products.model}
                             className="h-full w-full object-cover"
+                            loading="lazy"
                           />
                         ) : (
                           <div className="flex h-full items-center justify-center text-muted-foreground">
@@ -722,6 +766,13 @@ function CustomerDashboard() {
             ))}
             {waitlist && waitlist.length === 0 && (
               <p className="text-sm text-muted-foreground">Você não está em nenhuma fila.</p>
+            )}
+            {(waitlist ?? []).length >= PAGE_SIZE && (
+              <div className="flex justify-center pt-4">
+                <Button variant="outline" size="sm" onClick={() => setWaitlistPage((p) => p + 1)}>
+                  Carregar mais
+                </Button>
+              </div>
             )}
           </TabsContent>
         </Tabs>

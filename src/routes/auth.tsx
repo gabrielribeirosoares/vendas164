@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { AppFooter } from "@/components/AppFooter";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PhoneInput } from "@/components/PhoneInput";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { useSession } from "@/lib/session";
 
 type AuthSearch = { loja?: string; produto?: string; next?: string };
@@ -37,6 +37,14 @@ export const Route = createFileRoute("/auth")({
 });
 
 function AuthPage() {
+  return (
+    <ErrorBoundary>
+      <AuthPageContent />
+    </ErrorBoundary>
+  );
+}
+
+function AuthPageContent() {
   const search = Route.useSearch();
   const navigate = useNavigate();
   const { user, loading: sessionLoading } = useSession();
@@ -49,6 +57,7 @@ function AuthPage() {
   const { data: invitedStore } = useQuery({
     queryKey: ["invited-store", search.loja, search.next],
     enabled: !!(search.loja || search.next?.startsWith("/loja/")),
+    retry: 2,
     queryFn: async () => {
       if (search.loja) {
         const { data } = await supabase
@@ -140,13 +149,9 @@ function AuthPage() {
         phone: cleanPhone,
       });
 
-      // Lógica de Garagem: Migração de reservas vinculadas por telefone/email temporário para o novo user.id
-      try {
-        const rawPhoneDigits = cleanPhone ? cleanPhone.replace(/\D/g, "") : "";
-        const userEmail = (user.email || "").toLowerCase().trim();
-        const lowerName = cleanName.toLowerCase().trim();
-
-        // Migração via RPC: a função de banco acha os IDs antigos ou via metadados pix_key GUEST e atualiza
+// Lógica de Garagem: Migração de reservas vinculadas por telefone/email temporário para o novo user.id
+       try {
+         // Migração via RPC: a função de banco acha os IDs antigos ou via metadados pix_key GUEST e atualiza
         const { error: rpcError } = await supabase.rpc("migrate_reservations_by_phone", {
           p_new_user_id: user.id,
           p_phone: cleanPhone,
@@ -199,15 +204,6 @@ function AuthPage() {
       return;
     }
     toast.success("Conta criada com sucesso!");
-    await finish();
-  }
-
-  async function handleGoogle() {
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
-    });
-    if (result.error) return toast.error("Não foi possível entrar com Google.");
-    if (result.redirected) return;
     await finish();
   }
 

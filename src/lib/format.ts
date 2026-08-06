@@ -1,6 +1,10 @@
 export const brl = (value: number | null | undefined) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value ?? 0));
 
+export function hasNoSignalRequirement(product: any): boolean {
+  return product.payment_deadline_hours === 0 || Number(product.down_payment_amount ?? 0) === 0;
+}
+
 export const paymentLabels: Record<string, string> = {
   aguardando_sinal: "Aguardando sinal",
   sem_sinal: "Sem sinal / Pagar na chegada",

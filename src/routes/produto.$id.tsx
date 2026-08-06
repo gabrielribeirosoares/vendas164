@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Clock, Package, Share2, Store as StoreIcon, CreditCard, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo } from "@/lib/format";
+import { brl, formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo, hasNoSignalRequirement } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { joinWaitlist, reservationErrorMessage, reserveQuota } from "@/lib/reservations";
 
@@ -30,6 +32,14 @@ export const Route = createFileRoute("/produto/$id")({
 });
 
 function ProductPage() {
+  return (
+    <ErrorBoundary>
+      <ProductPageContent />
+    </ErrorBoundary>
+  );
+}
+
+function ProductPageContent() {
   const { id } = Route.useParams();
   const { user } = useSession();
   const navigate = useNavigate();
@@ -41,6 +51,7 @@ function ProductPage() {
 
   const { data: product, isLoading } = useQuery({
     queryKey: ["product", id],
+    retry: 2,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
@@ -54,6 +65,7 @@ function ProductPage() {
 
   const { data: waitlistData } = useQuery({
     queryKey: ["waitlist", id],
+    retry: 2,
     queryFn: async () => {
       const { data } = await supabase
         .from("waitlist")
@@ -93,7 +105,7 @@ function ProductPage() {
           orderIds.push(orderId);
         }
 
-        const isNoSignal = product.payment_deadline_hours === 0 || Number((product as any).down_payment_amount) === 0;
+const hasNoSignal = hasNoSignalRequirement(product);
         
         // Atualizar pedidos com número de parcelas escolhido e status se sem sinal
         if (orderIds.length > 0) {
@@ -103,7 +115,7 @@ function ProductPage() {
           if (selectedInstallment > 1) {
             updatePayload.installment_count = selectedInstallment;
           }
-          if (isNoSignal) {
+          if (hasNoSignal) {
             updatePayload.payment_status = "sem_sinal";
             updatePayload.reservation_expires_at = null;
           }
@@ -124,7 +136,7 @@ function ProductPage() {
           }
         }
 
-        if (isNoSignal) {
+        if (hasNoSignal) {
           toast.success(qtyToReserve > 1 ? `${qtyToReserve} unidades reservadas com sucesso! (Sem sinal)` : "Unidade reservada com sucesso! (Sem sinal)");
         } else {
           toast.success(qtyToReserve > 1 ? `${qtyToReserve} unidades reservadas! Envie o sinal dentro do prazo.` : "Unidade reservada! Envie o sinal dentro do prazo.");
@@ -151,7 +163,19 @@ function ProductPage() {
     return (
       <div className="min-h-screen">
         <AppHeader />
-        <p className="p-8 text-center text-sm text-muted-foreground">Carregando…</p>
+        <main className="mx-auto max-w-5xl px-4 py-10">
+          <div className="grid gap-8 md:grid-cols-2">
+            <div className="aspect-square w-full rounded-3xl bg-muted">
+              <Skeleton className="h-full w-full" />
+            </div>
+            <div className="space-y-4">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
@@ -165,7 +189,18 @@ function ProductPage() {
     );
   }
 
-  const isNoSignal = product.payment_deadline_hours === 0 || Number((product as any).down_payment_amount) === 0;
+  useEffect(() => {
+    document.title = `${product.model} — ${product.brand} | Vendas 1:64`;
+    const metaDescription = document.querySelector('meta[name="description"]');
+if (metaDescription) {
+      metaDescription.setAttribute(
+        "content",
+        `Pré-venda de ${product.brand} ${product.model} — ${product.stock} unidades disponíveis. ${product.is_open ? "Pré-venda aberta." : "Pré-venda fechada."}`,
+      );
+    }
+  }, [product]);
+
+  const hasNoSignal = hasNoSignalRequirement(product);
 
   // Cálculo de parcelamento e total com base no produto e quantidade selecionada
   const installmentOptions = getInstallmentOptions(product, quantity);
@@ -186,6 +221,7 @@ function ProductPage() {
                   src={product.image_url}
                   alt={`${product.brand} ${product.model}`}
                   className="h-full w-full object-cover"
+                  loading="lazy"
                 />
               ) : (
                 <div className="flex h-full items-center justify-center text-muted-foreground">
@@ -239,7 +275,7 @@ function ProductPage() {
               <Badge variant="outline">
                 {product.stock > 0 ? `${product.stock} ${product.stock === 1 ? "unidade disponível" : "unidades disponíveis"}` : "Unidades esgotadas"}
               </Badge>
-              {isNoSignal && (
+              {hasNoSignal && (
                 <Badge variant="secondary" className="bg-blue-500/15 text-blue-600 border-blue-500/30">
                   Sem sinal
                 </Badge>
@@ -329,7 +365,7 @@ function ProductPage() {
               <CardContent className="space-y-3 p-5 text-sm">
                 <p className="flex items-center gap-2 text-muted-foreground">
                   <Clock className="size-4 text-primary" />
-                  {isNoSignal ? (
+                  {hasNoSignal ? (
                     <span className="font-semibold text-foreground">Sem necessidade de sinal (reserva garantida)</span>
                   ) : (product as any).payment_deadline_date ? (
                     <span>Data limite para pagar o sinal: <strong>{new Date((product as any).payment_deadline_date + "T00:00:00").toLocaleDateString("pt-BR")}</strong></span>

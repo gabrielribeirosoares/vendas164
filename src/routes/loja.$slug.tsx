@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookmarkCheck, Check, Copy, Package, Store as StoreIcon } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, getProductInstallmentInfo } from "@/lib/format";
 import { useSession } from "@/lib/session";
@@ -28,6 +30,14 @@ export const Route = createFileRoute("/loja/$slug")({
 });
 
 function StorePage() {
+  return (
+    <ErrorBoundary>
+      <StorePageContent />
+    </ErrorBoundary>
+  );
+}
+
+function StorePageContent() {
   const { slug } = Route.useParams();
   const { user } = useSession();
   const navigate = useNavigate();
@@ -37,6 +47,7 @@ function StorePage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["store", slug],
+    retry: 2,
     queryFn: async () => {
       const { data: store, error } = await supabase
         .from("stores")
@@ -57,6 +68,7 @@ function StorePage() {
   const { data: isFollowing } = useQuery({
     queryKey: ["is-following-store", user?.id, data?.store?.id],
     enabled: !!user && !!data?.store?.id,
+    retry: 2,
     queryFn: async () => {
       const { data: link } = await supabase
         .from("customer_store_link")
@@ -141,7 +153,20 @@ function StorePage() {
     return (
       <div className="min-h-screen">
         <AppHeader />
-        <p className="p-8 text-center text-sm text-muted-foreground">Carregando loja…</p>
+        <main className="mx-auto max-w-6xl px-4 py-10">
+          <Skeleton className="h-32 w-full rounded-3xl" />
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Card key={i} className="border-border/60 panel">
+                <CardContent className="p-4">
+                  <Skeleton className="h-40 w-full rounded-xl" />
+                  <Skeleton className="mt-3 h-4 w-3/4" />
+                  <Skeleton className="mt-2 h-4 w-1/2" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </main>
       </div>
     );
   }
@@ -182,25 +207,31 @@ function StorePage() {
   }
 
   // Extração de marcas e escalas disponíveis
-  const availableScales = Array.from(
-    new Set((products ?? []).map((p) => p.scale).filter(Boolean)),
-  ).sort();
+  const availableScales = useMemo(() =>
+    Array.from(
+      new Set((products ?? []).map((p) => p.scale).filter(Boolean)),
+    ).sort(),
+    [products]);
 
-  const filteredProducts = (products ?? []).filter((p) => {
+  const filteredProducts = useMemo(() => (products ?? []).filter((p) => {
     const matchBrand = selectedBrand === "all" || (p.brand || "Outros").trim() === selectedBrand;
     const matchScale = selectedScale === "all" || p.scale === selectedScale;
     return matchBrand && matchScale;
-  });
+  }), [products, selectedBrand, selectedScale]);
 
   // Agrupamento por marca
-  const brandsMap: Record<string, typeof products> = {};
-  for (const p of filteredProducts) {
-    const brandName = (p.brand || "Outros").trim();
-    if (!brandsMap[brandName]) brandsMap[brandName] = [];
-    brandsMap[brandName].push(p);
-  }
-  const brandList = Object.keys(brandsMap).sort((a, b) => a.localeCompare(b));
-  const filteredBrands = selectedBrand === "all" ? brandList : brandList.filter((b) => b === selectedBrand);
+  const brandsMap = useMemo(() => {
+    const map: Record<string, typeof products> = {};
+    for (const p of filteredProducts) {
+      const brandName = (p.brand || "Outros").trim();
+      if (!map[brandName]) map[brandName] = [];
+      map[brandName].push(p);
+    }
+    return map;
+  }, [filteredProducts]);
+
+  const brandList = useMemo(() => Object.keys(brandsMap).sort((a, b) => a.localeCompare(b)), [brandsMap]);
+  const filteredBrands = useMemo(() => selectedBrand === "all" ? brandList : brandList.filter((b) => b === selectedBrand), [brandList, selectedBrand]);
 
   return (
     <div className="min-h-screen">
@@ -216,6 +247,7 @@ function StorePage() {
                 src={store.logo_url}
                 alt={`Logo ${store.name}`}
                 className="size-16 rounded-2xl object-cover"
+                loading="lazy"
               />
             ) : (
               <span
@@ -349,95 +381,91 @@ function StorePage() {
                   </Badge>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {brandProducts.map((p) => (
-                    <Link key={p.id} to="/produto/$id" params={{ id: p.id }} className="group">
-                      <Card className="flex h-full flex-col overflow-hidden border-border/60 panel transition-transform group-hover:-translate-y-1">
-                        <div className="relative aspect-video w-full overflow-hidden bg-muted">
-                          {p.image_url ? (
-                            <img
-                              src={p.image_url}
-                              alt={`${p.brand} ${p.model}`}
-                              loading="lazy"
-                              className="h-full w-full object-cover transition-transform group-hover:scale-105 duration-300"
-                            />
-                          ) : (
-                            <div className="flex h-full items-center justify-center text-muted-foreground">
-                              <Package className="size-8" />
-                            </div>
-                          )}
-                          {/* Badge flutuante de acionamento na foto */}
-                          <div
-                            className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur-md transition-transform group-hover:scale-105"
-                            style={{ backgroundColor: store.primary_color }}
-                          >
-                            <BookmarkCheck className="size-3.5" />
-                            <span>Reservar</span>
-                          </div>
-                        </div>
+<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                   {brandProducts.map((p) => (
+                     <Link key={p.id} to="/produto/$id" params={{ id: p.id }} className="group">
+                       <Card className="flex h-full flex-col overflow-hidden border-border/60 panel transition-transform group-hover:-translate-y-1">
+                         <div className="relative aspect-video w-full overflow-hidden bg-muted">
+                           {p.image_url ? (
+                             <img
+                               src={p.image_url}
+                               alt={`${p.brand} ${p.model}`}
+                               loading="lazy"
+                               className="h-full w-full object-cover transition-transform group-hover:scale-105 duration-300"
+                             />
+                           ) : (
+                             <div className="flex h-full items-center justify-center text-muted-foreground">
+                               <Package className="size-8" />
+                             </div>
+                           )}
+                           {/* Badge flutuante de acionamento na foto */}
+                           <div
+                             className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur-md transition-transform group-hover:scale-105"
+                             style={{ backgroundColor: store.primary_color }}
+                           >
+                             <BookmarkCheck className="size-3.5" />
+                             <span>Reservar</span>
+                           </div>
+                         </div>
 
-                        <CardContent className="flex flex-1 flex-col justify-between p-4">
-                          <div>
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                              {p.brand} · {p.scale}
-                            </p>
-                            <h3 className="mt-1 font-semibold">{p.model}</h3>
-                          </div>
+                         <CardContent className="flex flex-1 flex-col justify-between p-4">
+                           <div>
+                             <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                               {p.brand} · {p.scale}
+                             </p>
+                             <h3 className="mt-1 font-semibold">{p.model}</h3>
+                           </div>
 
-                          <div className="mt-4 space-y-3">
-                            <div className="flex flex-col gap-0.5">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <span className="text-[10px] uppercase font-semibold text-muted-foreground block">À vista</span>
-                                  <span className="font-display text-lg font-bold" style={{ color: store.primary_color }}>
-                                    {brl(Number(p.price))}
-                                  </span>
-                                </div>
-                                <Badge variant={p.is_open ? "secondary" : "outline"}>
-                                  {p.is_open ? `${p.stock} ${p.stock === 1 ? "unidade" : "unidades"}` : "Fechada"}
-                                </Badge>
-                              </div>
-                              {(() => {
-                                const inst = getProductInstallmentInfo(p);
-                                if (!inst) return null;
-                                return (
-                                  <p className="text-xs text-muted-foreground">
-                                    ou <strong className="text-foreground">{inst.maxInstallments}x de {brl(inst.installmentValue)}</strong> {inst.hasSurcharge ? "" : "sem acréscimo"}
-                                  </p>
-                                );
-                              })()}
-                            </div>
+                           <div className="mt-4 space-y-3">
+                             <div className="flex flex-col gap-0.5">
+                               <div className="flex items-center justify-between">
+                                 <div>
+                                   <span className="text-[10px] uppercase font-semibold text-muted-foreground block">À vista</span>
+                                   <span className="font-display text-lg font-bold" style={{ color: store.primary_color }}>
+                                     {brl(Number(p.price))}
+                                   </span>
+                                 </div>
+                                 <Badge variant={p.is_open ? "secondary" : "outline"}>
+                                   {p.is_open ? `${p.stock} ${p.stock === 1 ? "unidade" : "unidades"}` : "Fechada"}
+                                 </Badge>
+                               </div>
+                               {(() => {
+                                 const inst = getProductInstallmentInfo(p);
+                                 if (!inst) return null;
+                                 return (
+                                   <p className="text-xs text-muted-foreground">
+                                     ou <strong className="text-foreground">{inst.maxInstallments}x de {brl(inst.installmentValue)}</strong> {inst.hasSurcharge ? "" : "sem acréscimo"}
+                                   </p>
+                                 );
+                               })()}
+                             </div>
 
-                            <Button
-                              size="sm"
-                              className="w-full font-semibold gap-1.5 shadow-md"
-                              style={
-                                p.is_open && p.stock > 0
-                                  ? { backgroundColor: store.primary_color, color: "#fff" }
-                                  : undefined
-                              }
-                              variant={p.is_open && p.stock > 0 ? "default" : "outline"}
-                            >
-                              <BookmarkCheck className="size-4 shrink-0" />
-                              {!p.is_open
-                                ? "Pré-venda fechada"
-                                : p.stock > 0
-                                  ? "Reservar unidade"
-                                  : "Entrar na fila"}
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  ))}
-                </div>
+                             <Button
+                               size="sm"
+                               className="w-full font-semibold gap-1.5 shadow-md"
+                               style={
+                                 p.is_open && p.stock > 0
+                                   ? { backgroundColor: store.primary_color, color: "#fff" }
+                                   : undefined
+                               }
+                               variant={p.is_open && p.stock > 0 ? "default" : "outline"}
+                             >
+                               <BookmarkCheck className="size-4 shrink-0" />
+                               {!p.is_open
+                                 ? "Pré-venda fechada"
+                                 : p.stock > 0
+                                   ? "Reservar unidade"
+                                   : "Entrar na fila"}
+                             </Button>
+                           </div>
+                         </CardContent>
+                       </Card>
+                     </Link>
+                   ))}
+                 </div>
               </section>
             );
-          })}
-
-          {products.length === 0 && (
-            <p className="text-sm text-muted-foreground">Nenhuma pré-venda cadastrada ainda.</p>
-          )}
+})}
         </div>
       </main>
     </div>

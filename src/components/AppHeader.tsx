@@ -55,6 +55,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
   const { data: myStore } = useQuery({
     queryKey: ["my-store-header", user?.id],
     enabled: !!user && propStore === undefined,
+    retry: 2,
     queryFn: async () => {
       const { data } = await supabase
         .from("stores")
@@ -68,6 +69,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
   const { data: myLinkedStores } = useQuery({
     queryKey: ["my-linked-stores-header", user?.id],
     enabled: !!user,
+    retry: 2,
     queryFn: async () => {
       const { data } = await supabase
         .from("customer_store_link")
@@ -107,6 +109,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                     src={currentStore.logo_url}
                     alt={currentStore.name}
                     className="size-8 sm:size-9 rounded-xl object-cover border border-border/50 shrink-0"
+                    loading="lazy"
                   />
                 ) : (
                   <span
@@ -157,7 +160,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                           onClick={() => navigate({ to: "/loja/$slug", params: { slug: s.slug } })}
                         >
                           {s.logo_url ? (
-                            <img src={s.logo_url} alt={s.name} className="size-5 rounded object-cover" />
+                            <img src={s.logo_url} alt={s.name} className="size-5 rounded object-cover" loading="lazy" />
                           ) : (
                             <StoreIcon className="size-4 text-muted-foreground" />
                           )}

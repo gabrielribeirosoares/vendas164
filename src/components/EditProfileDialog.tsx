@@ -29,6 +29,7 @@ export function EditProfileDialog({ user, open, onOpenChange }: EditProfileDialo
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
     enabled: !!user && open,
+    retry: 2,
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
