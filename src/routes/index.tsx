@@ -34,16 +34,16 @@ function Home() {
         <AppHeader />
 
         <main className="flex-1">
-          <section className="hero-surface border-b border-border/60">
-            <div className="mx-auto grid max-w-6xl gap-6 px-4 py-10 md:grid-cols-2 md:items-center md:py-20">
+          <section className="hero-surface border-b border-border/30">
+            <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 md:grid-cols-2 md:items-center md:py-20">
               <div>
-                <Badge variant="outline" className="border-primary/40 text-primary">
+                <Badge variant="outline" className="border-primary/30 text-primary bg-primary/5">
                   Plataforma 1/64
                 </Badge>
-                <h1 className="mt-4 text-4xl font-bold leading-[1.05] md:text-5xl">
+                <h1 className="mt-5 text-4xl font-bold leading-[1.08] md:text-5xl tracking-tight">
                   Pré-vendas de miniaturas sem planilha, sem confusão.
                 </h1>
-                <p className="mt-4 max-w-lg text-base text-muted-foreground">
+                <p className="mt-4 max-w-lg text-base text-muted-foreground leading-relaxed">
                   Cadastre cotas, defina o prazo do sinal, acompanhe o saldo a receber e deixe o
                   colecionador acompanhar tudo e copiar o PIX em 1 clique.
                 </p>
@@ -56,7 +56,7 @@ function Home() {
                   </Button>
                 </div>
               </div>
-              <div className="overflow-hidden rounded-3xl border border-border/60 panel">
+              <div className="overflow-hidden rounded-3xl border border-border/30 bg-card/50">
                 <img
                   src={heroImage}
                   alt="Miniaturas colecionáveis 1:64 alinhadas sobre superfície escura"
@@ -69,19 +69,19 @@ function Home() {
             </div>
           </section>
 
-          <section className="mx-auto max-w-6xl px-4 py-10 pb-16">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <section className="mx-auto max-w-6xl px-4 py-12 pb-16">
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 { icon: Package, title: "Cotas e estoque", text: "Controle quantas peças restam em cada pré-venda." },
                 { icon: Clock, title: "Prazo do sinal", text: "12h, 24h ou 48h com contagem regressiva automática." },
                 { icon: Wallet, title: "Financeiro", text: "Projetado, sinal recebido e saldo a receber em tempo real." },
                 { icon: Share2, title: "Links de convite", text: "Compartilhe a loja ou um produto e vincule o cliente." },
               ].map((item) => (
-                <Card key={item.title} className="panel border-border/60">
-                  <CardContent className="p-5">
+                <Card key={item.title} className="border-border/30 bg-card/50 hover:bg-card/70 transition-colors">
+                  <CardContent className="p-6">
                     <item.icon className="size-5 text-primary" />
-                    <h3 className="mt-3 text-base font-semibold">{item.title}</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">{item.text}</p>
+                    <h3 className="mt-3 text-base font-semibold tracking-tight">{item.title}</h3>
+                    <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">{item.text}</p>
                   </CardContent>
                 </Card>
               ))}

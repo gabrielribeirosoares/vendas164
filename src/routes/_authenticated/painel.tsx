@@ -332,13 +332,13 @@ function CustomerDashboardContent() {
     return (
       <div className="min-h-screen">
         <AppHeader />
-        <main className="mx-auto max-w-6xl px-4 py-8">
-          <Skeleton className="h-8 w-48 mb-4" />
+        <main className="mx-auto max-w-6xl px-4 py-10">
+          <Skeleton className="h-8 w-48 mb-6" />
           <div className="grid gap-4 sm:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <Card key={i} className="border-border/60 panel">
-                <CardContent className="p-4">
-                  <Skeleton className="h-4 w-24 mb-2" />
+              <Card key={i} className="border-border/30 bg-muted/15">
+                <CardContent className="p-5">
+                  <Skeleton className="h-3 w-24 mb-3" />
                   <Skeleton className="h-8 w-full" />
                 </CardContent>
               </Card>
@@ -353,9 +353,7 @@ function CustomerDashboardContent() {
     return (
       <div className="min-h-screen">
         <AppHeader />
-        <p className="p-8 text-center text-sm text-muted-foreground">
-          Sessão não encontrada. Por favor, faça login novamente.
-        </p>
+        <p className="p-8 text-center text-sm text-muted-foreground">Sessão não encontrada. Por favor, faça login novamente.</p>
       </div>
     );
   }
@@ -363,19 +361,17 @@ function CustomerDashboardContent() {
   return (
     <div className="min-h-screen">
       <AppHeader />
-      <main className="mx-auto max-w-6xl px-4 py-8">
+      <main className="mx-auto max-w-6xl px-4 py-10">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">Meu painel</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Acompanhe reservas, prazos e saldos com as lojas que você segue.
-            </p>
+            <h1 className="text-2xl font-bold tracking-tight">Meu painel</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Acompanhe reservas, prazos e saldos com as lojas que você segue.</p>
           </div>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setEditProfileOpen(true)}
-            className="gap-2 border-border/80 hover:bg-accent"
+            className="gap-2 border-border/40 hover:bg-accent/50"
           >
             <User className="size-4 text-primary" />
             <span>Editar meu perfil</span>
@@ -389,7 +385,7 @@ function CustomerDashboardContent() {
           onOpenChange={setEditProfileOpen}
         />
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-3">
+        <div className="mt-8 grid gap-4 sm:grid-cols-3">
           <StatCard label="Total reservado" value={brl(total)} />
           <StatCard label="Sinal pago" value={brl(paid)} accent />
           <StatCard label="Saldo devedor" value={brl(total - paid)} />
@@ -397,19 +393,19 @@ function CustomerDashboardContent() {
 
         {feed?.links && feed.links.length > 0 && (
           <div className="mt-8">
-            <h2 className="text-base font-semibold flex items-center gap-2">
+            <h2 className="text-base font-semibold flex items-center gap-2 text-foreground">
               <StoreIcon className="size-4 text-primary" /> Lojas onde sou cliente
             </h2>
-            <div className="mt-3 flex flex-wrap gap-3">
+            <div className="mt-3 flex flex-wrap gap-2.5">
               {feed.links.map((l) => (
                 <Link key={l.store_id} to="/loja/$slug" params={{ slug: l.stores?.slug ?? "" }}>
-                  <Card className="panel border-border/60 hover:border-primary/50 transition-colors">
+                  <Card className="border-border/30 bg-muted/20 hover:bg-muted/40 transition-colors">
                     <CardContent className="flex items-center gap-3 p-3 px-4">
                       {l.stores?.logo_url ? (
                         <img
                           src={l.stores.logo_url}
                           alt={l.stores.name}
-                          className="size-8 rounded-lg object-cover border border-border/40"
+                          className="size-8 rounded-lg object-cover border border-border/30"
                           loading="lazy"
                         />
                       ) : (
@@ -418,8 +414,8 @@ function CustomerDashboardContent() {
                         </span>
                       )}
                       <div>
-                        <p className="text-sm font-semibold">{l.stores?.name}</p>
-                        <p className="text-xs text-muted-foreground">/loja/{l.stores?.slug}</p>
+                        <p className="text-sm font-semibold text-foreground">{l.stores?.name}</p>
+                        <p className="text-xs text-muted-foreground font-mono">/loja/{l.stores?.slug}</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -429,8 +425,8 @@ function CustomerDashboardContent() {
           </div>
         )}
 
-        <Tabs defaultValue="reservas" className="mt-8">
-          <TabsList className="w-full flex overflow-x-auto justify-start sm:justify-center whitespace-nowrap p-1 max-w-full">
+        <Tabs defaultValue="reservas" className="mt-10">
+          <TabsList className="w-full flex overflow-x-auto justify-start sm:justify-center whitespace-nowrap p-1 max-w-full bg-muted/30">
             <TabsTrigger value="reservas" className="text-xs sm:text-sm">Minhas reservas</TabsTrigger>
             <TabsTrigger value="garagem" className="gap-1.5 text-xs sm:text-sm font-semibold">
               <Car className="size-3.5 text-primary" />
@@ -440,12 +436,12 @@ function CustomerDashboardContent() {
             <TabsTrigger value="fila" className="text-xs sm:text-sm">Fila de espera</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="reservas" className="mt-4 space-y-3">
+          <TabsContent value="reservas" className="mt-5 space-y-3 overflow-x-hidden">
             {groupedPendingOrders.map(({ order: o, quantity: qty }) => (
-              <Card key={o.id} className="border-border/60 panel">
+              <Card key={o.id} className="border-border/30 bg-card/60 overflow-hidden">
                 <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                    <div className="size-16 shrink-0 overflow-hidden rounded-xl bg-muted">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+                    <div className="size-10 shrink-0 overflow-hidden rounded-xl bg-muted sm:size-12">
                       {o.products?.image_url ? (
                         <img
                           src={o.products.image_url}
@@ -455,20 +451,20 @@ function CustomerDashboardContent() {
                         />
                       ) : (
                         <div className="flex h-full items-center justify-center text-muted-foreground">
-                          <Package className="size-5" />
+                          <Package className="size-4 sm:size-5" />
                         </div>
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground flex flex-wrap items-center gap-1.5">
                         <span>{o.products?.brand} · {o.stores?.name}</span>
                         {qty > 1 && (
-                          <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[11px] px-2 py-0 border-primary/20">
+                          <span className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
                             {qty}x unidades acumuladas
-                          </Badge>
+                          </span>
                         )}
                       </div>
-                      <h3 className="font-semibold text-base flex items-center gap-2">
+                      <h3 className="font-semibold text-base flex flex-wrap items-center gap-2">
                         {o.products?.model}
                         {qty > 1 && (
                           <span className="text-xs font-normal text-muted-foreground font-mono">({qty} unidades)</span>
@@ -494,7 +490,7 @@ function CustomerDashboardContent() {
                         })()}
                       </div>
                     </div>
-                    <div className="text-sm sm:text-right">
+                    <div className="text-sm lg:text-right">
                       <p className="text-muted-foreground">Total {brl(Number(o.total_price) * qty)}</p>
                       <p className="text-muted-foreground">Sinal {brl(Number(o.down_payment) * qty)}</p>
                       <p className="font-semibold text-primary">
@@ -502,7 +498,7 @@ function CustomerDashboardContent() {
                       </p>
                     </div>
                     {o.stores?.whatsapp_number && o.payment_status !== "cancelado" && (
-                      <Button asChild variant="secondary" size="sm">
+                      <Button asChild variant="secondary" size="sm" className="w-full lg:w-auto">
                         <a
                           href={whatsappLink(
                             o.stores.whatsapp_number,
@@ -525,11 +521,11 @@ function CustomerDashboardContent() {
                     const pixKey = o.pix_key || o.stores?.pix_key || o.stores?.whatsapp_number;
                     if (!pixKey) return null;
                     return (
-                      <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl bg-primary/10 p-3 text-xs border border-primary/20">
+                      <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl bg-primary/5 p-3.5 text-xs border border-primary/10">
                         <div className="flex items-center gap-2 min-w-0">
                           <Wallet className="size-4 text-primary shrink-0" />
                           <span className="font-semibold text-foreground">Chave PIX da loja:</span>
-                          <code className="bg-background px-2.5 py-1 rounded-lg font-mono text-primary font-bold border border-border/60 select-all">
+                          <code className="bg-background/80 px-2.5 py-1 rounded-lg font-mono text-primary font-bold border border-border/30 select-all">
                             {pixKey}
                           </code>
                         </div>
@@ -550,11 +546,11 @@ function CustomerDashboardContent() {
 
                   {/* BLOCO DO CÓDIGO DE RASTREIO DOS CORREIOS */}
                   {o.tracking_code && (
-                    <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl bg-muted/40 p-3 text-xs border border-border/50">
+                    <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl bg-muted/20 p-3.5 text-xs border border-border/20">
                       <div className="flex items-center gap-2 min-w-0">
                         <Truck className="size-4 text-primary shrink-0" />
                         <span className="font-semibold text-foreground">Rastreio:</span>
-                        <code className="bg-background px-2.5 py-1 rounded-lg font-mono text-primary font-bold border border-border/60 select-all">
+                        <code className="bg-background/80 px-2.5 py-1 rounded-lg font-mono text-primary font-bold border border-border/30 select-all">
                           {o.tracking_code}
                         </code>
                         <Button
@@ -583,9 +579,7 @@ function CustomerDashboardContent() {
               </Card>
             ))}
             {pendingOrders.length === 0 && (
-              <p className="text-sm text-muted-foreground py-6 text-center border border-dashed rounded-xl">
-                Você não possui reservas em andamento no momento.
-              </p>
+              <p className="text-sm text-muted-foreground py-8 text-center">Você não possui reservas em andamento no momento.</p>
             )}
             {(orders ?? []).length >= PAGE_SIZE && (
               <div className="flex justify-center pt-4">
@@ -597,27 +591,27 @@ function CustomerDashboardContent() {
           </TabsContent>
 
           {/* ABA GARAGEM (COLEÇÃO ENTREGUE) */}
-          <TabsContent value="garagem" className="mt-4 space-y-4">
+          <TabsContent value="garagem" className="mt-5 space-y-4">
             {deliveredOrders.length > 0 && (
-              <div className="relative mb-4">
+              <div className="relative mb-5">
                 <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
                 <Input
                   placeholder="Buscar na garagem por modelo, marca, loja ou #id..."
                   value={garageSearchQuery}
                   onChange={(e) => setGarageSearchQuery(e.target.value)}
-                  className="pl-9 h-9 text-sm w-full md:max-w-md bg-card border-border/60"
+                  className="pl-9 h-9 text-sm w-full md:max-w-md bg-muted/20 border-border/30"
                 />
               </div>
             )}
             
             {groupedDeliveredOrders.length === 0 ? (
-              <Card className="panel border-dashed border-border/60 mt-4">
-                <CardContent className="p-8 text-center space-y-2">
-                  <Car className="mx-auto size-10 text-muted-foreground/40" />
-                  <h3 className="font-bold text-base">
+              <Card className="border-border/30 bg-muted/15 mt-4">
+                <CardContent className="p-8 text-center space-y-3">
+                  <Car className="mx-auto size-10 text-muted-foreground/60" />
+                  <h3 className="font-bold text-base text-foreground">
                     {deliveredOrders.length > 0 ? "Nenhuma miniatura encontrada" : "Sua garagem está vazia"}
                   </h3>
-                  <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  <p className="text-xs text-muted-foreground max-w-sm mx-auto leading-relaxed">
                     {deliveredOrders.length > 0 
                       ? "Tente buscar por outro termo."
                       : "Assim que suas reservas forem quitadas ou entregues pelo lojista, as miniaturas aparecerão automaticamente aqui na sua Garagem Colecionável!"}
@@ -629,7 +623,7 @@ function CustomerDashboardContent() {
                 {groupedDeliveredOrders.map((item) => {
                   const { order: o, quantity: qty, ids } = item;
                   return (
-                    <Card key={ids[0]} className="panel border-emerald-500/30 bg-emerald-500/5 overflow-hidden">
+                    <Card key={ids[0]} className="border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
                       <div className="aspect-video w-full overflow-hidden bg-muted relative">
                         {o.products?.image_url ? (
                           <img
@@ -643,27 +637,25 @@ function CustomerDashboardContent() {
                             <Package className="size-10" />
                           </div>
                         )}
-                        <div className="absolute top-2 right-2">
-                          <Badge className="bg-emerald-600 text-white font-semibold text-[10px] gap-1 shadow-sm">
+                        <div className="absolute top-2.5 right-2.5">
+                          <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-semibold text-[10px] gap-1 border border-emerald-500/20 shadow-none">
                             <CheckCircle2 className="size-3" /> Na Garagem
                           </Badge>
                         </div>
                       </div>
-                      <CardContent className="p-4 space-y-1.5">
+                      <CardContent className="p-4 space-y-2">
                         <div className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider flex items-center gap-1.5">
                           <span>{o.products?.brand} · {o.stores?.name}</span>
                           {qty > 1 && (
-                            <Badge className="bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 font-bold text-[9px] px-1.5 py-0 border-emerald-500/30 shadow-none">
+                            <span className="font-bold text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 bg-emerald-500/10 rounded-full">
                               {qty}x
-                            </Badge>
+                            </span>
                           )}
                         </div>
-                        <h4 className="font-bold text-base text-foreground leading-snug flex items-center gap-1">
-                          {o.products?.model}
-                        </h4>
-                        <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/40">
-                          <span>Valor pago: <strong>{brl(Number(o.total_price) * qty)}</strong></span>
-                          <span className="font-mono text-[10px]">#{ids[0].slice(0, 6)}</span>
+                        <h4 className="font-bold text-base text-foreground leading-snug">{o.products?.model}</h4>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground pt-2.5 border-t border-border/20">
+                          <span>Valor pago: <strong className="text-foreground font-semibold">{brl(Number(o.total_price) * qty)}</strong></span>
+                          <span className="font-mono text-[10px] text-muted-foreground">#{ids[0].slice(0, 6)}</span>
                         </div>
                       </CardContent>
                     </Card>
@@ -673,11 +665,11 @@ function CustomerDashboardContent() {
             )}
           </TabsContent>
 
-          <TabsContent value="lojas" className="mt-4">
-            <div className="flex flex-wrap gap-2">
+          <TabsContent value="lojas" className="mt-5">
+            <div className="flex flex-wrap gap-2.5">
               {(feed?.links ?? []).map((l) => (
                 <Link key={l.store_id} to="/loja/$slug" params={{ slug: l.stores?.slug ?? "" }}>
-                  <Badge variant="secondary" className="gap-1.5 px-3 py-1.5">
+                  <Badge variant="secondary" className="gap-1.5 px-3 py-1.5 bg-muted/30 border-border/30 hover:bg-muted/50 transition-colors">
                     <StoreIcon className="size-3.5" /> {l.stores?.name}
                   </Badge>
                 </Link>
@@ -692,7 +684,7 @@ function CustomerDashboardContent() {
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {(feed?.products ?? []).map((p: any) => (
                 <Link key={p.id} to="/loja/$slug/$itemSlug" params={{ slug: p.stores?.slug ?? "loja", itemSlug: p.slug || p.id }} className="group">
-                  <Card className="flex h-full flex-col overflow-hidden border-border/60 panel transition-transform group-hover:-translate-y-1">
+                  <Card className="flex h-full flex-col overflow-hidden border-border/30 bg-card/60 transition-transform group-hover:-translate-y-1">
                     <div className="relative aspect-video w-full overflow-hidden bg-muted">
                       {p.image_url ? (
                         <img
@@ -731,12 +723,12 @@ function CustomerDashboardContent() {
                           >
                             {brl(Number(p.price))}
                           </span>
-                          <Badge variant="outline">{p.stock} {p.stock === 1 ? "unidade" : "unidades"}</Badge>
+                          <Badge variant="outline" className="border-border/40">{p.stock} {p.stock === 1 ? "unidade" : "unidades"}</Badge>
                         </div>
 
                         <Button
                           size="sm"
-                          className="w-full font-semibold gap-1.5 shadow-md"
+                          className="w-full font-semibold gap-1.5"
                           style={{ backgroundColor: p.stores?.primary_color || "#e11d48", color: "#fff" }}
                         >
                           <BookmarkCheck className="size-4 shrink-0" />
@@ -750,9 +742,9 @@ function CustomerDashboardContent() {
             </div>
           </TabsContent>
 
-          <TabsContent value="fila" className="mt-4 space-y-3">
+          <TabsContent value="fila" className="mt-5 space-y-3">
             {(waitlist ?? []).map((w) => (
-              <Card key={w.id} className="border-border/60 panel">
+              <Card key={w.id} className="border-border/30 bg-card/60">
                 <CardContent className="flex items-center justify-between p-4">
                   <div>
                     <h3 className="font-semibold">
@@ -760,12 +752,12 @@ function CustomerDashboardContent() {
                     </h3>
                     <p className="text-xs text-muted-foreground">{w.stores?.name}</p>
                   </div>
-                  <Badge variant="outline">Na fila</Badge>
+                  <Badge variant="outline" className="border-border/40 text-muted-foreground">Na fila</Badge>
                 </CardContent>
               </Card>
             ))}
             {waitlist && waitlist.length === 0 && (
-              <p className="text-sm text-muted-foreground">Você não está em nenhuma fila.</p>
+              <p className="text-sm text-muted-foreground py-6 text-center">Você não está em nenhuma fila.</p>
             )}
             {(waitlist ?? []).length >= PAGE_SIZE && (
               <div className="flex justify-center pt-4">
@@ -785,12 +777,12 @@ function CustomerDashboardContent() {
 
 function StatCard({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <Card className="border-border/60 panel">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+    <Card className="border-border/30 bg-muted/15">
+      <CardHeader className="pb-2 pt-5">
+        <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className={`font-display text-2xl font-bold ${accent ? "text-success" : ""}`}>{value}</p>
+        <p className={`font-display text-2xl font-bold tracking-tight ${accent ? "text-success" : "text-foreground"}`}>{value}</p>
       </CardContent>
     </Card>
   );

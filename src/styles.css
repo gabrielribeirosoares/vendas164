@@ -192,3 +192,15 @@
 @utility glow {
   box-shadow: var(--shadow-glow);
 }
+
+@utility surface {
+  background-color: var(--color-muted);
+}
+
+@utility surface-subtle {
+  background-color: color-mix(in oklab, var(--color-muted) 60%, transparent);
+}
+
+@utility border-subtle {
+  border-color: var(--color-border);
+}

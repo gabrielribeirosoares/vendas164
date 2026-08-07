@@ -83,7 +83,7 @@ function ProductPageContent() {
       const { data } = await supabase
         .from("waitlist")
         .select("user_id")
-        .eq("product_id", product?.id)
+        .eq("product_id", product!.id)
         .order("created_at", { ascending: true });
       return data || [];
     },
@@ -229,7 +229,7 @@ const hasNoSignal = hasNoSignalRequirement(product);
       <AppHeader />
       <main className="mx-auto max-w-5xl px-4 py-10">
         <div className="grid gap-8 md:grid-cols-2">
-          <div className="overflow-hidden rounded-3xl border border-border/60 panel">
+          <div className="overflow-hidden rounded-3xl border border-border/30 bg-card/60">
             <div className="aspect-square w-full bg-muted">
               {product.image_url ? (
                 <img
@@ -250,12 +250,12 @@ const hasNoSignal = hasNoSignalRequirement(product);
             <Link
               to="/loja/$slug"
               params={{ slug: product.stores?.slug ?? "" }}
-              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <StoreIcon className="size-4" /> {product.stores?.name}
             </Link>
-            <h1 className="mt-2 text-3xl font-bold">{product.model}</h1>
-            <p className="text-sm uppercase tracking-wide text-muted-foreground">
+            <h1 className="mt-2 text-3xl font-bold tracking-tight">{product.model}</h1>
+            <p className="text-sm text-muted-foreground mt-1">
               {product.brand} · escala {product.scale}
             </p>
 
@@ -273,10 +273,10 @@ const hasNoSignal = hasNoSignalRequirement(product);
                 const inst = getProductInstallmentInfo(product, quantity);
                 if (!inst) return null;
                 return (
-                  <div className="flex flex-wrap items-center gap-2 pt-1 text-sm text-muted-foreground">
-                    <Badge variant="outline" className="border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10 font-semibold">
+                  <div className="flex flex-wrap items-center gap-2 pt-1.5 text-sm text-muted-foreground">
+                    <span className="text-xs font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-md border border-amber-500/20">
                       Ou em até {inst.maxInstallments}x de {brl(inst.installmentValue * quantity)}
-                    </Badge>
+                    </span>
                     <span>{inst.hasSurcharge ? `(Total parcelado: ${brl(inst.totalPrice * quantity)})` : "(sem acréscimo)"}</span>
                   </div>
                 );
@@ -284,14 +284,14 @@ const hasNoSignal = hasNoSignalRequirement(product);
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              <Badge variant={product.is_open ? "secondary" : "outline"}>
+              <Badge variant={product.is_open ? "secondary" : "outline"} className="border-border/30">
                 {product.is_open ? "Pré-venda aberta" : "Pré-venda fechada"}
               </Badge>
-              <Badge variant="outline">
+              <Badge variant="outline" className="border-border/30">
                 {product.stock > 0 ? `${product.stock} ${product.stock === 1 ? "unidade disponível" : "unidades disponíveis"}` : "Unidades esgotadas"}
               </Badge>
               {hasNoSignal && (
-                <Badge variant="secondary" className="bg-blue-500/15 text-blue-600 border-blue-500/30">
+                <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-blue-500/20">
                   Sem sinal
                 </Badge>
               )}
@@ -299,19 +299,19 @@ const hasNoSignal = hasNoSignalRequirement(product);
 
             {/* Controles de Quantidade e Parcelamento */}
             {product.is_open && product.stock > 0 && isEligibleToBuyWaitlist && (
-              <Card className="mt-6 border-border/60 panel bg-muted/20">
-                <CardContent className="space-y-4 p-4">
+              <Card className="mt-6 border-border/30 bg-muted/15">
+                <CardContent className="space-y-4 p-5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Seletor de Quantidade */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold flex items-center gap-1.5">
+                      <Label className="text-xs font-semibold flex items-center gap-1.5 text-muted-foreground">
                         <ShoppingBag className="size-3.5 text-primary" /> Quantidade
                       </Label>
                       <Select
                         value={String(quantity)}
                         onValueChange={(val) => setQuantity(Number(val))}
                       >
-                        <SelectTrigger className="bg-background">
+                        <SelectTrigger className="bg-background border-border/30">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -336,14 +336,14 @@ const hasNoSignal = hasNoSignalRequirement(product);
 
                     {/* Seletor de Parcelamento */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold flex items-center gap-1.5">
+                      <Label className="text-xs font-semibold flex items-center gap-1.5 text-muted-foreground">
                         <CreditCard className="size-3.5 text-primary" /> Forma de Pagamento
                       </Label>
                       <Select
                         value={String(selectedInstallment)}
                         onValueChange={(val) => setSelectedInstallment(Number(val))}
                       >
-                        <SelectTrigger className="bg-background">
+                        <SelectTrigger className="bg-background border-border/30">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -360,7 +360,7 @@ const hasNoSignal = hasNoSignalRequirement(product);
                   </div>
 
                   {/* Resumo Atualizado do Pedido */}
-                  <div className="rounded-lg bg-background/80 p-3 border border-border/40 text-xs space-y-1">
+                  <div className="rounded-lg bg-background/80 p-4 border border-border/20 text-xs space-y-1.5">
                     <div className="flex justify-between items-center text-muted-foreground">
                       <span>Total da reserva ({quantity} {quantity === 1 ? "unidade" : "unidades"}):</span>
                       <span className="font-semibold text-foreground text-sm">{brl(totalPriceCalculated)}</span>
@@ -376,19 +376,19 @@ const hasNoSignal = hasNoSignalRequirement(product);
               </Card>
             )}
 
-            <Card className="mt-6 border-border/60 panel">
+            <Card className="mt-6 border-border/30 bg-muted/10">
               <CardContent className="space-y-3 p-5 text-sm">
-                <p className="flex items-center gap-2 text-muted-foreground">
+                <p className="flex items-center gap-2.5 text-muted-foreground">
                   <Clock className="size-4 text-primary" />
                   {hasNoSignal ? (
                     <span className="font-semibold text-foreground">Sem necessidade de sinal (reserva garantida)</span>
                   ) : (product as any).payment_deadline_date ? (
-                    <span>Data limite para pagar o sinal: <strong>{new Date((product as any).payment_deadline_date + "T00:00:00").toLocaleDateString("pt-BR")}</strong></span>
+                    <span>Data limite para pagar o sinal: <strong className="text-foreground">{new Date((product as any).payment_deadline_date + "T00:00:00").toLocaleDateString("pt-BR")}</strong></span>
                   ) : (
                     <span>Prazo para pagar o sinal: {formatDeadlineHours(product.payment_deadline_hours)} após a reserva</span>
                   )}
                 </p>
-                <p className="flex items-center gap-2 text-muted-foreground">
+                <p className="flex items-center gap-2.5 text-muted-foreground">
                   <CalendarDays className="size-4 text-primary" />
                   Previsão de chegada:{" "}
                   {product.release_date
@@ -401,7 +401,7 @@ const hasNoSignal = hasNoSignalRequirement(product);
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <Button
                 size="lg"
-                className="flex-1 glow"
+                className="flex-1"
                 onClick={handleReserve}
                 disabled={
                   !product.is_open || 
@@ -420,7 +420,7 @@ const hasNoSignal = hasNoSignalRequirement(product);
                       ? `Você é o ${userWaitlistIndex + 1}º na fila`
                       : "Entrar na fila de espera"}
               </Button>
-              <Button size="lg" variant="secondary" onClick={share}>
+              <Button size="lg" variant="secondary" onClick={share} className="border-border/30">
                 <Share2 className="size-4" /> Compartilhar
               </Button>
             </div>
