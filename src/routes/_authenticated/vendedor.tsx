@@ -159,7 +159,7 @@ function getWhatsAppTemplates(o: OrderRow, quantity: number, displayName: string
 
   const summary = getOrderSummaryMessage(o, quantity, displayName);
 
-  const signalReminder = `Olá ${displayName}!\n\nPassando para lembrar da sua reserva da miniatura *${modelName}*${quantity > 1 ? ` (${quantity}x)` : ''}.\n\n📌 *Valor do Sinal:* ${brl(signal)}${o.reservation_expires_at ? `\n⏳ *Prazo de Validade:* ${new Date(o.reservation_expires_at).toLocaleString("pt-BR")}` : ''}${pixInfo}\n\nAssim que efetuar o pagamento do sinal, nos envie o comprovante para confirmarmos sua cota! Muito obrigado!`;
+  const signalReminder = `Olá ${displayName}!\n\nPassando para lembrar da sua reserva da miniatura *${modelName}*${quantity > 1 ? ` (${quantity}x)` : ''}.\n\n📌 *Valor do Sinal:* ${brl(signal)}${o.reservation_expires_at ? `\n⏳ *Prazo de Validade:* ${new Date(o.reservation_expires_at).toLocaleDateString("pt-BR")}` : ''}${pixInfo}\n\nAssim que efetuar o pagamento do sinal, nos envie o comprovante para confirmarmos sua cota! Muito obrigado!`;
 
   const arrived = `Olá ${displayName}, ótimas notícias! 📦🎉\n\nA sua miniatura *${modelName}*${quantity > 1 ? ` (${quantity}x)` : ''} acabou de chegar em nosso estoque!\n\n💰 *Saldo restante a pagar:* ${brl(remaining)}${pixInfo}\n\nPor favor, nos envie o comprovante e confirme seu endereço de entrega para realizarmos o despacho!`;
 
