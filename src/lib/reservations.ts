@@ -22,9 +22,13 @@ export async function joinWaitlist(userId: string, productId: string, storeId: s
 }
 
 export function reservationErrorMessage(error: unknown) {
-  const message = String((error as { message?: string })?.message ?? error);
+  console.error("[reservationErrorMessage] Error details:", error);
+  const err = error as { message?: string; details?: string; hint?: string; code?: string };
+  const message = String(err?.message || err?.details || error || "");
   if (message.includes("out_of_stock")) return "Unidades esgotadas. Entre na fila de espera.";
   if (message.includes("presale_closed")) return "Esta pré-venda está fechada.";
   if (message.includes("not_authenticated")) return "Faça login para reservar.";
+  if (message.includes("product_not_found")) return "Produto não encontrado ou indisponível.";
+  if (err?.message) return `Não foi possível concluir a reserva: ${err.message}`;
   return "Não foi possível concluir a reserva.";
 }

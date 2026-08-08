@@ -97,6 +97,18 @@ function ProductPageContent() {
     (product && product.stock > waitlistCount) || 
     (isOnWaitlist && product && userWaitlistIndex < product.stock);
 
+  const hasNoSignal = hasNoSignalRequirement(product);
+  const signalInfo = getProductSignalAmount(product, quantity);
+
+  // Cálculo de parcelamento e total com base no produto e quantidade selecionada
+  const installmentOptions = getInstallmentOptions(product, quantity);
+  const chosenInstallmentObj = installmentOptions.find((o) => o.value === selectedInstallment) ?? installmentOptions[0];
+  const totalPriceCalculated = chosenInstallmentObj.totalPrice;
+  const unitPriceForChosenOption = totalPriceCalculated / Math.max(1, quantity);
+  const downPaymentToPay = hasNoSignal ? 0 : signalInfo.amount;
+  const remainingBalanceCalculated = Math.max(0, totalPriceCalculated - downPaymentToPay);
+  const installmentValCalculated = selectedInstallment > 1 ? totalPriceCalculated / selectedInstallment : totalPriceCalculated;
+
   async function handleReserve() {
     if (!product) return;
     if (!user) {
@@ -118,8 +130,6 @@ function ProductPageContent() {
           orderIds.push(orderId);
         }
 
-const hasNoSignal = hasNoSignalRequirement(product);
-        
         // Atualizar pedidos com número de parcelas escolhido e status se sem sinal
         if (orderIds.length > 0) {
           const updatePayload: any = {
@@ -168,6 +178,7 @@ const hasNoSignal = hasNoSignalRequirement(product);
       queryClient.invalidateQueries();
       navigate({ to: "/painel" });
     } catch (error) {
+      console.error("[handleReserve] error:", error);
       toast.error(reservationErrorMessage(error));
     } finally {
       setReserving(false);
@@ -196,7 +207,7 @@ const hasNoSignal = hasNoSignalRequirement(product);
       <div className="min-h-screen">
         <AppHeader />
         <main className="mx-auto max-w-5xl px-4 py-10">
-<div className="grid gap-4 md:gap-8 md:grid-cols-2">
+          <div className="grid gap-4 md:gap-8 md:grid-cols-2">
             <div className="aspect-square w-full rounded-3xl bg-muted">
               <Skeleton className="h-full w-full" />
             </div>
@@ -220,18 +231,6 @@ const hasNoSignal = hasNoSignalRequirement(product);
       </div>
     );
   }
-
-
-  const hasNoSignal = hasNoSignalRequirement(product);
-  const signalInfo = getProductSignalAmount(product, quantity);
-
-  // Cálculo de parcelamento e total com base no produto e quantidade selecionada
-  const installmentOptions = getInstallmentOptions(product, quantity);
-  const chosenInstallmentObj = installmentOptions.find((o) => o.value === selectedInstallment) ?? installmentOptions[0];
-  const totalPriceCalculated = chosenInstallmentObj.totalPrice;
-  const downPaymentToPay = hasNoSignal ? 0 : signalInfo.amount;
-  const remainingBalanceCalculated = Math.max(0, totalPriceCalculated - downPaymentToPay);
-  const installmentValCalculated = selectedInstallment > 1 ? totalPriceCalculated / selectedInstallment : totalPriceCalculated;
 
   return (
     <div className="min-h-screen">
