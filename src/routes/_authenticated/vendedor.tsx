@@ -608,7 +608,7 @@ function SellerDashboard() {
           </TabsList>
 
           <TabsContent value="produtos" className="mt-5">
-            <ProductsTab store={store} products={products ?? []} userId={user!.id} />
+            <ProductsTab store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} />
           </TabsContent>
 
           <TabsContent value="reservas" className="mt-5">
@@ -789,10 +789,12 @@ function ProductsTab({
   store,
   products,
   userId,
+  onSelectTab,
 }: {
   store: Store;
   products: Product[];
   userId: string;
+  onSelectTab?: (tab: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ ...emptyProduct });
@@ -1489,6 +1491,11 @@ function ProductsTab({
           setManualDialogOpen(false);
           setManualReservationProduct(null);
         }}
+        onSuccess={() => {
+          setManualDialogOpen(false);
+          setManualReservationProduct(null);
+          onSelectTab?.("reservas");
+        }}
       />
     </>
   );
@@ -2025,6 +2032,7 @@ interface ManualReservationDialogProps {
   products: Product[];
   open: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
   preSelectedProduct?: Product | null;
 }
 
@@ -2035,6 +2043,7 @@ function ManualReservationDialog({
   products,
   open,
   onClose,
+  onSuccess,
   preSelectedProduct,
 }: ManualReservationDialogProps) {
   const themeColor = storeColor || "#e11d48";
@@ -2341,7 +2350,11 @@ function ManualReservationDialog({
       setSelectedUserId("");
       setInstallmentCount(1);
       setManualQuantity(1);
-      onClose();
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        onClose();
+      }
     } catch (err: any) {
       console.error("Erro ao criar reserva manual:", err);
       toast.error("Não foi possível registrar a reserva.");

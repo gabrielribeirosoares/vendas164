@@ -171,19 +171,16 @@ function ProductPageContent() {
           orderIds.push(orderId);
         }
 
-        // Atualizar pedidos com número de parcelas escolhido e status se sem sinal
+        // Atualizar pedidos com status se sem sinal ou prazo personalizado
         if (orderIds.length > 0) {
-          const updatePayload: any = {
-            total_price: unitPriceForChosenOption
-          };
-          if (selectedInstallment > 1) {
-            updatePayload.installment_count = selectedInstallment;
+          const updatePayload: any = {};
+          if (unitPriceForChosenOption && Number(unitPriceForChosenOption) > 0) {
+            updatePayload.total_price = unitPriceForChosenOption;
           }
           if (hasNoSignal) {
             updatePayload.payment_status = "sem_sinal";
             updatePayload.reservation_expires_at = null;
           } else {
-            updatePayload.payment_status = "aguardando_sinal";
             if ((product as any)?.payment_deadline_date) {
               updatePayload.reservation_expires_at = new Date((product as any).payment_deadline_date + "T23:59:59").toISOString();
             } else if ((product as any)?.payment_deadline_hours && Number((product as any).payment_deadline_hours) > 0) {
@@ -192,18 +189,29 @@ function ProductPageContent() {
           }
 
           if (Object.keys(updatePayload).length > 0) {
-            await supabase
-              .from("orders")
-              .update(updatePayload)
-              .in("id", orderIds);
+            try {
+              const { error: updError } = await supabase
+                .from("orders")
+                .update(updatePayload)
+                .in("id", orderIds);
+              if (updError) {
+                console.warn("[handleReserve] Note: order update payload was skipped:", updError.message);
+              }
+            } catch (updErr) {
+              console.warn("[handleReserve] Could not update extra order details:", updErr);
+            }
           }
 
           if (isOnWaitlist) {
-            await supabase
-              .from("waitlist")
-              .delete()
-              .eq("product_id", product.id)
-              .eq("user_id", user.id);
+            try {
+              await supabase
+                .from("waitlist")
+                .delete()
+                .eq("product_id", product.id)
+                .eq("user_id", user.id);
+            } catch (wlErr) {
+              console.warn("[handleReserve] Could not clear waitlist:", wlErr);
+            }
           }
         }
 
@@ -216,8 +224,20 @@ function ProductPageContent() {
         await joinWaitlist(user.id, product.id, product.store_id);
         toast.success("Você entrou na fila de espera.");
       }
-      queryClient.invalidateQueries();
-      navigate({ to: "/painel" });
+
+      await queryClient.invalidateQueries();
+      try {
+        await navigate({ to: "/painel" });
+      } catch (navError) {
+        console.warn("[handleReserve] Router navigate failed, using fallback:", navError);
+        window.location.href = "/painel";
+      }
+
+      setTimeout(() => {
+        if (typeof window !== "undefined" && !window.location.pathname.startsWith("/painel")) {
+          window.location.href = "/painel";
+        }
+      }, 150);
     } catch (error) {
       console.error("[handleReserve] error:", error);
       toast.error(reservationErrorMessage(error));
