@@ -22,7 +22,7 @@ const fetchStoreBySlug = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const { data: store } = await supabase
       .from("stores")
-      .select("id, name, slug, logo_url, favicon_url, about_text, primary_color")
+      .select("id, name, slug, logo_url, favicon_url, description, primary_color")
       .eq("slug", data.slug)
       .maybeSingle();
     return store;
@@ -36,7 +36,7 @@ export const Route = createFileRoute("/loja/$slug")({
   head: ({ loaderData, params }) => {
     const store = loaderData?.store;
     const title = store?.name ? `${store.name} — Pré-vendas de Miniaturas 1:64` : `Loja ${params.slug} — Vendas 1:64`;
-    const desc = store?.about_text || `Veja as pré-vendas abertas e reserve suas miniaturas na loja ${store?.name || params.slug}.`;
+    const desc = store?.description || `Veja as pré-vendas abertas e reserve suas miniaturas na loja ${store?.name || params.slug}.`;
     const img = store?.logo_url || store?.favicon_url || "https://vendas164.com.br/og-image.png";
 
     return {

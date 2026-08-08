@@ -24,7 +24,7 @@ const fetchAuthStoreMeta = createServerFn({ method: "GET" })
     if (data.loja) {
       const { data: storeData } = await supabase
         .from("stores")
-        .select("id, name, slug, logo_url, favicon_url, about_text")
+        .select("id, name, slug, logo_url, favicon_url, description")
         .eq("id", data.loja)
         .maybeSingle();
       store = storeData;
@@ -33,7 +33,7 @@ const fetchAuthStoreMeta = createServerFn({ method: "GET" })
       const slug = data.next.replace("/loja/", "").split("?")[0].split("/")[0];
       const { data: storeData } = await supabase
         .from("stores")
-        .select("id, name, slug, logo_url, favicon_url, about_text")
+        .select("id, name, slug, logo_url, favicon_url, description")
         .eq("slug", slug)
         .maybeSingle();
       store = storeData;
@@ -56,7 +56,7 @@ export const Route = createFileRoute("/auth")({
     const store = loaderData?.store;
     const title = store?.name ? `Entrar / Criar Conta — ${store.name}` : "Entrar ou criar conta — Vendas 1:64";
     const desc = store?.name
-      ? (store.about_text || `Acesse sua conta para ver as pré-vendas e fazer reservas na ${store.name}.`)
+      ? (store.description || `Acesse sua conta para ver as pré-vendas e fazer reservas na ${store.name}.`)
       : "Acesse sua conta para reservar miniaturas ou gerenciar sua loja.";
     const img = store?.logo_url || store?.favicon_url || "https://vendas164.com.br/og-image.png";
 
