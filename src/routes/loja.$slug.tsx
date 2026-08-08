@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, getProductInstallmentInfo, getProductSignalAmount } from "@/lib/format";
+import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 import { saveCustomerToCache } from "@/lib/customerCache";
 
@@ -601,8 +602,8 @@ function StorePageContent() {
                                       {brl(Number(p.price))}
                                     </span>
                                   </div>
-                                  <Badge variant={p.is_open ? "secondary" : "outline"} className="border-border/30">
-                                    {p.is_open ? `${p.stock} ${p.stock === 1 ? "unidade" : "unidades"}` : "Fechada"}
+                                  <Badge variant={p.is_open ? "secondary" : "outline"} className="border-border/30 text-xs">
+                                    {formatStockRemaining(p)}
                                   </Badge>
                                 </div>
 

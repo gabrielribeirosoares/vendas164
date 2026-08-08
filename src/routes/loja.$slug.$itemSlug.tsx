@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement } from "@/lib/format";
+import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 import { joinWaitlist, reservationErrorMessage, reserveQuota } from "@/lib/reservations";
 
@@ -379,7 +380,7 @@ function ProductPageContent() {
                 {product.is_open ? "Pré-venda aberta" : "Pré-venda fechada"}
               </Badge>
               <Badge variant="outline" className="border-border/30">
-                {product.stock > 0 ? `${product.stock} ${product.stock === 1 ? "unidade disponível" : "unidades disponíveis"}` : "Unidades esgotadas"}
+                {formatStockRemaining(product)}
               </Badge>
               {hasNoSignal && (
                 <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">

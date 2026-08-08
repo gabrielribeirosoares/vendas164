@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, getProductSignalAmount, whatsappLink } from "@/lib/format";
+import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 
 export const Route = createFileRoute("/_authenticated/painel")({
@@ -81,11 +82,13 @@ function CustomerDashboardContent() {
       // A migração de reservas antigas é feita automaticamente em src/lib/session.ts
       // via a RPC migrate_reservations_by_phone (mais eficiente e sem consultas pesadas).
 
-      // Buscar ordens atualizadas do usuário
+      // Buscar ordens atualizadas do usuário (excluindo canceladas)
       const { data, error } = await supabase
         .from("orders")
         .select("*, products(*), stores(name, slug, whatsapp_number, pix_key)")
         .eq("user_id", user!.id)
+        .neq("payment_status", "cancelado")
+        .neq("delivery_status", "cancelado")
         .order("created_at", { ascending: false })
         .limit(PAGE_SIZE)
         .range(ordersPage * PAGE_SIZE, (ordersPage + 1) * PAGE_SIZE - 1);
@@ -143,7 +146,7 @@ function CustomerDashboardContent() {
 
   // Separar pedidos em andamento vs entregues/na garagem
   const active = useMemo(() => (orders ?? []).filter((o) => {
-    if (o.payment_status === "cancelado") return false;
+    if (o.payment_status === "cancelado" || o.delivery_status === "cancelado") return false;
     if (o.pix_key && typeof o.pix_key === "string" && (o.pix_key.startsWith("GUEST:") || o.pix_key.startsWith('{"manual_guest":true'))) {
       return false;
     }
@@ -660,7 +663,9 @@ function CustomerDashboardContent() {
                           >
                             {brl(Number(p.price))}
                           </span>
-                          <Badge variant="outline" className="border-border/40">{p.stock} {p.stock === 1 ? "unidade" : "unidades"}</Badge>
+                          <Badge variant="outline" className="border-border/40 text-xs">
+                            {formatStockRemaining(p)}
+                          </Badge>
                         </div>
 
                         <Button

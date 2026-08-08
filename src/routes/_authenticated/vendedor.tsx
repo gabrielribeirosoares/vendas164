@@ -52,6 +52,7 @@ import { useSession } from "@/lib/session";
 import { uploadImage } from "@/lib/upload";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { DEFAULT_PRESET_BRANDS, getStoreBrands, saveStoreBrands } from "@/lib/brands";
+import { getProductTotalStock } from "@/lib/stock";
 import type { Tables } from "@/integrations/supabase/types";
 import { SalesChart } from "@/components/vendedor/SalesChart";
 export const Route = createFileRoute("/_authenticated/vendedor")({
@@ -402,6 +403,9 @@ function SellerDashboard() {
       }
     }
   }, [store?.name, activeTab]);
+
+
+
 
   if (sessionLoading || isLoading) {
     return (
@@ -863,6 +867,7 @@ function ProductsTab({
       payment_deadline_date: form.payment_deadline_date || null,
       payment_deadline_hours: computedHours,
       stock: Number(form.stock || 0),
+      initial_stock: Number(form.stock || 0),
       image_url: form.image_url || null,
       slug: slugify(form.model.trim()),
       bulk_discount_threshold: (form as any).bulk_discount_threshold ? Number((form as any).bulk_discount_threshold) : null,
@@ -877,7 +882,13 @@ function ProductsTab({
 
     let { error } = await supabase.from("products").insert(payload);
 
-    // Fallbacks progressivos para lidar com colunas ausentes no banco
+    // Fallbacks progressivos para lidar com colunas opcionais ausentes no banco
+    if (error && (error.code === "PGRST204" || error.message?.includes("initial_stock") || (error as any).status === 400)) {
+      delete (payload as any).initial_stock;
+      const retry = await supabase.from("products").insert(payload);
+      error = retry.error;
+    }
+
     if (error && (error.code === "PGRST204" || error.message?.includes("bulk_discount") || error.message?.includes("bulk_has_installment_surcharge") || error.message?.includes("bulk_installment_price") || (error as any).status === 400)) {
       delete payload.bulk_discount_threshold;
       delete payload.bulk_discount_price;
@@ -934,11 +945,26 @@ function ProductsTab({
   }
 
   async function handleQuickStock(product: Product, delta: number) {
-    const newStock = Math.max(0, (product.stock ?? 0) + delta);
-    const { error } = await supabase.from("products").update({
+    const currentStock = product.stock ?? 0;
+    const newStock = Math.max(0, currentStock + delta);
+    // initial_stock acompanha o delta: se lojista adiciona/remove unidades, o total original muda junto
+    const currentInitial = (product as any).initial_stock ?? currentStock;
+    const newInitial = Math.max(newStock, currentInitial + delta);
+
+    let { error } = await supabase.from("products").update({
       stock: newStock,
+      initial_stock: newInitial,
       is_open: newStock > 0 ? product.is_open : false,
     }).eq("id", product.id);
+
+    // Se a coluna initial_stock ainda não existir no banco, tenta sem ela
+    if (error && ((error as any).status === 400 || error.message?.includes("initial_stock"))) {
+      const retry = await supabase.from("products").update({
+        stock: newStock,
+        is_open: newStock > 0 ? product.is_open : false,
+      }).eq("id", product.id);
+      error = retry.error;
+    }
 
     if (error) return toast.error("Erro ao alterar estoque.");
     queryClient.invalidateQueries();
@@ -1391,8 +1417,8 @@ function ProductsTab({
                                 >
                                   -
                                 </button>
-                                <span className="text-xs font-semibold px-1 min-w-[28px] text-center font-mono">
-                                  {p.stock} un
+                                <span className="text-xs font-semibold px-2 min-w-[36px] text-center font-mono" title={`Estoque total: ${getProductTotalStock(p)} unidades no total`}>
+                                  {p.stock} de {getProductTotalStock(p)} un
                                 </span>
                                 <button
                                   type="button"
@@ -1599,6 +1625,12 @@ function EditProductDialog({
     const hasSurcharge = maxInst > 1 && form.has_surcharge === "true";
     const instPrice = maxInst > 1 ? (hasSurcharge && form.installment_price ? Number(form.installment_price) : Number(form.price || 0)) : null;
 
+    const newStock = Number(form.stock || 0);
+    const currentStock = product.stock ?? 0;
+    const currentInitial = (product as any).initial_stock ?? currentStock;
+    const stockDelta = newStock - currentStock;
+    const newInitial = Math.max(newStock, currentInitial + stockDelta);
+
     const payload: any = {
       brand: form.brand.trim(),
       model: form.model.trim(),
@@ -1612,7 +1644,8 @@ function EditProductDialog({
       release_date: form.release_date ? (form.release_date.length === 7 ? form.release_date + "-01" : form.release_date) : null,
       payment_deadline_date: form.payment_deadline_date || null,
       payment_deadline_hours: computedHours,
-      stock: Number(form.stock || 0),
+      stock: newStock,
+      initial_stock: newInitial,
       is_open: form.is_open,
       image_url: form.image_url || null,
       slug: slugify(form.model.trim()),
@@ -1632,6 +1665,12 @@ function EditProductDialog({
       .eq("id", product.id);
 
     // Fallbacks progressivos para lidar com colunas ausentes no banco
+    if (error && (error.code === "PGRST204" || error.message?.includes("initial_stock") || (error as any).status === 400)) {
+      delete (payload as any).initial_stock;
+      const retry = await supabase.from("products").update(payload).eq("id", product.id);
+      error = retry.error;
+    }
+
     if (error && (error.code === "PGRST204" || error.message?.includes("bulk_discount") || error.message?.includes("bulk_has_installment_surcharge") || error.message?.includes("bulk_installment_price") || (error as any).status === 400)) {
       delete payload.bulk_discount_threshold;
       delete payload.bulk_discount_price;
@@ -2745,6 +2784,13 @@ function OrdersTab({
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
+      // Ocultar cancelados por padrão caso o usuário não tenha filtrado especificamente por 'cancelado'
+      if (paymentFilter === "todos" && deliveryFilter === "todos") {
+        if (o.payment_status === "cancelado" || o.delivery_status === "cancelado") {
+          return false;
+        }
+      }
+
       if (paymentFilter === "atrasado") {
         if (o.payment_status !== "aguardando_sinal" || !o.reservation_expires_at || new Date(o.reservation_expires_at) >= new Date()) {
           return false;
@@ -2850,6 +2896,23 @@ function OrdersTab({
     queryClient.invalidateQueries();
   }
 
+  async function handleDeleteGroup(item: GroupedOrderRow) {
+    if (!window.confirm(`Tem certeza que deseja excluir permanentemente esta reserva (${item.quantity} unidade(s))?`)) {
+      return;
+    }
+    const { order: o, quantity, ids } = item;
+    const wasCancelled = o.payment_status === "cancelado" || o.delivery_status === "cancelado";
+    if (!wasCancelled) {
+      await adjustStockOnCancel(o.product_id, true, quantity);
+    }
+    const { error } = await supabase.from("orders").delete().in("id", ids);
+    if (error) {
+      return toast.error("Não foi possível excluir a reserva.");
+    }
+    queryClient.invalidateQueries();
+    toast.success("Reserva excluída!");
+  }
+
   async function handlePaymentStatusChange(item: GroupedOrderRow, newStatus: string) {
     const { order: o, quantity, ids } = item;
     const groupId = ids[0];
@@ -2941,6 +3004,9 @@ function OrdersTab({
   const brandData = useMemo(() => {
     const counts: Record<string, number> = {};
     orders.forEach(o => {
+      if (o.payment_status === "cancelado" || o.delivery_status === "cancelado") {
+        return;
+      }
       const b = o.products?.brand || "Outros";
       counts[b] = (counts[b] || 0) + 1;
     });
@@ -3410,6 +3476,15 @@ function OrdersTab({
                             <SelectItem value="cancelado">Cancelado</SelectItem>
                           </SelectContent>
                         </Select>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          title="Excluir reserva permanentemente"
+                          onClick={() => handleDeleteGroup(item)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
                       </div>
 
                       {currentPaymentStatus === "aguardando_sinal" && o.reservation_expires_at ? (
@@ -3632,6 +3707,15 @@ function OrdersTab({
                           onClick={() => handleTrackingSave(ids, trackingDrafts[groupId] ?? o.tracking_code ?? "")}
                         >
                           OK
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                          title="Excluir reserva"
+                          onClick={() => handleDeleteGroup(item)}
+                        >
+                          <Trash2 className="size-3.5" />
                         </Button>
                       </div>
                       {o.tracking_code && (
@@ -4157,6 +4241,7 @@ function AdminModerationPanel() {
       
       const salesMap = new Map();
       orders?.forEach(order => {
+         if (order.payment_status === "cancelado" || (order as any).delivery_status === "cancelado") return;
          const current = salesMap.get(order.store_id) || { total_amount: 0, total_orders: 0, total_profit: 0, has_cost: false };
          current.total_orders += 1;
          current.total_amount += order.total_price || 0;
@@ -4549,7 +4634,7 @@ function ClientsTab({ orders }: { orders: OrderRow[] }) {
       client.firstOrderDate = orderDate;
     }
 
-    if (order.payment_status !== "cancelado") {
+    if (order.payment_status !== "cancelado" && order.delivery_status !== "cancelado") {
       client.totalSpent += Number(order.total_price || 0);
 
       const brand = order.products?.brand;
