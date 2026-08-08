@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate, Outlet, useMatchRoute } from "@tans
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpDown, BookmarkCheck, Check, Copy, Package, Search, Sparkles, Store as StoreIcon, X } from "lucide-react";
 import { toast } from "sonner";
+import { createServerFn } from "@tanstack/react-start";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Badge } from "@/components/ui/badge";
@@ -16,13 +17,20 @@ import { brl, getProductInstallmentInfo, getProductSignalAmount } from "@/lib/fo
 import { useSession } from "@/lib/session";
 import { saveCustomerToCache } from "@/lib/customerCache";
 
-export const Route = createFileRoute("/loja/$slug")({
-  loader: async ({ params }) => {
+const fetchStoreBySlug = createServerFn({ method: "GET" })
+  .validator((d: { slug: string }) => d)
+  .handler(async ({ data }) => {
     const { data: store } = await supabase
       .from("stores")
       .select("id, name, slug, logo_url, favicon_url, about_text, primary_color")
-      .eq("slug", params.slug)
+      .eq("slug", data.slug)
       .maybeSingle();
+    return store;
+  });
+
+export const Route = createFileRoute("/loja/$slug")({
+  loader: async ({ params }) => {
+    const store = await fetchStoreBySlug({ data: { slug: params.slug } });
     return { store };
   },
   head: ({ loaderData, params }) => {

@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Clock, Package, Share2, Store as StoreIcon, CreditCard, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
+import { createServerFn } from "@tanstack/react-start";
 import { AppHeader } from "@/components/AppHeader";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Badge } from "@/components/ui/badge";
@@ -16,24 +17,30 @@ import { brl, formatDeadlineHours, getInstallmentOptions, getProductInstallmentI
 import { useSession } from "@/lib/session";
 import { joinWaitlist, reservationErrorMessage, reserveQuota } from "@/lib/reservations";
 
-export const Route = createFileRoute("/loja/$slug/$itemSlug")({
-  loader: async ({ params }) => {
+const fetchProductBySlugs = createServerFn({ method: "GET" })
+  .validator((d: { slug: string; itemSlug: string }) => d)
+  .handler(async ({ data }) => {
     let { data: product } = await supabase
       .from("products")
-      .select("*, stores!inner(id, name, slug, logo_url, favicon_url)")
-      .eq("slug", params.itemSlug)
-      .eq("stores.slug", params.slug)
+      .select("*, stores!inner(id, owner_id, name, slug, primary_color, whatsapp_number, logo_url, favicon_url)")
+      .eq("slug", data.itemSlug)
+      .eq("stores.slug", data.slug)
       .maybeSingle();
 
     if (!product) {
       const { data: fallbackProduct } = await supabase
         .from("products")
-        .select("*, stores(id, name, slug, logo_url, favicon_url)")
-        .eq("id", params.itemSlug)
+        .select("*, stores(id, owner_id, name, slug, primary_color, whatsapp_number, logo_url, favicon_url)")
+        .eq("id", data.itemSlug)
         .maybeSingle();
       product = fallbackProduct;
     }
+    return product;
+  });
 
+export const Route = createFileRoute("/loja/$slug/$itemSlug")({
+  loader: async ({ params }) => {
+    const product = await fetchProductBySlugs({ data: { slug: params.slug, itemSlug: params.itemSlug } });
     return { product };
   },
   head: ({ loaderData, params }) => {

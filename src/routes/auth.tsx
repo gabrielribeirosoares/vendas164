@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { createServerFn } from "@tanstack/react-start";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { AppFooter } from "@/components/AppFooter";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -16,32 +17,39 @@ import { useSession } from "@/lib/session";
 
 type AuthSearch = { loja?: string; produto?: string; next?: string };
 
+const fetchAuthStoreMeta = createServerFn({ method: "GET" })
+  .validator((d: { loja?: string; next?: string }) => d)
+  .handler(async ({ data }) => {
+    let store: any = null;
+    if (data.loja) {
+      const { data: storeData } = await supabase
+        .from("stores")
+        .select("id, name, slug, logo_url, favicon_url, about_text")
+        .eq("id", data.loja)
+        .maybeSingle();
+      store = storeData;
+    }
+    if (!store && data.next?.startsWith("/loja/")) {
+      const slug = data.next.replace("/loja/", "").split("?")[0].split("/")[0];
+      const { data: storeData } = await supabase
+        .from("stores")
+        .select("id, name, slug, logo_url, favicon_url, about_text")
+        .eq("slug", slug)
+        .maybeSingle();
+      store = storeData;
+    }
+    return store;
+  });
+
 export const Route = createFileRoute("/auth")({
   validateSearch: (search: Record<string, unknown>): AuthSearch => ({
     loja: typeof search.loja === "string" ? search.loja : undefined,
     produto: typeof search.produto === "string" ? search.produto : undefined,
     next: typeof search.next === "string" && search.next.startsWith("/") ? search.next : undefined,
   }),
-  loaderDeps: ({ search }) => ({ loja: search.loja, next: search.next, produto: search.produto }),
+  loaderDeps: ({ search }) => ({ loja: search.loja, next: search.next }),
   loader: async ({ deps }) => {
-    let store: any = null;
-    if (deps.loja) {
-      const { data } = await supabase
-        .from("stores")
-        .select("id, name, slug, logo_url, favicon_url, about_text")
-        .eq("id", deps.loja)
-        .maybeSingle();
-      store = data;
-    }
-    if (!store && deps.next?.startsWith("/loja/")) {
-      const slug = deps.next.replace("/loja/", "").split("?")[0].split("/")[0];
-      const { data } = await supabase
-        .from("stores")
-        .select("id, name, slug, logo_url, favicon_url, about_text")
-        .eq("slug", slug)
-        .maybeSingle();
-      store = data;
-    }
+    const store = await fetchAuthStoreMeta({ data: { loja: deps.loja, next: deps.next } });
     return { store };
   },
   head: ({ loaderData }) => {
