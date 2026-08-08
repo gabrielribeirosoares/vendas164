@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo, hasNoSignalRequirement } from "@/lib/format";
+import { brl, formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { joinWaitlist, reservationErrorMessage, reserveQuota } from "@/lib/reservations";
 
@@ -223,12 +223,14 @@ const hasNoSignal = hasNoSignalRequirement(product);
 
 
   const hasNoSignal = hasNoSignalRequirement(product);
+  const signalInfo = getProductSignalAmount(product, quantity);
 
   // Cálculo de parcelamento e total com base no produto e quantidade selecionada
   const installmentOptions = getInstallmentOptions(product, quantity);
   const chosenInstallmentObj = installmentOptions.find((o) => o.value === selectedInstallment) ?? installmentOptions[0];
   const totalPriceCalculated = chosenInstallmentObj.totalPrice;
-  const unitPriceForChosenOption = totalPriceCalculated / quantity;
+  const downPaymentToPay = hasNoSignal ? 0 : signalInfo.amount;
+  const remainingBalanceCalculated = Math.max(0, totalPriceCalculated - downPaymentToPay);
   const installmentValCalculated = selectedInstallment > 1 ? totalPriceCalculated / selectedInstallment : totalPriceCalculated;
 
   return (
@@ -266,7 +268,7 @@ const hasNoSignal = hasNoSignalRequirement(product);
               {product.brand} · escala {product.scale}
             </p>
 
-            <div className="mt-6 space-y-1">
+            <div className="mt-6 space-y-2">
               <div className="flex items-baseline gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">À vista:</span>
                 <span className="font-display text-4xl font-bold text-primary">
@@ -280,7 +282,7 @@ const hasNoSignal = hasNoSignalRequirement(product);
                 const inst = getProductInstallmentInfo(product, quantity);
                 if (!inst) return null;
                 return (
-                  <div className="flex flex-wrap items-center gap-2 pt-1.5 text-sm text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5 text-sm text-muted-foreground">
                     <span className="text-xs font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-md border border-amber-500/20">
                       Ou em até {inst.maxInstallments}x de {brl(inst.installmentValue * quantity)}
                     </span>
@@ -288,6 +290,28 @@ const hasNoSignal = hasNoSignalRequirement(product);
                   </div>
                 );
               })()}
+
+              {/* Destaque das condições de Sinal e Saldo */}
+              {!hasNoSignal ? (
+                <div className="flex flex-wrap items-center gap-2.5 pt-2">
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 px-3.5 py-2">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">Sinal para garantir:</span>
+                    <span className="text-lg font-bold text-primary">{brl(downPaymentToPay)}</span>
+                    {quantity > 1 && <span className="text-[11px] text-muted-foreground ml-1 font-normal">({quantity}x {brl(downPaymentToPay / quantity)})</span>}
+                  </div>
+                  <div className="rounded-xl border border-border/30 bg-muted/20 px-3.5 py-2">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">Saldo na chegada:</span>
+                    <span className="text-lg font-bold text-foreground">{brl(remainingBalanceCalculated)}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="pt-2">
+                  <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                    <span className="size-2 rounded-full bg-emerald-500" />
+                    <span>Sem sinal — Pagamento total na chegada da miniatura</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
@@ -298,7 +322,7 @@ const hasNoSignal = hasNoSignalRequirement(product);
                 {product.stock > 0 ? `${product.stock} ${product.stock === 1 ? "unidade disponível" : "unidades disponíveis"}` : "Unidades esgotadas"}
               </Badge>
               {hasNoSignal && (
-                <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-blue-500/20">
+                <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
                   Sem sinal
                 </Badge>
               )}
@@ -367,15 +391,33 @@ const hasNoSignal = hasNoSignalRequirement(product);
                   </div>
 
                   {/* Resumo Atualizado do Pedido */}
-                  <div className="rounded-lg bg-background/80 p-4 border border-border/20 text-xs space-y-1.5">
+                  <div className="rounded-lg bg-background/80 p-4 border border-border/20 text-xs space-y-2">
                     <div className="flex justify-between items-center text-muted-foreground">
                       <span>Total da reserva ({quantity} {quantity === 1 ? "unidade" : "unidades"}):</span>
                       <span className="font-semibold text-foreground text-sm">{brl(totalPriceCalculated)}</span>
                     </div>
                     {selectedInstallment > 1 && (
-                      <div className="flex justify-between items-center text-primary font-medium">
+                      <div className="flex justify-between items-center text-muted-foreground">
                         <span>Plano escolhido:</span>
-                        <span>{selectedInstallment}x de {brl(installmentValCalculated)}</span>
+                        <span className="font-medium text-foreground">{selectedInstallment}x de {brl(installmentValCalculated)}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-border/20 pt-2 flex justify-between items-center">
+                      {hasNoSignal ? (
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                          Sem sinal agora (Pague na chegada)
+                        </span>
+                      ) : (
+                        <>
+                          <span className="font-semibold text-primary">Sinal a pagar agora:</span>
+                          <span className="font-bold text-primary text-sm">{brl(downPaymentToPay)}</span>
+                        </>
+                      )}
+                    </div>
+                    {!hasNoSignal && (
+                      <div className="flex justify-between items-center text-muted-foreground text-[11px]">
+                        <span>Saldo a pagar na chegada:</span>
+                        <span className="font-medium text-foreground">{brl(remainingBalanceCalculated)}</span>
                       </div>
                     )}
                   </div>

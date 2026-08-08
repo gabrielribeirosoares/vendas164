@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, whatsappLink } from "@/lib/format";
+import { brl, getProductSignalAmount, whatsappLink } from "@/lib/format";
 import { useSession } from "@/lib/session";
 
 export const Route = createFileRoute("/_authenticated/painel")({
@@ -369,44 +369,102 @@ function CustomerDashboardContent() {
                         })()}
                       </div>
                     </div>
-                    <div className="text-sm lg:text-right">
-                      <p className="text-muted-foreground">Total {brl(Number(o.total_price) * qty)}</p>
-                      <p className="text-muted-foreground">Sinal {brl(Number(o.down_payment) * qty)}</p>
-                      <p className="font-semibold text-primary">
-                        Saldo {brl(Number(o.remaining_balance) * qty)}
-                      </p>
-                    </div>
-                    {o.stores?.whatsapp_number && o.payment_status !== "cancelado" && (
-                      <Button asChild variant="secondary" size="sm" className="w-full lg:w-auto">
-                        <a
-                          href={whatsappLink(
-                            o.stores.whatsapp_number,
-                            o.payment_status === "sem_sinal"
-                              ? `Olá, gostaria de acompanhar minha reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`
-                              : `Olá, segue o comprovante da reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`,
+                    {(() => {
+                      const signalInfo = getProductSignalAmount(o.products, qty);
+                      const expectedSignal = signalInfo.amount;
+                      const isAguardando = o.payment_status === "aguardando_sinal";
+                      const isSinalPago = o.payment_status === "sinal_pago";
+                      const isQuitado = o.payment_status === "quitado";
+                      const isSemSinal = o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada";
+
+                      return (
+                        <div className="text-sm lg:text-right space-y-0.5">
+                          <p className="text-xs text-muted-foreground">Total: <span className="font-medium text-foreground">{brl(Number(o.total_price) * qty)}</span></p>
+                          {isAguardando ? (
+                            <>
+                              <p className="text-sm font-bold text-primary">
+                                Sinal a pagar: {brl(expectedSignal)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Saldo na chegada: {brl(Math.max(0, (Number(o.total_price) * qty) - expectedSignal))}
+                              </p>
+                            </>
+                          ) : isSinalPago ? (
+                            <>
+                              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                                Sinal pago: {brl(Number(o.down_payment) * qty)}
+                              </p>
+                              <p className="text-sm font-bold text-primary">
+                                Saldo restante: {brl(Number(o.remaining_balance) * qty)}
+                              </p>
+                            </>
+                          ) : isQuitado ? (
+                            <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                              Totalmente Quitado
+                            </p>
+                          ) : isSemSinal ? (
+                            <>
+                              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                                Sem sinal
+                              </p>
+                              <p className="text-sm font-bold text-foreground">
+                                Pagar na chegada: {brl(Number(o.total_price) * qty)}
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-muted-foreground">Cancelado</p>
                           )}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <MessageCircle className="size-4" />
-                          {o.payment_status === "sem_sinal" ? "Falar com a loja" : "Comprovante"}
-                        </a>
-                      </Button>
-                    )}
+                        </div>
+                      );
+                    })()}
+
+                    {o.stores?.whatsapp_number && o.payment_status !== "cancelado" && (() => {
+                      const isAguardando = o.payment_status === "aguardando_sinal";
+                      const signalInfo = getProductSignalAmount(o.products, qty);
+                      const expectedSignal = signalInfo.amount;
+                      const msg = o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada"
+                        ? `Olá, gostaria de acompanhar minha reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`
+                        : isAguardando
+                          ? `Olá, segue o comprovante do sinal de ${brl(expectedSignal)} da reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`
+                          : `Olá, segue o comprovante da reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`;
+
+                      return (
+                        <Button asChild variant="secondary" size="sm" className="w-full lg:w-auto">
+                          <a
+                            href={whatsappLink(o.stores.whatsapp_number, msg)}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <MessageCircle className="size-4" />
+                            {o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada" ? "Falar com a loja" : "Comprovante"}
+                          </a>
+                        </Button>
+                      );
+                    })()}
                   </div>
 
                   {/* BLOCO DA CHAVE PIX DA LOJA */}
                   {o.payment_status !== "quitado" && o.payment_status !== "cancelado" && (() => {
                     const pixKey = o.pix_key || o.stores?.pix_key || o.stores?.whatsapp_number;
                     if (!pixKey) return null;
+                    const isAguardando = o.payment_status === "aguardando_sinal";
+                    const signalInfo = getProductSignalAmount(o.products, qty);
+                    const expectedSignal = signalInfo.amount;
+                    const pixAmount = isAguardando ? expectedSignal : (Number(o.remaining_balance) * qty);
+
                     return (
                       <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl bg-primary/5 p-3.5 text-xs border border-primary/10">
-                        <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 min-w-0">
                           <Wallet className="size-4 text-primary shrink-0" />
                           <span className="font-semibold text-foreground">Chave PIX da loja:</span>
                           <code className="bg-background/80 px-2.5 py-1 rounded-lg font-mono text-primary font-bold border border-border/30 select-all">
                             {pixKey}
                           </code>
+                          {pixAmount > 0 && (
+                            <span className="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
+                              {isAguardando ? `Valor do sinal: ${brl(pixAmount)}` : `Valor a transferir: ${brl(pixAmount)}`}
+                            </span>
+                          )}
                         </div>
                         <Button
                           variant="secondary"

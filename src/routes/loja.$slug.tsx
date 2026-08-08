@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, getProductInstallmentInfo } from "@/lib/format";
+import { brl, getProductInstallmentInfo, getProductSignalAmount } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { saveCustomerToCache } from "@/lib/customerCache";
 
@@ -560,7 +560,7 @@ function StorePageContent() {
                             </div>
 
                             <div className="mt-4 space-y-3">
-                              <div className="flex flex-col gap-0.5">
+                              <div className="flex flex-col gap-1.5">
                                 <div className="flex items-center justify-between">
                                   <div>
                                     <span className="text-[10px] uppercase font-semibold text-muted-foreground block">
@@ -577,11 +577,30 @@ function StorePageContent() {
                                     {p.is_open ? `${p.stock} ${p.stock === 1 ? "unidade" : "unidades"}` : "Fechada"}
                                   </Badge>
                                 </div>
+
+                                {(() => {
+                                  const signal = getProductSignalAmount(p);
+                                  if (signal.isSemSinal) {
+                                    return (
+                                      <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                        <span className="inline-block size-1.5 rounded-full bg-emerald-500" />
+                                        <span>Sem sinal (Pagar na chegada)</span>
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <div className="flex items-center justify-between text-xs rounded-md bg-muted/30 px-2 py-1 border border-border/20">
+                                      <span className="text-muted-foreground">Sinal para reservar:</span>
+                                      <strong className="text-primary font-semibold">{brl(signal.amount)}</strong>
+                                    </div>
+                                  );
+                                })()}
+
                                 {(() => {
                                   const inst = getProductInstallmentInfo(p);
                                   if (!inst) return null;
                                   return (
-                                    <p className="text-xs text-muted-foreground">
+                                    <p className="text-[11px] text-muted-foreground">
                                       ou <strong className="text-foreground">{inst.maxInstallments}x de {brl(inst.installmentValue)}</strong>{" "}
                                       {inst.hasSurcharge ? "" : "sem acréscimo"}
                                     </p>

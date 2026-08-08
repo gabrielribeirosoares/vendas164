@@ -11,6 +11,20 @@ export function hasNoSignalRequirement(product: any): boolean {
   return !hasDownPayment && !hasDeadlineDate && !hasDeadlineHours;
 }
 
+export function getProductSignalAmount(product: any, quantity: number = 1): { amount: number; isSemSinal: boolean; isCustom: boolean } {
+  if (!product) return { amount: 0, isSemSinal: false, isCustom: false };
+  if (hasNoSignalRequirement(product)) {
+    return { amount: 0, isSemSinal: true, isCustom: false };
+  }
+  const customSignal = Number(product.down_payment_amount ?? 0);
+  if (customSignal > 0) {
+    return { amount: customSignal * quantity, isSemSinal: false, isCustom: true };
+  }
+  const price = Number(product.price ?? 0);
+  const calculated = Math.round(price * 0.2 * 100) / 100;
+  return { amount: calculated * quantity, isSemSinal: false, isCustom: false };
+}
+
 export const paymentLabels: Record<string, string> = {
   aguardando_sinal: "Aguardando sinal",
   sem_sinal: "Sem sinal / Pagar na chegada",
