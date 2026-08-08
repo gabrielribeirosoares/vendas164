@@ -131,6 +131,13 @@ const hasNoSignal = hasNoSignalRequirement(product);
           if (hasNoSignal) {
             updatePayload.payment_status = "sem_sinal";
             updatePayload.reservation_expires_at = null;
+          } else {
+            updatePayload.payment_status = "aguardando_sinal";
+            if ((product as any)?.payment_deadline_date) {
+              updatePayload.reservation_expires_at = new Date((product as any).payment_deadline_date + "T23:59:59").toISOString();
+            } else if ((product as any)?.payment_deadline_hours && Number((product as any).payment_deadline_hours) > 0) {
+              updatePayload.reservation_expires_at = new Date(Date.now() + Number((product as any).payment_deadline_hours) * 3600 * 1000).toISOString();
+            }
           }
 
           if (Object.keys(updatePayload).length > 0) {

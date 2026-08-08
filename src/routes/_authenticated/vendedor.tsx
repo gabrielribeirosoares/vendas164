@@ -47,13 +47,13 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo, slugify, whatsappLink } from "@/lib/format";
+import { brl, formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo, hasNoSignalRequirement, slugify, whatsappLink } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { uploadImage } from "@/lib/upload";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { DEFAULT_PRESET_BRANDS, getStoreBrands, saveStoreBrands } from "@/lib/brands";
 import type { Tables } from "@/integrations/supabase/types";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from "recharts";
+import { SalesChart } from "@/components/vendedor/SalesChart";
 export const Route = createFileRoute("/_authenticated/vendedor")({
   head: () => ({
     meta: [
@@ -74,7 +74,7 @@ type Store = Tables<"stores">;
 type Product = Tables<"products">;
 
 type OrderRow = Tables<"orders"> & {
-  products: { brand: string; model: string; image_url?: string | null } | null;
+  products: Tables<"products"> | null;
   profiles: { name: string | null; email: string | null; phone: string | null } | null;
 };
 
@@ -83,10 +83,7 @@ function SmartNotifications({ products, orders }: { products: Product[]; orders:
   
   const now = new Date();
   const lateOrders = orders.filter(o => {
-    if (o.payment_status === "cancelado") return false;
-    const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
-    const effectiveStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
-    if (effectiveStatus !== "aguardando_sinal") return false;
+    if (o.payment_status !== "aguardando_sinal") return false;
     if (!o.reservation_expires_at) return false;
     return new Date(o.reservation_expires_at) < now;
   });
@@ -130,18 +127,22 @@ function SmartNotifications({ products, orders }: { products: Product[]; orders:
 
 function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: string) {
   const modelName = `${o.products?.brand || ''} ${o.products?.model || 'Miniatura'}`.trim();
-  const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
   const total = Number(o.total_price) * quantity;
-  const signal = Number(o.down_payment) * quantity;
-  const isPaid = o.payment_status === "sinal_pago" || o.payment_status === "quitado";
+  const customSignal = Number((o.products as any)?.down_payment_amount || 0);
+  const expectedSignal = (customSignal > 0 ? customSignal : Math.round(Number(o.total_price) * 0.2 * 100) / 100) * quantity;
+  const isSemSinal = o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada";
 
   let msg = `Olá ${displayName},\n\nAqui é o resumo da sua reserva:\n- Miniatura: *${modelName}*\n`;
   if (quantity > 1) msg += `- Quantidade: ${quantity}x\n`;
   msg += `- Valor Total: *${brl(total)}*\n`;
   
-  if (!isPaid && signal > 0) {
-    msg += `- Sinal a pagar: *${brl(signal)}*\n`;
-  } else if (!isPaid && isNoSignalOrder) {
+  if (o.payment_status === "aguardando_sinal") {
+    msg += `- Sinal a pagar: *${brl(expectedSignal)}*\n`;
+  } else if (o.payment_status === "sinal_pago") {
+    msg += `- Sinal pago: *${brl(Number(o.down_payment) * quantity)}*\n- Saldo restante: *${brl(Number(o.remaining_balance) * quantity)}*\n`;
+  } else if (o.payment_status === "quitado") {
+    msg += `- Status: *Totalmente Quitado*\n`;
+  } else if (isSemSinal) {
     msg += `- Pagamento na chegada do produto.\n`;
   }
   
@@ -151,7 +152,9 @@ function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: stri
 
 function getWhatsAppTemplates(o: OrderRow, quantity: number, displayName: string, storePixKey?: string) {
   const modelName = `${o.products?.brand || ''} ${o.products?.model || 'Miniatura'}`.trim();
-  const signal = Number(o.down_payment) * quantity;
+  const customSignal = Number((o.products as any)?.down_payment_amount || 0);
+  const expectedSignal = (customSignal > 0 ? customSignal : Math.round(Number(o.total_price) * 0.2 * 100) / 100) * quantity;
+  const signal = Number(o.down_payment) > 0 ? Number(o.down_payment) * quantity : expectedSignal;
   const remaining = Number(o.remaining_balance) * quantity;
   const tracking = o.tracking_code?.trim();
   const trackingLink = tracking ? `https://rastreamento.correios.com.br/app/index.php?codigo=${encodeURIComponent(tracking)}` : '';
@@ -340,7 +343,7 @@ function SellerDashboard() {
     queryFn: async (): Promise<OrderRow[]> => {
       const { data, error } = await supabase
         .from("orders")
-        .select("*, products(brand, model, price, image_url, release_date)")
+        .select("*, products(*)")
         .eq("store_id", store!.id)
         .order("created_at", { ascending: false });
 
@@ -2140,6 +2143,19 @@ function ManualReservationDialog({
     }
   }, [preSelectedProduct, products, open]);
 
+  useEffect(() => {
+    if (selectedProductId && products.length > 0) {
+      const p = products.find((prod) => prod.id === selectedProductId);
+      if (p) {
+        if (hasNoSignalRequirement(p)) {
+          setPaymentStatus("sem_sinal");
+        } else {
+          setPaymentStatus("aguardando_sinal");
+        }
+      }
+    }
+  }, [selectedProductId, products]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedProductId) return toast.error("Selecione uma pré-venda.");
@@ -2246,6 +2262,19 @@ function ManualReservationDialog({
         downPayment = totalPrice;
       } else if (paymentStatus === "sem_sinal") {
         downPayment = 0;
+      } else if (paymentStatus === "aguardando_sinal") {
+        downPayment = 0;
+      }
+
+      let expiresAt: string | null = null;
+      if (paymentStatus === "aguardando_sinal") {
+        if ((product as any).payment_deadline_date) {
+          expiresAt = new Date((product as any).payment_deadline_date + "T23:59:59").toISOString();
+        } else if ((product as any).payment_deadline_hours && Number((product as any).payment_deadline_hours) > 0) {
+          expiresAt = new Date(Date.now() + Number((product as any).payment_deadline_hours) * 3600 * 1000).toISOString();
+        } else {
+          expiresAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+        }
       }
 
       // 5. Inserir as reservas no banco
@@ -2263,13 +2292,11 @@ function ManualReservationDialog({
           total_price: totalPrice,
           down_payment: downPayment,
           payment_status: paymentStatus,
+          reservation_expires_at: expiresAt,
         };
 
         if (installmentCount > 1) {
           orderPayload.installment_count = installmentCount;
-        }
-        if (paymentStatus === "sem_sinal") {
-          orderPayload.reservation_expires_at = null;
         }
         if (guestKeyString) {
           orderPayload.pix_key = guestKeyString;
@@ -2304,15 +2331,7 @@ function ManualReservationDialog({
         .update({ stock: Math.max(0, product.stock - qtyToCreate) })
         .eq("id", product.id);
 
-      if (effectiveUserId) {
-        try {
-          await supabase
-            .from("customer_store_link")
-            .upsert({ user_id: effectiveUserId, store_id: storeId }, { onConflict: "user_id,store_id" });
-        } catch {
-          // Ignora se RLS ou constraint negar o vinculo
-        }
-      }
+      // O vínculo de cliente com a loja já é garantido pela tabela 'orders' (store_id e user_id)
 
       queryClient.invalidateQueries();
       toast.success(qtyToCreate > 1 ? `${qtyToCreate} unidades vinculadas ao cliente ${cleanName}!` : `Reserva vinculada ao cliente ${cleanName}!`);
@@ -2713,14 +2732,11 @@ function OrdersTab({
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
-      const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
-      const effectiveStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
-
       if (paymentFilter === "atrasado") {
-        if (effectiveStatus !== "aguardando_sinal" || !o.reservation_expires_at || new Date(o.reservation_expires_at) >= new Date()) {
+        if (o.payment_status !== "aguardando_sinal" || !o.reservation_expires_at || new Date(o.reservation_expires_at) >= new Date()) {
           return false;
         }
-      } else if (paymentFilter !== "todos" && effectiveStatus !== paymentFilter) {
+      } else if (paymentFilter !== "todos" && o.payment_status !== paymentFilter) {
         return false;
       }
 
@@ -2757,9 +2773,6 @@ function OrdersTab({
   const groupedOrders = useMemo(() => {
     const map = new Map<string, GroupedOrderRow>();
     for (const o of filteredOrders) {
-      const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
-      const effectiveStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
-
       let guestMeta: any = null;
       if (o.pix_key && typeof o.pix_key === "string") {
         if (o.pix_key.startsWith("GUEST:")) {
@@ -2773,7 +2786,7 @@ function OrdersTab({
       const effectiveUserId = o.user_id + "_" + clientPhone;
       const tracking = o.tracking_code || "";
 
-      const key = `${o.product_id}_${effectiveUserId}_${effectiveStatus}_${o.delivery_status}_${tracking}`;
+      const key = `${o.product_id}_${effectiveUserId}_${o.payment_status}_${o.delivery_status}_${tracking}`;
 
       if (map.has(key)) {
         const item = map.get(key)!;
@@ -2816,7 +2829,7 @@ function OrdersTab({
 
   async function updateGroup(
     ids: string[],
-    patch: Partial<Pick<Tables<"orders">, "down_payment" | "payment_status" | "delivery_status">>,
+    patch: Partial<Pick<Tables<"orders">, "down_payment" | "payment_status" | "delivery_status" | "reservation_expires_at">>,
   ) {
     const { error } = await supabase.from("orders").update(patch).in("id", ids);
 
@@ -2840,20 +2853,43 @@ function OrdersTab({
       await adjustStockOnCancel(o.product_id, false, quantity);
     }
 
+    const patch: any = { payment_status: newStatus };
+
     if (newStatus === "sinal_pago") {
       if (customSignal > 0) {
         downPayment = customSignal;
       } else if (downPayment === 0 && totalPrice > 0) {
         downPayment = Math.round(totalPrice * 0.2 * 100) / 100;
       }
+      patch.down_payment = downPayment;
+      patch.reservation_expires_at = null;
     } else if (newStatus === "quitado") {
       downPayment = totalPrice;
+      patch.down_payment = downPayment;
+      patch.reservation_expires_at = null;
+    } else if (newStatus === "sem_sinal") {
+      downPayment = 0;
+      patch.down_payment = 0;
+      patch.reservation_expires_at = null;
     } else if (newStatus === "aguardando_sinal") {
       downPayment = 0;
+      patch.down_payment = 0;
+      if (!o.reservation_expires_at) {
+        const prod = o.products as any;
+        if (prod?.payment_deadline_date) {
+          patch.reservation_expires_at = new Date(prod.payment_deadline_date + "T23:59:59").toISOString();
+        } else if (prod?.payment_deadline_hours && Number(prod.payment_deadline_hours) > 0) {
+          patch.reservation_expires_at = new Date(Date.now() + Number(prod.payment_deadline_hours) * 3600 * 1000).toISOString();
+        } else {
+          patch.reservation_expires_at = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+        }
+      }
+    } else {
+      patch.down_payment = downPayment;
     }
 
     setDrafts((prev) => ({ ...prev, [groupId]: String(downPayment) }));
-    await updateGroup(ids, { payment_status: newStatus, down_payment: downPayment });
+    await updateGroup(ids, patch);
 
     if (!wasCancelled && isNowCancelled) {
       toast.success(`Reserva cancelada! +${quantity} unidade(s) devolvida(s) ao estoque.`);
@@ -2876,9 +2912,9 @@ function OrdersTab({
     await updateGroup(ids, { delivery_status: newStatus });
 
     if (!wasCancelled && isNowCancelled) {
-      toast.success(`Reserva cancelada! +${quantity} unidade(s) devolvida(s) ao estoque.`);
+      toast.success(`Envio cancelado! +${quantity} unidade(s) devolvida(s) ao estoque.`);
     } else {
-      toast.success("Reserva atualizada.");
+      toast.success("Status de envio atualizado.");
     }
   }
 
@@ -2888,6 +2924,7 @@ function OrdersTab({
     estimateSize: () => 350,
     overscan: 5,
   });
+  
   const brandData = useMemo(() => {
     const counts: Record<string, number> = {};
     orders.forEach(o => {
@@ -2899,8 +2936,6 @@ function OrdersTab({
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
   }, [orders]);
-
-  const COLORS = ["#8b5cf6", "#d946ef", "#f43f5e", "#f97316", "#eab308"];
 
   const handleDragStart = (e: React.DragEvent, item: GroupedOrderRow) => {
     e.dataTransfer.setData("application/json", JSON.stringify(item.ids));
@@ -2927,6 +2962,7 @@ function OrdersTab({
   const kanbanBoard = useMemo(() => {
     const cols = {
       aguardando_sinal: { title: "Aguardando Sinal", items: [] as GroupedOrderRow[] },
+      sem_sinal: { title: "Sem Sinal / Chegada", items: [] as GroupedOrderRow[] },
       sinal_pago: { title: "Sinal Pago", items: [] as GroupedOrderRow[] },
       quitado: { title: "Quitado", items: [] as GroupedOrderRow[] },
       entregue: { title: "Entregue / Enviado", items: [] as GroupedOrderRow[] },
@@ -2935,17 +2971,17 @@ function OrdersTab({
 
     groupedOrders.forEach(item => {
       const { order: o } = item;
-      const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
-      const effectiveStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
 
       if (o.payment_status === "cancelado" || o.delivery_status === "cancelado") {
         cols.cancelado.items.push(item);
       } else if (o.delivery_status === "entregue" || o.delivery_status === "enviado") {
         cols.entregue.items.push(item);
-      } else if (effectiveStatus === "quitado") {
+      } else if (o.payment_status === "quitado") {
         cols.quitado.items.push(item);
-      } else if (effectiveStatus === "sinal_pago") {
+      } else if (o.payment_status === "sinal_pago") {
         cols.sinal_pago.items.push(item);
+      } else if (o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada") {
+        cols.sem_sinal.items.push(item);
       } else {
         cols.aguardando_sinal.items.push(item);
       }
@@ -2989,33 +3025,7 @@ function OrdersTab({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="border-border/60 panel">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-              <Trophy className="size-4 text-primary" /> Top Marcas Reservadas
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="h-[200px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={brandData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis fontSize={12} tickLine={false} axisLine={false} />
-                <RechartsTooltip 
-                  cursor={{ fill: 'hsl(var(--muted))' }}
-                  contentStyle={{ backgroundColor: 'hsl(var(--background))', borderColor: 'hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--foreground))' }}
-                  itemStyle={{ color: 'hsl(var(--foreground))' }}
-                  formatter={(value: number) => [value, "Reservas"]}
-                />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                  {brandData.map((_entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        <SalesChart brandData={brandData} />
       </div>
 
     <Card className="border-border/60 panel relative">
@@ -3353,8 +3363,7 @@ function OrdersTab({
 
                 {/* Status e Prazo */}
                 {(() => {
-                  const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
-                  const currentPaymentStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
+                  const currentPaymentStatus = o.payment_status;
                   return (
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -3477,8 +3486,7 @@ function OrdersTab({
                   (guestMeta?.phone || o.profiles?.phone || cached?.phone ? `Cliente (${guestMeta?.phone || o.profiles?.phone || cached?.phone})` : "Cliente sem nome");
 
                 const clientPhone = guestMeta?.phone || o.profiles?.phone || cached?.phone;
-                const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
-                const currentPaymentStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
+                const currentPaymentStatus = o.payment_status;
 
                 return (
                   <TableRow key={groupId} data-state={selectedOrders.has(groupId) ? "selected" : undefined}>

@@ -1,8 +1,14 @@
+const brlFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
 export const brl = (value: number | null | undefined) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value ?? 0));
+  brlFormatter.format(Number(value ?? 0));
 
 export function hasNoSignalRequirement(product: any): boolean {
-  return product.payment_deadline_hours === 0 || Number(product.down_payment_amount ?? 0) === 0;
+  if (!product) return false;
+  const hasDownPayment = Number(product.down_payment_amount ?? 0) > 0;
+  const hasDeadlineDate = Boolean(product.payment_deadline_date);
+  const hasDeadlineHours = Number(product.payment_deadline_hours ?? 0) > 0;
+  return !hasDownPayment && !hasDeadlineDate && !hasDeadlineHours;
 }
 
 export const paymentLabels: Record<string, string> = {

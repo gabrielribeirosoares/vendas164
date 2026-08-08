@@ -78,133 +78,13 @@ function CustomerDashboardContent() {
     enabled: !!user,
     retry: 2,
     queryFn: async () => {
-      // 1. Tentar auto-migrar reservas pendentes por telefone (tanto via profiles quanto via meta)
-      if (user) {
-        try {
-          const { data: currentProf } = await supabase
-            .from("profiles")
-            .select("phone, name, email")
-            .eq("id", user.id)
-            .maybeSingle();
+      // A migração de reservas antigas é feita automaticamente em src/lib/session.ts
+      // via a RPC migrate_reservations_by_phone (mais eficiente e sem consultas pesadas).
 
-          const userEmail = (currentProf?.email || user.email || "").toLowerCase().trim();
-          const userPhone = currentProf?.phone || user.user_metadata?.phone || profile?.phone || "";
-          const userName = currentProf?.name || user.user_metadata?.name || profile?.name || "";
-          const rawPhoneDigits = userPhone ? userPhone.replace(/\D/g, "") : "";
-          const lowerName = userName.toLowerCase().trim();
-
-          let migratedCount = 0;
-
-          // 1A. Procurar perfis duplicados no Supabase com o mesmo número de telefone
-          if (rawPhoneDigits.length >= 8) {
-            const { data: allProfiles } = await supabase.from("profiles").select("id, phone").neq("id", user.id);
-            if (allProfiles && allProfiles.length > 0) {
-              const duplicateUserIds: string[] = [];
-              for (const pItem of allProfiles) {
-                if (pItem.phone) {
-                  const pDigits = String(pItem.phone).replace(/\D/g, "");
-                  if (pDigits.length >= 8 && (rawPhoneDigits.slice(-8) === pDigits.slice(-8) || rawPhoneDigits === pDigits)) {
-                    duplicateUserIds.push(pItem.id);
-                  }
-                }
-              }
-
-              if (duplicateUserIds.length > 0) {
-                const { data: ordersToMigrate } = await supabase.from("orders").select("id, store_id").in("user_id", duplicateUserIds);
-                if (ordersToMigrate && ordersToMigrate.length > 0) {
-                  const { error: migErr } = await supabase.from("orders").update({ user_id: user.id }).in("user_id", duplicateUserIds);
-                  if (!migErr) {
-                    migratedCount += ordersToMigrate.length;
-                    for (const oItem of ordersToMigrate) {
-                      if (oItem.store_id) {
-                        await supabase.from("customer_store_link").upsert({ user_id: user.id, store_id: oItem.store_id }, { onConflict: "user_id,store_id" });
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-
-          // 1B. Buscar pedidos com metadados ou cache local
-          const { data: candidateOrders } = await supabase
-            .from("orders")
-            .select("id, pix_key, store_id, user_id")
-            .neq("user_id", user.id);
-
-          if (candidateOrders && candidateOrders.length > 0) {
-            const { getCustomerFromCache } = await import("@/lib/customerCache");
-
-            for (const orderItem of candidateOrders) {
-              let meta: any = null;
-
-              if (orderItem.pix_key && typeof orderItem.pix_key === "string") {
-                try {
-                  if (orderItem.pix_key.startsWith("GUEST:")) {
-                    meta = JSON.parse(orderItem.pix_key.replace(/^GUEST:/, ""));
-                  } else if (orderItem.pix_key.startsWith('{"manual_guest":true')) {
-                    meta = JSON.parse(orderItem.pix_key);
-                  }
-                } catch {}
-              }
-
-              // Fallback pelo customerCache
-              if (!meta) {
-                const cached = getCustomerFromCache(orderItem.id) || getCustomerFromCache(orderItem.user_id);
-                if (cached) {
-                  meta = { name: cached.name, phone: cached.phone, email: cached.email };
-                }
-              }
-
-              if (meta) {
-                const customPixKey = meta.pix || meta.custom_pix || null;
-                const metaPhoneDigits = meta.phone ? String(meta.phone).replace(/\D/g, "") : "";
-                const metaEmail = (meta.email || "").toLowerCase().trim();
-                const metaName = (meta.name || "").toLowerCase().trim();
-
-                const phoneMatch = Boolean(
-                  rawPhoneDigits && metaPhoneDigits && (
-                    (rawPhoneDigits.length >= 8 && metaPhoneDigits.length >= 8 && rawPhoneDigits.slice(-8) === metaPhoneDigits.slice(-8)) ||
-                    rawPhoneDigits === metaPhoneDigits
-                  )
-                );
-                const emailMatch = Boolean(userEmail && metaEmail && userEmail === metaEmail);
-                const nameMatch = Boolean(lowerName && metaName && lowerName.length > 2 && lowerName === metaName);
-
-                if (phoneMatch || emailMatch || nameMatch) {
-                  const { error: updateErr } = await supabase
-                    .from("orders")
-                    .update({ user_id: user.id, pix_key: customPixKey })
-                    .eq("id", orderItem.id);
-
-                  if (!updateErr) {
-                    migratedCount++;
-                    if (orderItem.store_id) {
-                      await supabase
-                        .from("customer_store_link")
-                        .upsert({ user_id: user.id, store_id: orderItem.store_id }, { onConflict: "user_id,store_id" })
-                        .then(() => undefined)
-                        .then(() => undefined);
-                    }
-                  }
-                }
-              }
-            }
-          }
-
-          if (migratedCount > 0) {
-            const { toast } = await import("sonner");
-            toast.success(`${migratedCount} ${migratedCount === 1 ? "reserva vinculada" : "reservas vinculadas"} à sua conta!`);
-          }
-        } catch (err) {
-          console.error("Erro na auto-migração do painel:", err);
-        }
-      }
-
-      // 2. Buscar ordens atualizadas do usuário
+      // Buscar ordens atualizadas do usuário
       const { data, error } = await supabase
         .from("orders")
-        .select("*, products(brand, model, image_url, release_date), stores(name, slug, whatsapp_number, pix_key)")
+        .select("*, products(*), stores(name, slug, whatsapp_number, pix_key)")
         .eq("user_id", user!.id)
         .order("created_at", { ascending: false })
         .limit(PAGE_SIZE)
@@ -472,8 +352,7 @@ function CustomerDashboardContent() {
                       </h3>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         {(() => {
-                          const isNoSignalOrder = o.payment_status === "sem_sinal" || (!o.reservation_expires_at && Number(o.down_payment) === 0);
-                          const currentPaymentStatus = isNoSignalOrder && o.payment_status === "aguardando_sinal" ? "sem_sinal" : o.payment_status;
+                          const currentPaymentStatus = o.payment_status;
                           return (
                             <>
                               <PaymentBadge status={currentPaymentStatus} />
