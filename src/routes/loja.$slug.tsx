@@ -17,17 +17,36 @@ import { useSession } from "@/lib/session";
 import { saveCustomerToCache } from "@/lib/customerCache";
 
 export const Route = createFileRoute("/loja/$slug")({
-  head: ({ params }) => ({
-    meta: [
-      { title: `Loja ${params.slug} — pré-vendas de miniaturas | Vendas 1:64` },
-      {
-        name: "description",
-        content: `Veja as pré-vendas abertas e reserve sua cota na loja ${params.slug}.`,
-      },
-      { property: "og:title", content: `Loja ${params.slug} — Vendas 1:64` },
-      { property: "og:description", content: "Pré-vendas abertas de miniaturas colecionáveis." },
-    ],
-  }),
+  loader: async ({ params }) => {
+    const { data: store } = await supabase
+      .from("stores")
+      .select("id, name, slug, logo_url, favicon_url, about_text, primary_color")
+      .eq("slug", params.slug)
+      .maybeSingle();
+    return { store };
+  },
+  head: ({ loaderData, params }) => {
+    const store = loaderData?.store;
+    const title = store?.name ? `${store.name} — Pré-vendas de Miniaturas 1:64` : `Loja ${params.slug} — Vendas 1:64`;
+    const desc = store?.about_text || `Veja as pré-vendas abertas e reserve suas miniaturas na loja ${store?.name || params.slug}.`;
+    const img = store?.logo_url || store?.favicon_url || "https://vendas164.com.br/og-image.png";
+
+    return {
+      meta: [
+        { title },
+        { name: "description", content: desc },
+        { property: "og:title", content: title },
+        { property: "og:description", content: desc },
+        { property: "og:image", content: img },
+        { property: "og:type", content: "website" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: desc },
+        { name: "twitter:image", content: img },
+      ],
+      links: (store?.favicon_url || store?.logo_url) ? [{ rel: "icon", href: store.favicon_url || store.logo_url }] : [],
+    };
+  },
   component: StorePage,
 });
 

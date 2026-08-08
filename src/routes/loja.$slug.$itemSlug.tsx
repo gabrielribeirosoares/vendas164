@@ -17,17 +17,50 @@ import { useSession } from "@/lib/session";
 import { joinWaitlist, reservationErrorMessage, reserveQuota } from "@/lib/reservations";
 
 export const Route = createFileRoute("/loja/$slug/$itemSlug")({
-  head: () => ({
-    meta: [
-      { title: "Pré-venda de miniatura — Vendas 1:64" },
-      {
-        name: "description",
-        content: "Detalhes da pré-venda: preço, unidades disponíveis, prazo do sinal e reserva.",
-      },
-      { property: "og:title", content: "Pré-venda de miniatura — Vendas 1:64" },
-      { property: "og:description", content: "Reserve sua unidade desta miniatura colecionável." },
-    ],
-  }),
+  loader: async ({ params }) => {
+    let { data: product } = await supabase
+      .from("products")
+      .select("*, stores!inner(id, name, slug, logo_url, favicon_url)")
+      .eq("slug", params.itemSlug)
+      .eq("stores.slug", params.slug)
+      .maybeSingle();
+
+    if (!product) {
+      const { data: fallbackProduct } = await supabase
+        .from("products")
+        .select("*, stores(id, name, slug, logo_url, favicon_url)")
+        .eq("id", params.itemSlug)
+        .maybeSingle();
+      product = fallbackProduct;
+    }
+
+    return { product };
+  },
+  head: ({ loaderData, params }) => {
+    const product = loaderData?.product;
+    const store = (product as any)?.stores;
+    const title = product ? `${product.model} (${product.brand}) — ${store?.name || "Vendas 1:64"}` : "Pré-venda de miniatura — Vendas 1:64";
+    const desc = product
+      ? `Pré-venda de ${product.brand} ${product.model} por ${brl(product.price)}. Garanta sua unidade na loja ${store?.name || params.slug}!`
+      : "Detalhes da pré-venda: preço, unidades disponíveis, prazo do sinal e reserva.";
+    const img = product?.image_url || store?.logo_url || store?.favicon_url || "https://vendas164.com.br/og-image.png";
+
+    return {
+      meta: [
+        { title },
+        { name: "description", content: desc },
+        { property: "og:title", content: title },
+        { property: "og:description", content: desc },
+        { property: "og:image", content: img },
+        { property: "og:type", content: "website" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: desc },
+        { name: "twitter:image", content: img },
+      ],
+      links: (store?.favicon_url || store?.logo_url) ? [{ rel: "icon", href: store.favicon_url || store.logo_url }] : [],
+    };
+  },
   component: ProductPage,
 });
 

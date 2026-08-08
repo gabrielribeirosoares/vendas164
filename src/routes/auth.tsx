@@ -22,17 +22,52 @@ export const Route = createFileRoute("/auth")({
     produto: typeof search.produto === "string" ? search.produto : undefined,
     next: typeof search.next === "string" && search.next.startsWith("/") ? search.next : undefined,
   }),
-  head: () => ({
-    meta: [
-      { title: "Entrar ou criar conta" },
-      {
-        name: "description",
-        content: "Acesse sua conta para reservar miniaturas ou gerenciar sua loja.",
-      },
-      { property: "og:title", content: "Entrar ou criar conta" },
-      { property: "og:description", content: "Acesse sua conta." },
-    ],
-  }),
+  loaderDeps: ({ search }) => ({ loja: search.loja, next: search.next, produto: search.produto }),
+  loader: async ({ deps }) => {
+    let store: any = null;
+    if (deps.loja) {
+      const { data } = await supabase
+        .from("stores")
+        .select("id, name, slug, logo_url, favicon_url, about_text")
+        .eq("id", deps.loja)
+        .maybeSingle();
+      store = data;
+    }
+    if (!store && deps.next?.startsWith("/loja/")) {
+      const slug = deps.next.replace("/loja/", "").split("?")[0].split("/")[0];
+      const { data } = await supabase
+        .from("stores")
+        .select("id, name, slug, logo_url, favicon_url, about_text")
+        .eq("slug", slug)
+        .maybeSingle();
+      store = data;
+    }
+    return { store };
+  },
+  head: ({ loaderData }) => {
+    const store = loaderData?.store;
+    const title = store?.name ? `Entrar / Criar Conta — ${store.name}` : "Entrar ou criar conta — Vendas 1:64";
+    const desc = store?.name
+      ? (store.about_text || `Acesse sua conta para ver as pré-vendas e fazer reservas na ${store.name}.`)
+      : "Acesse sua conta para reservar miniaturas ou gerenciar sua loja.";
+    const img = store?.logo_url || store?.favicon_url || "https://vendas164.com.br/og-image.png";
+
+    return {
+      meta: [
+        { title },
+        { name: "description", content: desc },
+        { property: "og:title", content: title },
+        { property: "og:description", content: desc },
+        { property: "og:image", content: img },
+        { property: "og:type", content: "website" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: desc },
+        { name: "twitter:image", content: img },
+      ],
+      links: (store?.favicon_url || store?.logo_url) ? [{ rel: "icon", href: store.favicon_url || store.logo_url }] : [],
+    };
+  },
   component: AuthPage,
 });
 
