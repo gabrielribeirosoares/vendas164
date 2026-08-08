@@ -1004,9 +1004,29 @@ function ProductsTab({
   }
 
   async function remove(product: Product) {
-    await supabase.from("products").delete().eq("id", product.id);
-    queryClient.invalidateQueries();
-    toast.success("Miniatura removida.");
+    try {
+      // Primeiro remove da waitlist (pode ter FK sem cascade)
+      await supabase.from("waitlist").delete().eq("product_id", product.id);
+
+      const { error } = await supabase.from("products").delete().eq("id", product.id);
+
+      if (error) {
+        // FK ainda ativa por orders vinculadas — orienta o lojista
+        if ((error as any).status === 400 || (error as any).code === "23503") {
+          toast.error(
+            "Não é possível excluir: há reservas vinculadas a esta pré-venda. Cancele ou exclua as reservas antes de remover o produto."
+          );
+          return;
+        }
+        toast.error("Erro ao remover a miniatura.");
+        return;
+      }
+
+      queryClient.invalidateQueries();
+      toast.success("Miniatura removida.");
+    } catch {
+      toast.error("Erro ao remover a miniatura.");
+    }
   }
 
   async function onFile(file: File) {

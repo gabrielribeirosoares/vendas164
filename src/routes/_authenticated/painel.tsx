@@ -177,12 +177,11 @@ function CustomerDashboardContent() {
       if (!garageSearchQuery.trim()) return true;
       const q = garageSearchQuery.toLowerCase().trim();
       const cleanQ = q.replace(/^#/, "");
-      
-      const prodModel = (o.products?.model || "").toLowerCase();
-      const prodBrand = (o.products?.brand || "").toLowerCase();
+      // Usar snapshot quando o produto foi deletado
+      const prodModel = (o.products?.model || (o as any).product_model || "").toLowerCase();
+      const prodBrand = (o.products?.brand || (o as any).product_brand || "").toLowerCase();
       const storeName = (o.stores?.name || "").toLowerCase();
       const orderId = (o.id || "").toLowerCase();
-      
       return (
         prodModel.includes(q) ||
         prodBrand.includes(q) ||
@@ -565,10 +564,10 @@ function CustomerDashboardContent() {
                   return (
                     <Card key={ids[0]} className="border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
                       <div className="aspect-video w-full overflow-hidden bg-muted relative">
-                        {o.products?.image_url ? (
+                        {(o.products?.image_url || (o as any).product_image_url) ? (
                           <img
-                            src={o.products.image_url}
-                            alt={o.products.model}
+                            src={o.products?.image_url || (o as any).product_image_url}
+                            alt={o.products?.model || (o as any).product_model}
                             className="h-full w-full object-cover"
                             loading="lazy"
                           />
@@ -585,14 +584,14 @@ function CustomerDashboardContent() {
                       </div>
                       <CardContent className="p-4 space-y-2">
                         <div className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider flex items-center gap-1.5">
-                          <span>{o.products?.brand} · {o.stores?.name}</span>
+                          <span>{o.products?.brand || (o as any).product_brand} · {o.stores?.name}</span>
                           {qty > 1 && (
                             <span className="font-bold text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 bg-emerald-500/10 rounded-full">
                               {qty}x
                             </span>
                           )}
                         </div>
-                        <h4 className="font-bold text-base text-foreground leading-snug">{o.products?.model}</h4>
+                        <h4 className="font-bold text-base text-foreground leading-snug">{o.products?.model || (o as any).product_model}</h4>
                         <div className="flex items-center justify-between text-xs text-muted-foreground pt-2.5 border-t border-border/20">
                           <span>Valor pago: <strong className="text-foreground font-semibold">{brl(Number(o.total_price) * qty)}</strong></span>
                           <span className="font-mono text-[10px] text-muted-foreground">#{ids[0].slice(0, 6)}</span>
