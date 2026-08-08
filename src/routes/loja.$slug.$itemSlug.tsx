@@ -51,6 +51,7 @@ export const Route = createFileRoute("/loja/$slug/$itemSlug")({
       ? `Pré-venda de ${product.brand} ${product.model} por ${brl(product.price)}. Garanta sua unidade na loja ${store?.name || params.slug}!`
       : "Detalhes da pré-venda: preço, unidades disponíveis, prazo do sinal e reserva.";
     const img = product?.image_url || store?.logo_url || store?.favicon_url || "https://vendas164.com.br/og-image.png";
+    const favicon = store?.favicon_url || store?.logo_url || undefined;
 
     return {
       meta: [
@@ -65,7 +66,7 @@ export const Route = createFileRoute("/loja/$slug/$itemSlug")({
         { name: "twitter:description", content: desc },
         { name: "twitter:image", content: img },
       ],
-      links: (store?.favicon_url || store?.logo_url) ? [{ rel: "icon", href: store.favicon_url || store.logo_url }] : [],
+      links: favicon ? [{ rel: "icon", href: favicon }] : [],
     };
   },
   component: ProductPage,

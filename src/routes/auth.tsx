@@ -59,6 +59,7 @@ export const Route = createFileRoute("/auth")({
       ? (store.description || `Acesse sua conta para ver as pré-vendas e fazer reservas na ${store.name}.`)
       : "Acesse sua conta para reservar miniaturas ou gerenciar sua loja.";
     const img = store?.logo_url || store?.favicon_url || "https://vendas164.com.br/og-image.png";
+    const favicon = store?.favicon_url || store?.logo_url || undefined;
 
     return {
       meta: [
@@ -73,7 +74,7 @@ export const Route = createFileRoute("/auth")({
         { name: "twitter:description", content: desc },
         { name: "twitter:image", content: img },
       ],
-      links: (store?.favicon_url || store?.logo_url) ? [{ rel: "icon", href: store.favicon_url || store.logo_url }] : [],
+      links: favicon ? [{ rel: "icon", href: favicon }] : [],
     };
   },
   component: AuthPage,
