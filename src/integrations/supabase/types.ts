@@ -312,6 +312,10 @@ export type Database = {
       expire_stale_orders: { Args: never; Returns: number }
       is_store_owner: { Args: { _store_id: string }; Returns: boolean }
       migrate_reservations_by_phone: { Args: { p_new_user_id: string; p_phone: string }; Returns: void }
+      reservar_miniatura: {
+        Args: { p_produto_id: string; p_quantidade: number }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

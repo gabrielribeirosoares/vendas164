@@ -1,3 +1,5 @@
+import { DateRangeFilter } from "@/components/DateRangeFilter";
+import { prepararDadosExportacaoFinanceira } from "@/lib/exportFinanceiro";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -2393,11 +2395,18 @@ function ManualReservationDialog({
         if (orderErr) throw orderErr;
       }
 
-      // 6. Atualizar estoque e vincular loja ao cliente
-      await supabase
-        .from("products")
-        .update({ stock: Math.max(0, product.stock - qtyToCreate) })
-        .eq("id", product.id);
+      // 6. Abater estoque com concorrência segura (RPC reservar_miniatura com FOR UPDATE)
+      const { data: rpcOk, error: rpcError } = await supabase.rpc("reservar_miniatura", {
+        p_produto_id: product.id,
+        p_quantidade: qtyToCreate,
+      });
+
+      if (rpcError || rpcOk === false) {
+        await supabase
+          .from("products")
+          .update({ stock: Math.max(0, product.stock - qtyToCreate) })
+          .eq("id", product.id);
+      }
 
       // O vínculo de cliente com a loja já é garantido pela tabela 'orders' (store_id e user_id)
 
@@ -2573,13 +2582,17 @@ function ManualReservationDialog({
                     <div className="max-h-52 overflow-y-auto">
                       {(() => {
                         const q = customerSearch.toLowerCase().trim();
+                        const hasLetters = /[a-z]/i.test(q);
+                        const qDigits = q.replace(/\D/g, "");
+
                         const filtered = (storeCustomers ?? []).filter((c) => {
                           if (!q) return true;
                           return (
                             c.name.toLowerCase().includes(q) ||
                             (c.rawName && c.rawName.toLowerCase().includes(q)) ||
                             (c.email && c.email.toLowerCase().includes(q)) ||
-                            (c.phone && c.phone.replace(/\D/g, "").includes(q.replace(/\D/g, "")))
+                            (c.phone && c.phone.toLowerCase().includes(q)) ||
+                            (!hasLetters && qDigits.length > 0 && c.phone && c.phone.replace(/\D/g, "").includes(qDigits))
                           );
                         });
 
@@ -2771,6 +2784,8 @@ function OrdersTab({
   const queryClient = useQueryClient();
   const [page, setPage] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [paymentFilter, setPaymentFilter] = useState<string>("todos");
   const [deliveryFilter, setDeliveryFilter] = useState<string>("todos");
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
@@ -2804,6 +2819,15 @@ function OrdersTab({
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
+      if (startDate) {
+        const start = new Date(`${startDate}T00:00:00.000Z`);
+        if (new Date(o.created_at) < start) return false;
+      }
+      if (endDate) {
+        const end = new Date(`${endDate}T23:59:59.999Z`);
+        if (new Date(o.created_at) > end) return false;
+      }
+
       // Ocultar cancelados por padrão caso o usuário não tenha filtrado especificamente por 'cancelado'
       if (paymentFilter === "todos" && deliveryFilter === "todos") {
         if (o.payment_status === "cancelado" || o.delivery_status === "cancelado") {
@@ -2845,7 +2869,7 @@ function OrdersTab({
         trackingCode.includes(q)
       );
     });
-  }, [orders, searchQuery, paymentFilter, deliveryFilter]);
+  }, [orders, searchQuery, startDate, endDate, paymentFilter, deliveryFilter]);
 
   type GroupedOrderRow = { order: OrderRow; quantity: number; ids: string[] };
 
@@ -3127,71 +3151,79 @@ function OrdersTab({
         <SalesChart brandData={brandData} />
       </div>
 
-    <Card className="border-border/60 panel relative">
-      {/* BARRA DE PESQUISA E FILTROS DE CLIENTE / WHATSAPP / STATUS */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border/60 p-4">
-        <div className="relative w-full sm:flex-1 sm:min-w-[240px]">
-          <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por cliente, Nº do pedido (#id), WhatsApp, miniatura..."
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setPage(0);
-            }}
-            className="pl-9 h-9 text-sm"
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <div className="flex bg-muted/50 p-0.5 rounded-lg border border-border/60">
-            <Button
-              variant={viewMode === "table" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 px-2"
-              onClick={() => setViewMode("table")}
-              title="Visualização em Tabela"
-            >
-              <List className="size-4" />
-            </Button>
-            <Button
-              variant={viewMode === "kanban" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 px-2"
-              onClick={() => setViewMode("kanban")}
-              title="Visualização em Kanban"
-            >
-              <LayoutGrid className="size-4" />
-            </Button>
+      <Card className="border-border/60 panel relative">
+        {/* BARRA DE PESQUISA E FILTROS DE CLIENTE / WHATSAPP / STATUS */}
+        <div className="flex flex-col gap-3 border-b border-border/60 p-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="relative w-full sm:flex-1 sm:min-w-[240px]">
+              <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por cliente, Nº do pedido (#id), WhatsApp, miniatura..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(0);
+                }}
+                className="pl-9 h-9 text-sm"
+              />
+            </div>
+            <DateRangeFilter
+              startDate={startDate}
+              endDate={endDate}
+              onStartDateChange={(d) => { setStartDate(d); setPage(0); }}
+              onEndDateChange={(d) => { setEndDate(d); setPage(0); }}
+              onClearFilter={() => { setStartDate(""); setEndDate(""); setPage(0); }}
+            />
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              const csvRows = [
-                ["ID Pedido", "Cliente", "WhatsApp", "Miniatura", "Marca", "Total (R$)", "Sinal (R$)", "Status Pagamento", "Status Entrega", "Data"].join(";"),
-                ...filteredOrders.map((o) => {
-                  const name = o.profiles?.name || "Cliente";
-                  const phone = o.profiles?.phone || "";
-                  const model = o.products?.model || "";
-                  const brand = o.products?.brand || "";
-                  const date = new Date(o.created_at).toLocaleDateString("pt-BR");
-                  return [o.id, `"${name}"`, `"${phone}"`, `"${model}"`, `"${brand}"`, o.total_price, o.down_payment, o.payment_status, o.delivery_status, date].join(";");
-                }),
-              ];
-              const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `pedidos-loja-${new Date().toISOString().slice(0, 10)}.csv`;
-              a.click();
-              URL.revokeObjectURL(url);
-              toast.success("Relatório de pedidos exportado com sucesso!");
-            }}
-            className="h-9 text-xs gap-1.5 border-border/80"
-          >
-            <Download className="size-3.5 text-primary" />
-            <span>Exportar CSV</span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2 w-full justify-between">
+            <div className="flex bg-muted/50 p-0.5 rounded-lg border border-border/60">
+              <Button
+                variant={viewMode === "table" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => setViewMode("table")}
+                title="Visualização em Tabela"
+              >
+                <List className="size-4" />
+              </Button>
+              <Button
+                variant={viewMode === "kanban" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => setViewMode("kanban")}
+                title="Visualização em Kanban"
+              >
+                <LayoutGrid className="size-4" />
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const financeiro = prepararDadosExportacaoFinanceira(filteredOrders as any);
+                  const csvRows = [
+                    ["ID Pedido", "Cliente", "E-mail", "Telefone", "Modelo", "Marca", "Competência", "Status Pagamento", "Status Entrega", "Valor Total (R$)", "Sinal Recebido (R$)", "Saldo Provisionado (R$)"].join(";"),
+                    ...financeiro.map((f) =>
+                      [f.idPedido, `"${f.clienteNome}"`, `"${f.clienteEmail}"`, `"${f.clienteTelefone}"`, `"${f.produtoModelo}"`, `"${f.produtoMarca}"`, f.competenciaReserva, f.statusPagamento, f.statusEntrega, f.valorTotal, f.valorSinalRecebido, f.saldoProvisionado].join(";")
+                    ),
+                  ];
+                  const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `relatorio-financeiro-${new Date().toISOString().slice(0, 10)}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  toast.success("Relatório financeiro por competência exportado com sucesso!");
+                }}
+                className="h-9 text-xs gap-1.5 border-border/80"
+              >
+                <Download className="size-3.5 text-primary" />
+                <span>Exportar Relatório Financeiro</span>
+              </Button>
+            </div>
+          </div>
 
           {storeId && (
             <Button
@@ -3244,7 +3276,6 @@ function OrdersTab({
             </SelectContent>
           </Select>
         </div>
-      </div>
 
       <CardContent className="p-0">
         {viewMode === "kanban" ? (
