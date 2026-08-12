@@ -1,33 +1,16 @@
 import { BookmarkCheck, CopyPlus } from "lucide-react";
 import { formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo, hasNoSignalRequirement } from "@/lib/format";
-import { DateRangeFilter } from "@/components/DateRangeFilter";
-import { prepararDadosExportacaoFinanceira } from "@/lib/exportFinanceiro";
-import { useEffect, useMemo, useState, useRef } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, Copy, Filter, Loader2, Package, Pencil, Plus, Search, Share2, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Search, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { PhoneInput } from "@/components/PhoneInput";
 import { getCustomerFromCache, saveCustomerToCache } from "@/lib/customerCache";
-import { PaymentBadge } from "@/components/StatusBadge";
-import { Countdown } from "@/components/Countdown";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -35,32 +18,25 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, slugify } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { uploadImage } from "@/lib/upload";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { getStoreBrands, saveStoreBrands } from "@/lib/brands";
 import { getProductTotalStock } from "@/lib/stock";
 import type { Tables } from "@/integrations/supabase/types";
-import { SalesChart } from "@/components/vendedor/SalesChart";
-import { SmartNotifications } from "@/components/vendedor/SmartNotifications";
-import { SellerOverview } from "@/components/vendedor/SellerOverview";
 
 type Store = Tables<"stores">;
 type Product = Tables<"products">;
@@ -105,6 +81,7 @@ export function ProductsTab({
   const [manualReservationProduct, setManualReservationProduct] = useState<Product | null>(null);
   const [selectedBrand, setSelectedBrand] = useState<string>("all");
   const [isCustomBrand, setIsCustomBrand] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const configuredBrands = useMemo(() => getStoreBrands(store.id), [store.id]);
   const availableBrandOptions = useMemo(() => {
@@ -231,6 +208,7 @@ export function ProductsTab({
     }
 
     setForm({ ...emptyProduct });
+    setSheetOpen(false);
     setIsCustomBrand(false);
     queryClient.invalidateQueries();
     toast.success("Pré-venda cadastrada!");
@@ -296,7 +274,8 @@ export function ProductsTab({
       setIsCustomBrand(false);
     }
 
-    toast.info(`Dados de "${p.model}" carregados no formulário de cadastro acima!`);
+    toast.info(`Dados de "${p.model}" carregados no formulário de cadastro!`);
+    setSheetOpen(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -338,12 +317,12 @@ export function ProductsTab({
 
   return (
     <>
-      <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
-        <Card className="h-fit border-border/30 bg-card/60">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold">Nova pré-venda</CardTitle>
-          </CardHeader>
-          <CardContent>
+      {/* Sheet lateral com o formulário */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+          <SheetHeader className="mb-4">
+            <SheetTitle className="text-lg font-semibold">Nova pré-venda</SheetTitle>
+          </SheetHeader>
             <form onSubmit={submit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -643,13 +622,14 @@ export function ProductsTab({
                 {saving && <Loader2 className="size-4 animate-spin" />} Publicar pré-venda
               </Button>
             </form>
-          </CardContent>
-        </Card>
+          </SheetContent>
+        </Sheet>
 
-        {/* Lista de Pré-vendas Agrupadas por Marca */}
-        <div className="space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-bold text-lg tracking-tight">Catálogo da Loja ({products.length})</h3>
+      {/* Catálogo em tela cheia */}
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-bold text-lg tracking-tight">Catálogo da Loja ({products.length})</h3>
+          <div className="flex flex-wrap items-center gap-2">
             {brandList.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5">
                 <Button
@@ -675,10 +655,19 @@ export function ProductsTab({
                 ))}
               </div>
             )}
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => { setForm({ ...emptyProduct }); setIsCustomBrand(false); setSheetOpen(true); }}
+              className="gap-1.5"
+            >
+              <Plus className="size-4" /> Nova pré-venda
+            </Button>
           </div>
+        </div>
 
-          <div className="space-y-5">
-            {filteredBrands.map((brand) => {
+        <div className="space-y-5">
+          {filteredBrands.map((brand) => {
               const brandProducts = brandsMap[brand];
               return (
                 <div key={brand} className="space-y-3">
@@ -814,7 +803,6 @@ export function ProductsTab({
             )}
           </div>
         </div>
-      </div>
 
       <EditProductDialog
         product={editingProduct}
@@ -2060,9 +2048,3 @@ export function ManualReservationDialog({
     </Dialog>
   );
 }
-
-
-
-const PAGE_SIZE = 8;
-
-
