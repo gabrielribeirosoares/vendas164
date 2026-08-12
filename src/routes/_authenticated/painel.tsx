@@ -85,13 +85,30 @@ function CustomerDashboardContent() {
       // Buscar ordens atualizadas do usuário (excluindo canceladas)
       const { data, error } = await supabase
         .from("orders")
-        .select("*, products(*), stores(name, slug, whatsapp_number, pix_key)")
+        .select("*, products(*), stores(name, slug, whatsapp_number, pix_key, owner_id)")
         .eq("user_id", user!.id)
         .neq("payment_status", "cancelado")
         .neq("delivery_status", "cancelado")
+        .neq("delivery_status", "entregue")
         .order("created_at", { ascending: false })
         .limit(PAGE_SIZE)
         .range(ordersPage * PAGE_SIZE, (ordersPage + 1) * PAGE_SIZE - 1);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const { data: garageOrders } = useQuery({
+    queryKey: ["my-garage", user?.id],
+    enabled: !!user,
+    retry: 2,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*, products(*), stores(name, slug, whatsapp_number, pix_key, owner_id)")
+        .eq("user_id", user!.id)
+        .eq("delivery_status", "entregue")
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
@@ -145,7 +162,7 @@ function CustomerDashboardContent() {
   });
 
   // Separar pedidos em andamento vs entregues/na garagem
-  const active = useMemo(() => (orders ?? []).filter((o) => {
+  const active = useMemo(() => (orders ?? []).filter((o: any) => {
     if (o.payment_status === "cancelado" || o.delivery_status === "cancelado") return false;
     if (o.pix_key && typeof o.pix_key === "string" && (o.pix_key.startsWith("GUEST:") || o.pix_key.startsWith('{"manual_guest":true'))) {
       return false;
@@ -154,7 +171,18 @@ function CustomerDashboardContent() {
     if (cachedGuest && cachedGuest.phone) return false;
     return true;
   }), [orders]);
-  const pendingOrders = useMemo(() => active.filter((o) => o.delivery_status !== "entregue"), [active]);
+  
+  const activeGarage = useMemo(() => (garageOrders ?? []).filter((o: any) => {
+    if (o.payment_status === "cancelado" || o.delivery_status === "cancelado") return false;
+    if (o.pix_key && typeof o.pix_key === "string" && (o.pix_key.startsWith("GUEST:") || o.pix_key.startsWith('{"manual_guest":true'))) {
+      return false;
+    }
+    const cachedGuest = getCustomerFromCache(o.id);
+    if (cachedGuest && cachedGuest.phone) return false;
+    return true;
+  }), [garageOrders]);
+
+  const pendingOrders = active;
 
   // Agrupamento de pedidos por produto e status para exibição consolidada
   const groupedPendingOrders = useMemo(() => {
@@ -170,10 +198,10 @@ function CustomerDashboardContent() {
     }
     return Array.from(map.values());
   }, [pendingOrders]);
-  const deliveredOrders = useMemo(() => active.filter((o) => o.delivery_status === "entregue"), [active]);
+  const deliveredOrders = activeGarage;
 
   const filteredDeliveredOrders = useMemo(() => {
-    return deliveredOrders.filter((o) => {
+    return deliveredOrders.filter((o: any) => {
       if (!garageSearchQuery.trim()) return true;
       const q = garageSearchQuery.toLowerCase().trim();
       const cleanQ = q.replace(/^#/, "");
@@ -381,7 +409,7 @@ function CustomerDashboardContent() {
 
                       return (
                         <div className="text-sm lg:text-right space-y-0.5">
-                          <p className="text-xs text-muted-foreground">Total: <span className="font-medium text-foreground">{brl(Number(o.total_price) * qty)}</span></p>
+                          <p className="text-xs text-muted-foreground">Total: <span className="font-medium text-foreground">{brl(Number(o.total_price) * qty)} {o.installment_count && o.installment_count > 1 ? `(${o.installment_count}x)` : ""}</span></p>
                           {isAguardando ? (
                             <>
                               <p className="text-sm font-bold text-primary">

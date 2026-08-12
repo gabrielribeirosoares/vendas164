@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { OnboardingTour, TourTriggerButton } from "@/components/OnboardingTour";
+import { CartDrawer } from "@/components/CartDrawer";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/lib/session";
 
@@ -194,9 +195,8 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                   <User className="size-3.5 sm:size-4 text-primary" />
                   <span className="hidden sm:inline">Perfil</span>
                 </Button>
-
+                <CartDrawer />
                 <TourTriggerButton />
-
                 <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sair" className="size-9 sm:size-9">
                   <LogOut className="size-4" />
                 </Button>

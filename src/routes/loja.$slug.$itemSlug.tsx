@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Clock, Package, Share2, Store as StoreIcon, CreditCard, ShoppingBag } from "lucide-react";
+import { CalendarDays, Clock, Package, Share2, ArrowLeft, Store as StoreIcon, CreditCard, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 import { createServerFn } from "@tanstack/react-start";
 import { AppHeader } from "@/components/AppHeader";
@@ -16,7 +16,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { brl, formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement } from "@/lib/format";
 import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
-import { joinWaitlist, reservationErrorMessage, reserveQuota } from "@/lib/reservations";
+import { joinWaitlist, reservationErrorMessage } from "@/lib/reservations";
+import { useCartStore } from "@/lib/cart";
 
 const fetchProductBySlugs = createServerFn({ method: "GET" })
   .validator((d: { slug: string; itemSlug: string }) => d)
@@ -90,6 +91,7 @@ function ProductPageContent() {
   const [quantity, setQuantity] = useState<number>(1);
   const [selectedInstallment, setSelectedInstallment] = useState<number>(1);
   const [reserving, setReserving] = useState<boolean>(false);
+  const cart = useCartStore();
 
   const { data: product, isLoading } = useQuery({
     queryKey: ["product", itemSlug],
@@ -161,89 +163,37 @@ function ProductPageContent() {
       toast.info("Você é o dono desta loja e não pode reservar unidades na sua própria pré-venda.");
       return;
     }
-    setReserving(true);
-    try {
-      if (product.stock > 0) {
-        const qtyToReserve = Math.min(quantity, product.stock);
-        const orderIds: string[] = [];
-
-        for (let i = 0; i < qtyToReserve; i++) {
-          const orderId = await reserveQuota(product.id);
-          orderIds.push(orderId);
+    if (product.stock > 0) {
+      cart.addItem({
+        productId: product.id,
+        storeId: product.store_id,
+        storeName: product.stores?.name,
+        quantity: quantity,
+        selectedInstallment,
+        unitPriceForChosenOption,
+        totalPrice: totalPriceCalculated,
+        downPaymentToPay: downPaymentToPay,
+        remainingBalance: remainingBalanceCalculated,
+        hasNoSignal,
+        productSnapshot: {
+          model: product.model,
+          brand: product.brand,
+          image_url: product.image_url,
+          scale: product.scale,
         }
-
-        // Atualizar pedidos com status se sem sinal ou prazo personalizado
-        if (orderIds.length > 0) {
-          const updatePayload: any = {};
-          if (unitPriceForChosenOption && Number(unitPriceForChosenOption) > 0) {
-            updatePayload.total_price = unitPriceForChosenOption;
-          }
-          if (hasNoSignal) {
-            updatePayload.payment_status = "sem_sinal";
-            updatePayload.reservation_expires_at = null;
-          } else {
-            if ((product as any)?.payment_deadline_date) {
-              updatePayload.reservation_expires_at = new Date((product as any).payment_deadline_date + "T23:59:59").toISOString();
-            } else if ((product as any)?.payment_deadline_hours && Number((product as any).payment_deadline_hours) > 0) {
-              updatePayload.reservation_expires_at = new Date(Date.now() + Number((product as any).payment_deadline_hours) * 3600 * 1000).toISOString();
-            }
-          }
-
-          if (Object.keys(updatePayload).length > 0) {
-            try {
-              const { error: updError } = await supabase
-                .from("orders")
-                .update(updatePayload)
-                .in("id", orderIds);
-              if (updError) {
-                console.warn("[handleReserve] Note: order update payload was skipped:", updError.message);
-              }
-            } catch (updErr) {
-              console.warn("[handleReserve] Could not update extra order details:", updErr);
-            }
-          }
-
-          if (isOnWaitlist) {
-            try {
-              await supabase
-                .from("waitlist")
-                .delete()
-                .eq("product_id", product.id)
-                .eq("user_id", user.id);
-            } catch (wlErr) {
-              console.warn("[handleReserve] Could not clear waitlist:", wlErr);
-            }
-          }
-        }
-
-        if (hasNoSignal) {
-          toast.success(qtyToReserve > 1 ? `${qtyToReserve} unidades reservadas com sucesso! (Sem sinal)` : "Unidade reservada com sucesso! (Sem sinal)");
-        } else {
-          toast.success(qtyToReserve > 1 ? `${qtyToReserve} unidades reservadas! Envie o sinal dentro do prazo.` : "Unidade reservada! Envie o sinal dentro do prazo.");
-        }
-      } else {
+      });
+      toast.success(quantity > 1 ? `${quantity} unidades adicionadas ao carrinho!` : "Unidade adicionada ao carrinho!");
+    } else {
+      setReserving(true);
+      try {
         await joinWaitlist(user.id, product.id, product.store_id);
         toast.success("Você entrou na fila de espera.");
+        await queryClient.invalidateQueries();
+      } catch (err) {
+        toast.error(reservationErrorMessage(err));
+      } finally {
+        setReserving(false);
       }
-
-      await queryClient.invalidateQueries();
-      try {
-        await navigate({ to: "/painel" });
-      } catch (navError) {
-        console.warn("[handleReserve] Router navigate failed, using fallback:", navError);
-        window.location.href = "/painel";
-      }
-
-      setTimeout(() => {
-        if (typeof window !== "undefined" && !window.location.pathname.startsWith("/painel")) {
-          window.location.href = "/painel";
-        }
-      }, 150);
-    } catch (error) {
-      console.error("[handleReserve] error:", error);
-      toast.error(reservationErrorMessage(error));
-    } finally {
-      setReserving(false);
     }
   }
 
@@ -298,6 +248,14 @@ function ProductPageContent() {
     <div className="min-h-screen">
       <AppHeader />
       <main className="mx-auto max-w-5xl px-4 py-10">
+        <div className="mb-6">
+          <Button variant="ghost" size="sm" asChild className="-ml-3 text-muted-foreground hover:text-foreground">
+            <Link to="/loja/$slug" params={{ slug: product?.stores?.slug ?? "" }}>
+              <ArrowLeft className="size-4 mr-1.5" />
+              Voltar para {product?.stores?.name}
+            </Link>
+          </Button>
+        </div>
         <div className="grid gap-8 md:grid-cols-2">
           <div className="overflow-hidden rounded-3xl border border-border/30 bg-card/60">
             <div className="aspect-square w-full bg-muted">
@@ -319,10 +277,10 @@ function ProductPageContent() {
           <div>
             <Link
               to="/loja/$slug"
-              params={{ slug: product.stores?.slug ?? "" }}
+              params={{ slug: product?.stores?.slug ?? "" }}
               className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
-              <StoreIcon className="size-4" /> {product.stores?.name}
+              <StoreIcon className="size-4" /> {product?.stores?.name}
             </Link>
             <h1 className="mt-2 text-3xl font-bold tracking-tight">{product.model}</h1>
             <p className="text-sm text-muted-foreground mt-1">
@@ -511,8 +469,9 @@ function ProductPageContent() {
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <Button
                 size="lg"
-                className="flex-1"
+                className="flex-1 font-bold shadow-md transition-all text-white"
                 onClick={handleReserve}
+                style={product.stock > 0 && product.is_open && isEligibleToBuyWaitlist ? { backgroundColor: product.stores?.primary_color } : undefined}
                 disabled={
                   !product.is_open || 
                   reserving || 
@@ -524,7 +483,12 @@ function ProductPageContent() {
                   ? "Pré-venda fechada"
                   : product.stock > 0
                     ? isEligibleToBuyWaitlist
-                      ? quantity > 1 ? `Reservar ${quantity} unidades` : "Reservar unidade"
+                      ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <ShoppingBag className="size-5" />
+                            {quantity > 1 ? `Adicionar ${quantity} ao Carrinho` : "Adicionar ao Carrinho"}
+                          </div>
+                        )
                       : "Estoque reservado p/ fila"
                     : isOnWaitlist
                       ? `Você é o ${userWaitlistIndex + 1}º na fila`
