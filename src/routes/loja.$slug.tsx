@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate, Outlet, useMatchRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpDown, BookmarkCheck, Check, Copy, Package, Search, Sparkles, Store as StoreIcon, X } from "lucide-react";
+import { ArrowUpDown, BookmarkCheck, Check, Copy, Package, Search, Sparkles, Store as StoreIcon, X, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 import { createServerFn } from "@tanstack/react-start";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
@@ -13,9 +13,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, getProductInstallmentInfo, getProductSignalAmount } from "@/lib/format";
+import { brl, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement } from "@/lib/format";
 import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
+import { useCartStore } from "@/lib/cart";
 import { saveCustomerToCache } from "@/lib/customerCache";
 
 const fetchStoreBySlug = createServerFn({ method: "GET" })
@@ -74,6 +75,7 @@ function StorePage() {
 function StorePageContent() {
   const { slug } = Route.useParams();
   const { user } = useSession();
+  const cart = useCartStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -193,6 +195,40 @@ function StorePageContent() {
     setSortBy("recent");
     setOnlyInStock(false);
   }
+
+    const handleQuickAdd = (e: React.MouseEvent, p: any) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (p.stock <= 0) {
+      toast.info("Esgotado! Entre no produto para fila de espera.");
+      return;
+    }
+    
+    const signal = getProductSignalAmount(p, 1).amount;
+    const hasNoSignal = hasNoSignalRequirement(p);
+    const downPaymentToPay = hasNoSignal ? 0 : signal;
+    
+    cart.addItem({
+      productId: p.id,
+      storeId: p.store_id,
+      storeName: store?.name,
+      quantity: 1,
+      selectedInstallment: 1,
+      unitPriceForChosenOption: p.price,
+      totalPrice: p.price,
+      downPaymentToPay,
+      remainingBalance: p.price - downPaymentToPay,
+      hasNoSignal,
+      productSnapshot: {
+        model: p.model,
+        brand: p.brand,
+        image_url: p.image_url,
+        scale: p.scale,
+      }
+    });
+    toast.success("Adicionado ao carrinho!");
+  };
 
   const store = data?.store;
   const products = data?.products ?? [];
@@ -571,13 +607,14 @@ function StorePageContent() {
                               </div>
                             )}
                             {/* Badge flutuante de acionamento na foto */}
-                            <div
-                              className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur-md transition-transform group-hover:scale-105"
+                            <button
+                              onClick={(e) => handleQuickAdd(e, p)}
+                              className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur-md transition-transform hover:scale-105 z-10"
                               style={{ backgroundColor: store.primary_color }}
                             >
-                              <BookmarkCheck className="size-3.5" />
-                              <span>Reservar</span>
-                            </div>
+                              <ShoppingCart className="size-3.5" />
+                              <span>+ Carrinho</span>
+                            </button>
                           </div>
 
                           <CardContent className="flex flex-1 flex-col justify-between p-4">

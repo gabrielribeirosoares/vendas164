@@ -4,10 +4,15 @@ export async function linkCustomerToStore(userId: string, storeId: string) {
   await supabase.from("customer_store_link").insert({ user_id: userId, store_id: storeId });
 }
 
-export async function reserveQuota(productId: string) {
+export async function reserveQuota(productId: string, installmentCount?: number) {
   const { data, error } = await supabase.rpc("create_reservation", { _product_id: productId });
   if (error) throw error;
-  return data as string;
+  const orderId = data as string;
+  // Salvar parcelamento diretamente no insert via update logo após criação
+  if (installmentCount && installmentCount > 1) {
+    await supabase.from("orders").update({ installment_count: installmentCount }).eq("id", orderId);
+  }
+  return orderId;
 }
 
 export async function joinWaitlist(userId: string, productId: string, storeId: string) {
