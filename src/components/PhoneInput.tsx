@@ -18,7 +18,13 @@ export interface Country {
 
 export const COUNTRIES: Country[] = [
   { code: "BR", name: "Brasil", ddi: "55", flag: "🇧🇷", placeholder: "(11) 99999-9999" },
-  { code: "US", name: "Estados Unidos / Canadá", ddi: "1", flag: "🇺🇸", placeholder: "(555) 000-0000" },
+  {
+    code: "US",
+    name: "Estados Unidos / Canadá",
+    ddi: "1",
+    flag: "🇺🇸",
+    placeholder: "(555) 000-0000",
+  },
   { code: "PT", name: "Portugal", ddi: "351", flag: "🇵🇹", placeholder: "912 345 678" },
   { code: "AR", name: "Argentina", ddi: "54", flag: "🇦🇷", placeholder: "9 11 1234-5678" },
   { code: "ES", name: "Espanha", ddi: "34", flag: "🇪🇸", placeholder: "612 34 56 78" },
