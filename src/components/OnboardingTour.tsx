@@ -320,7 +320,10 @@ export function OnboardingTour({ forceOpen, onClose, userId }: OnboardingTourPro
         </button>
 
         <div className="flex items-center justify-between">
-          <Badge variant="outline" className="gap-1 bg-primary/10 text-primary border-primary/20 text-xs px-2.5 py-0.5 font-medium">
+          <Badge
+            variant="outline"
+            className="gap-1 bg-primary/10 text-primary border-primary/20 text-xs px-2.5 py-0.5 font-medium"
+          >
             <Sparkles className="size-3" />
             {step.badge}
           </Badge>
@@ -332,7 +335,9 @@ export function OnboardingTour({ forceOpen, onClose, userId }: OnboardingTourPro
                 key={idx}
                 onClick={() => setCurrentStep(idx)}
                 className={`h-1.5 rounded-full transition-all ${
-                  idx === currentStep ? "w-5 bg-primary" : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50"
+                  idx === currentStep
+                    ? "w-5 bg-primary"
+                    : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50"
                 }`}
                 aria-label={`Ir para passo ${idx + 1}`}
               />
@@ -350,12 +355,12 @@ export function OnboardingTour({ forceOpen, onClose, userId }: OnboardingTourPro
           </div>
         </div>
 
-        <p className="text-sm text-foreground/90 leading-relaxed">
-          {step.description}
-        </p>
+        <p className="text-sm text-foreground/90 leading-relaxed">{step.description}</p>
 
         <div className="rounded-xl bg-muted/40 p-3 border border-border/40 space-y-2">
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Recursos principais:</p>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+            Recursos principais:
+          </p>
           <ul className="space-y-1.5 text-xs">
             {step.highlights.map((h, i) => (
               <li key={i} className="flex items-start gap-2 text-foreground/90 font-medium">
@@ -379,13 +384,25 @@ export function OnboardingTour({ forceOpen, onClose, userId }: OnboardingTourPro
 
           <div className="flex items-center gap-2">
             {currentStep > 0 && (
-              <Button type="button" variant="outline" size="sm" onClick={handlePrev} className="gap-1 text-xs h-9">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handlePrev}
+                className="gap-1 text-xs h-9"
+              >
                 <ArrowLeft className="size-3.5" />
                 Anterior
               </Button>
             )}
 
-            <Button type="button" variant="default" size="sm" onClick={handleNext} className="gap-1 text-xs h-9 font-semibold px-4">
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              onClick={handleNext}
+              className="gap-1 text-xs h-9 font-semibold px-4"
+            >
               {currentStep === TOUR_STEPS.length - 1 ? (
                 <>
                   Entendi! Começar <CheckCircle2 className="size-3.5" />

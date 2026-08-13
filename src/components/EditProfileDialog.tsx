@@ -3,12 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PhoneInput } from "@/components/PhoneInput";
@@ -31,11 +26,7 @@ export function EditProfileDialog({ user, open, onOpenChange }: EditProfileDialo
     enabled: !!user && open,
     retry: 2,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .maybeSingle();
+      const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
       return data;
     },
   });
@@ -65,7 +56,7 @@ export function EditProfileDialog({ user, open, onOpenChange }: EditProfileDialo
           email: user.email,
           phone: cleanPhone,
         },
-        { onConflict: "id" }
+        { onConflict: "id" },
       );
 
       if (profileErr) throw profileErr;
@@ -95,8 +86,15 @@ export function EditProfileDialog({ user, open, onOpenChange }: EditProfileDialo
         <form onSubmit={handleSave} className="space-y-4 pt-2">
           <div className="space-y-2">
             <Label htmlFor="prof-email">E-mail</Label>
-            <Input id="prof-email" value={user?.email || ""} disabled className="bg-muted/50 font-mono text-sm" />
-            <p className="text-xs text-muted-foreground">O e-mail da sua conta não pode ser alterado.</p>
+            <Input
+              id="prof-email"
+              value={user?.email || ""}
+              disabled
+              className="bg-muted/50 font-mono text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              O e-mail da sua conta não pode ser alterado.
+            </p>
           </div>
 
           <div className="space-y-2">

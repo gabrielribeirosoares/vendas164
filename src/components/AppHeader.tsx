@@ -135,7 +135,9 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                 <span className="flex size-8 sm:size-9 items-center justify-center rounded-xl bg-primary/15 text-primary shrink-0">
                   <Car className="size-4 sm:size-5" />
                 </span>
-                <span className="font-display text-base sm:text-lg font-bold tracking-tight">Vendas 1:64</span>
+                <span className="font-display text-base sm:text-lg font-bold tracking-tight">
+                  Vendas 1:64
+                </span>
               </>
             )}
           </Link>
@@ -143,7 +145,13 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
           <nav className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {!loading && user ? (
               <>
-                <Button asChild variant="ghost" size="sm" data-tour="header-reservas" className="px-2 sm:px-3 text-xs sm:text-sm">
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  data-tour="header-reservas"
+                  className="px-2 sm:px-3 text-xs sm:text-sm"
+                >
                   <Link to="/painel" preload="intent">
                     <span className="hidden sm:inline">Minhas reservas</span>
                     <span className="sm:hidden">Reservas</span>
@@ -153,7 +161,12 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                 {myLinkedStores && myLinkedStores.length > 0 && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" data-tour="header-lojas" className="gap-1 px-2 sm:px-3 text-xs sm:text-sm">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        data-tour="header-lojas"
+                        className="gap-1 px-2 sm:px-3 text-xs sm:text-sm"
+                      >
                         <StoreIcon className="size-3.5 sm:size-4 text-primary" />
                         <span>Lojas</span>
                         <ChevronDown className="size-3 opacity-60" />
@@ -167,7 +180,12 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                           onClick={() => navigate({ to: "/loja/$slug", params: { slug: s.slug } })}
                         >
                           {s.logo_url ? (
-                            <img src={s.logo_url} alt={s.name} className="size-5 rounded object-cover" loading="lazy" />
+                            <img
+                              src={s.logo_url}
+                              alt={s.name}
+                              className="size-5 rounded object-cover"
+                              loading="lazy"
+                            />
                           ) : (
                             <StoreIcon className="size-4 text-muted-foreground" />
                           )}
@@ -178,7 +196,13 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                   </DropdownMenu>
                 )}
 
-                <Button asChild variant="secondary" size="sm" data-tour="header-minha-loja" className="px-2 sm:px-3 text-xs sm:text-sm">
+                <Button
+                  asChild
+                  variant="secondary"
+                  size="sm"
+                  data-tour="header-minha-loja"
+                  className="px-2 sm:px-3 text-xs sm:text-sm"
+                >
                   <Link to="/vendedor" preload="intent">
                     <span className="hidden sm:inline">Minha loja</span>
                     <span className="sm:hidden">Loja</span>
@@ -197,21 +221,25 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                 </Button>
                 <CartDrawer />
                 <TourTriggerButton />
-                <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sair" className="size-9 sm:size-9">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={signOut}
+                  aria-label="Sair"
+                  className="size-9 sm:size-9"
+                >
                   <LogOut className="size-4" />
                 </Button>
 
-                <EditProfileDialog
-                  user={user}
-                  open={profileOpen}
-                  onOpenChange={setProfileOpen}
-                />
+                <EditProfileDialog user={user} open={profileOpen} onOpenChange={setProfileOpen} />
               </>
             ) : (
               <div className="flex items-center gap-2">
                 <TourTriggerButton />
                 <Button asChild size="sm">
-                  <Link to="/auth" preload="intent">Entrar</Link>
+                  <Link to="/auth" preload="intent">
+                    Entrar
+                  </Link>
                 </Button>
               </div>
             )}

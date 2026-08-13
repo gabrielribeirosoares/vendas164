@@ -21,7 +21,7 @@ export function CartDrawer() {
 
   const totalDownPayment = cart.getCartDownPaymentTotal();
   const total = cart.getCartTotal();
-  
+
   async function handleCheckout() {
     if (!user) {
       toast.info("Você precisa estar logado para finalizar as reservas.");
@@ -30,9 +30,9 @@ export function CartDrawer() {
       navigate({ to: "/auth" });
       return;
     }
-    
+
     if (cart.items.length === 0) return;
-    
+
     setReserving(true);
     try {
       for (const item of cart.items) {
@@ -55,9 +55,14 @@ export function CartDrawer() {
           }
 
           if (Object.keys(updatePayload).length > 0) {
-            const { error: updateErr } = await supabase.from("orders").update(updatePayload).in("id", orderIds);
+            const { error: updateErr } = await supabase
+              .from("orders")
+              .update(updatePayload)
+              .in("id", orderIds);
             if (updateErr) {
-              throw new Error("Erro ao salvar reserva: " + (updateErr.message || JSON.stringify(updateErr)));
+              throw new Error(
+                "Erro ao salvar reserva: " + (updateErr.message || JSON.stringify(updateErr)),
+              );
             }
           }
         }
@@ -66,7 +71,7 @@ export function CartDrawer() {
       toast.success("Reservas concluídas com sucesso!");
       cart.clearCart();
       setIsOpen(false);
-      
+
       await queryClient.invalidateQueries();
       navigate({ to: "/painel" });
     } catch (error) {
@@ -89,7 +94,7 @@ export function CartDrawer() {
           )}
         </Button>
       </SheetTrigger>
-      
+
       <SheetContent className="flex flex-col w-full sm:max-w-md bg-card/95 backdrop-blur-md p-0 border-l border-border/50">
         <SheetHeader className="p-5 border-b border-border/20 text-left">
           <SheetTitle className="flex items-center gap-2">
@@ -97,7 +102,7 @@ export function CartDrawer() {
             Seu Carrinho
           </SheetTitle>
         </SheetHeader>
-        
+
         <div className="flex-1 overflow-y-auto p-5">
           {cart.items.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center space-y-4 text-muted-foreground opacity-60">
@@ -107,23 +112,36 @@ export function CartDrawer() {
           ) : (
             <div className="space-y-4">
               {cart.items.map((item) => (
-                <div key={item.id} className="flex gap-4 p-3 rounded-xl border border-border/30 bg-background/50">
+                <div
+                  key={item.id}
+                  className="flex gap-4 p-3 rounded-xl border border-border/30 bg-background/50"
+                >
                   <div className="size-16 rounded-lg bg-muted overflow-hidden shrink-0">
                     {item.productSnapshot.image_url ? (
-                      <img src={item.productSnapshot.image_url} alt={item.productSnapshot.model} className="w-full h-full object-cover" />
+                      <img
+                        src={item.productSnapshot.image_url}
+                        alt={item.productSnapshot.model}
+                        className="w-full h-full object-cover"
+                      />
                     ) : (
                       <ShoppingBag className="w-full h-full p-4 text-muted-foreground opacity-20" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0 flex flex-col justify-between">
                     <div>
-                      <h4 className="font-semibold text-sm truncate">{item.productSnapshot.model}</h4>
-                      <p className="text-xs text-muted-foreground truncate">{item.productSnapshot.brand}</p>
+                      <h4 className="font-semibold text-sm truncate">
+                        {item.productSnapshot.model}
+                      </h4>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {item.productSnapshot.brand}
+                      </p>
                     </div>
                     <div className="flex items-center justify-between mt-2">
                       <div className="text-xs">
-                        <span className="font-semibold">{item.quantity} {item.quantity === 1 ? 'unidade' : 'unidades'}</span> 
-                        {item.selectedInstallment > 1 
+                        <span className="font-semibold">
+                          {item.quantity} {item.quantity === 1 ? "unidade" : "unidades"}
+                        </span>
+                        {item.selectedInstallment > 1
                           ? ` — ${item.selectedInstallment}x de ${brl(item.unitPriceForChosenOption / item.selectedInstallment)}`
                           : ` — ${brl(item.unitPriceForChosenOption)}`}
                       </div>
@@ -140,7 +158,7 @@ export function CartDrawer() {
             </div>
           )}
         </div>
-        
+
         {cart.items.length > 0 && (
           <div className="p-5 border-t border-border/20 bg-background/80 space-y-4">
             <div className="space-y-1.5 text-sm">
@@ -153,16 +171,21 @@ export function CartDrawer() {
                 <span>{brl(totalDownPayment)}</span>
               </div>
             </div>
-            
+
             <Button
               className="w-full h-12 text-base font-semibold group"
               disabled={reserving}
               onClick={handleCheckout}
             >
               {reserving ? (
-                <><Loader2 className="size-5 mr-2 animate-spin" /> Finalizando...</>
+                <>
+                  <Loader2 className="size-5 mr-2 animate-spin" /> Finalizando...
+                </>
               ) : (
-                <>Finalizar Reservas <ChevronRight className="size-5 ml-1 transition-transform group-hover:translate-x-1" /></>
+                <>
+                  Finalizar Reservas{" "}
+                  <ChevronRight className="size-5 ml-1 transition-transform group-hover:translate-x-1" />
+                </>
               )}
             </Button>
           </div>
