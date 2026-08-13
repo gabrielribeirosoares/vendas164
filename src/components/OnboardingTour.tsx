@@ -39,14 +39,14 @@ const TOUR_STEPS: TourStep[] = [
     highlights: [
       "Retorne ao catálogo com 1 clique",
       "Veja as miniaturas em destaque",
-      "Consulte preços e cotas disponíveis",
+      "Consulte preços e unidades disponíveis",
     ],
   },
   {
     title: "Minhas Reservas",
     subtitle: "Acompanhe seus pedidos e prazos.",
     description:
-      "Acesse este menu para ver todas as cotas que você reservou, cronômetros de sinal restantes, saldos a pagar e fotos das miniaturas.",
+      "Acesse este menu para ver todas as unidades que você reservou, cronômetros de sinal restantes, saldos a pagar e fotos das miniaturas.",
     icon: <BookmarkCheck className="size-7 text-success" />,
     badge: "Passo 2 de 5",
     selector: '[data-tour="header-reservas"]',
@@ -79,9 +79,9 @@ const TOUR_STEPS: TourStep[] = [
     badge: "Passo 4 de 5",
     selector: '[data-tour="header-minha-loja"]',
     highlights: [
-      "Cadastro rápido de pré-vendas (Preço, Sinal, Cotas)",
+      "Cadastro rápido de pré-vendas (Preço, Sinal, Unidades)",
       "Personalização com logotipo e cores",
-      "Devolução automática de cotas ao cancelar",
+      "Devolução automática de unidades ao cancelar",
     ],
   },
   {
