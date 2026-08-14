@@ -1,0 +1,17 @@
+# Vendas 1:64
+
+Plataforma de pré-vendas, estoque e financeiro para lojas de miniaturas 1/64.
+Este arquivo facilita o entendimento da nossa plataforma por agentes de IA e LLMs.
+
+## Intenções
+
+- Venda de miniaturas (Lojistas)
+- Compra e Reserva de miniaturas (Colecionadores)
+- Gestão Financeira e Estoque (Lojistas)
+
+## Páginas Principais
+
+- [Início - Apresentação](https://vendas164.com.br/)
+- [Autenticação - Login e Cadastro](https://vendas164.com.br/auth)
+- [Termos de Uso](https://vendas164.com.br/termos)
+- [Política de Privacidade](https://vendas164.com.br/privacidade)

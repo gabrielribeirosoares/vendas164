@@ -36,6 +36,43 @@ export const Route = createFileRoute("/")({
         content: "Pré-vendas, controle de reservas e financeiro para lojas de carros em miniatura.",
       },
     ],
+    links: [
+      { rel: "canonical", href: "https://vendas164.com.br/" }
+    ],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          "name": "Vendas 164",
+          "url": "https://vendas164.com.br/"
+        })
+      },
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          "name": "Vendas 164",
+          "url": "https://vendas164.com.br/",
+          "logo": "https://vendas164.com.br/og-image.png",
+          "sameAs": [
+            "https://instagram.com/vendas164"
+          ]
+        })
+      },
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "WebPage",
+          "name": "Vendas 164 — Pré-vendas e Reservas de Miniaturas 1/64",
+          "datePublished": "2024-01-01T00:00:00Z",
+          "dateModified": "2024-05-15T00:00:00Z"
+        })
+      }
+    ]
   }),
   component: Home,
 });
