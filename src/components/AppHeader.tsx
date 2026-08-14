@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Car, ChevronDown, LogOut, Store as StoreIcon, User } from "lucide-react";
+import { Car, ChevronDown, LogOut, Menu, Palette, Store as StoreIcon, User } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -143,63 +144,146 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
           <nav className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {!loading && user ? (
               <>
-                <Button asChild variant="ghost" size="sm" data-tour="header-reservas" className="px-2 sm:px-3 text-xs sm:text-sm">
-                  <Link to="/painel" preload="intent">
-                    <span className="hidden sm:inline">Minhas reservas</span>
-                    <span className="sm:hidden">Reservas</span>
-                  </Link>
-                </Button>
+                <div className="hidden sm:flex items-center gap-1.5">
+                  <Button asChild variant="ghost" size="sm" data-tour="header-reservas" className="px-3">
+                    <Link to="/painel" preload="intent">Minhas reservas</Link>
+                  </Button>
 
-                {myLinkedStores && myLinkedStores.length > 0 && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" data-tour="header-lojas" className="gap-1 px-2 sm:px-3 text-xs sm:text-sm">
-                        <StoreIcon className="size-3.5 sm:size-4 text-primary" />
-                        <span>Lojas</span>
-                        <ChevronDown className="size-3 opacity-60" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                      {myLinkedStores.map((s: any) => (
-                        <DropdownMenuItem
-                          key={s.id}
-                          className="cursor-pointer gap-2"
-                          onClick={() => navigate({ to: "/loja/$slug", params: { slug: s.slug } })}
-                        >
-                          {s.logo_url ? (
-                            <img src={s.logo_url} alt={s.name} className="size-5 rounded object-cover" loading="lazy" />
-                          ) : (
-                            <StoreIcon className="size-4 text-muted-foreground" />
-                          )}
-                          <span className="truncate">{s.name}</span>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                  {myLinkedStores && myLinkedStores.length > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" data-tour="header-lojas" className="gap-1 px-3">
+                          <StoreIcon className="size-4 text-primary" />
+                          <span>Lojas</span>
+                          <ChevronDown className="size-3 opacity-60" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        {myLinkedStores.map((s: any) => (
+                          <DropdownMenuItem
+                            key={s.id}
+                            className="cursor-pointer gap-2"
+                            onClick={() => navigate({ to: "/loja/$slug", params: { slug: s.slug } })}
+                          >
+                            {s.logo_url ? (
+                              <img src={s.logo_url} alt={s.name} className="size-5 rounded object-cover" loading="lazy" />
+                            ) : (
+                              <StoreIcon className="size-4 text-muted-foreground" />
+                            )}
+                            <span className="truncate">{s.name}</span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
 
-                <Button asChild variant="secondary" size="sm" data-tour="header-minha-loja" className="px-2 sm:px-3 text-xs sm:text-sm">
-                  <Link to="/vendedor" preload="intent">
-                    <span className="hidden sm:inline">Minha loja</span>
-                    <span className="sm:hidden">Loja</span>
-                  </Link>
-                </Button>
+                  <Button asChild variant="secondary" size="sm" data-tour="header-minha-loja" className="px-3">
+                    <Link to="/vendedor" search={{ tab: "produtos" }} preload="intent">Minha loja</Link>
+                  </Button>
 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  data-tour="header-perfil"
-                  onClick={() => setProfileOpen(true)}
-                  className="gap-1 px-2 sm:px-3 text-xs sm:text-sm"
-                >
-                  <User className="size-3.5 sm:size-4 text-primary" />
-                  <span className="hidden sm:inline">Perfil</span>
-                </Button>
-                <CartDrawer />
-                <TourTriggerButton />
-                <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sair" className="size-9 sm:size-9">
-                  <LogOut className="size-4" />
-                </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    data-tour="header-perfil"
+                    onClick={() => setProfileOpen(true)}
+                    className="gap-1 px-3"
+                  >
+                    <User className="size-4 text-primary" />
+                    <span>Perfil</span>
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sair" className="size-9">
+                    <LogOut className="size-4" />
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-1 sm:gap-1.5">
+                  <CartDrawer />
+                  <div className="hidden sm:flex"><TourTriggerButton /></div>
+                  
+                  <div className="flex sm:hidden">
+                    <Sheet>
+                      <SheetTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label="Menu Mobile" className="size-9">
+                          <Menu className="size-5" />
+                        </Button>
+                      </SheetTrigger>
+                      <SheetContent side="right" className="w-[280px] p-0 border-l border-border/60">
+                        <div className="flex flex-col h-full bg-background">
+                          <div className="p-5 border-b border-border/50 bg-muted/20">
+                            <h3 className="font-bold text-lg text-foreground">Menu</h3>
+                            <p className="text-xs text-muted-foreground mt-1 truncate">{user.email}</p>
+                          </div>
+                          
+                          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                            <Button asChild variant="ghost" className="w-full justify-start gap-3 h-11" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
+                              <Link to="/painel" preload="intent">
+                                <Car className="size-5 text-primary" /> Minhas Reservas
+                              </Link>
+                            </Button>
+                            {currentStore ? (
+                              <div className="py-2 border-y border-border/50 my-2">
+                                <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 px-2">Minha Loja</h4>
+                                <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
+                                  <Link to="/vendedor" search={{ tab: 'produtos' }}>
+                                    <StoreIcon className="size-4 text-emerald-500" /> Estoque e Pré-vendas
+                                  </Link>
+                                </Button>
+                                <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
+                                  <Link to="/vendedor" search={{ tab: 'reservas' }}>
+                                    <Car className="size-4 text-emerald-500" /> Pedidos/Reservas
+                                  </Link>
+                                </Button>
+                                <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
+                                  <Link to="/vendedor" search={{ tab: 'clientes' }}>
+                                    <User className="size-4 text-emerald-500" /> Clientes
+                                  </Link>
+                                </Button>
+                                <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
+                                  <Link to="/vendedor" search={{ tab: 'loja' }}>
+                                    <Palette className="size-4 text-emerald-500" /> Personalização
+                                  </Link>
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button asChild variant="ghost" className="w-full justify-start gap-3 h-11" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
+                                <Link to="/vendedor" search={{ tab: "produtos" }} preload="intent">
+                                  <StoreIcon className="size-5 text-emerald-500" /> Criar Minha Loja
+                                </Link>
+                              </Button>
+                            )}
+                            <Button variant="ghost" className="w-full justify-start gap-3 h-11" onClick={() => { setProfileOpen(true); document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'})); }}>
+                              <User className="size-5 text-blue-500" /> Meu Perfil
+                            </Button>
+                            
+                            {myLinkedStores && myLinkedStores.length > 0 && (
+                              <div className="pt-4 pb-2">
+                                <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-3 px-2">Lojas Seguidas</h4>
+                                {myLinkedStores.map((s: any) => (
+                                  <Button key={s.id} asChild variant="ghost" className="w-full justify-start gap-3 h-11 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
+                                    <Link to="/loja/$slug" params={{ slug: s.slug }}>
+                                      {s.logo_url ? (
+                                        <img src={s.logo_url} alt={s.name} className="size-5 rounded object-cover border border-border" />
+                                      ) : (
+                                        <StoreIcon className="size-5 text-muted-foreground" />
+                                      )}
+                                      <span className="truncate">{s.name}</span>
+                                    </Link>
+                                  </Button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="p-4 border-t border-border/50 bg-muted/10">
+                            <Button variant="destructive" className="w-full gap-2 font-medium" onClick={signOut}>
+                              <LogOut className="size-4" /> Sair da conta
+                            </Button>
+                          </div>
+                        </div>
+                      </SheetContent>
+                    </Sheet>
+                  </div>
+                </div>
 
                 <EditProfileDialog
                   user={user}

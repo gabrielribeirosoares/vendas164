@@ -5,10 +5,11 @@ export const Route = createFileRoute("/produto/$id")({
   loader: async ({ params }) => {
     const { id } = params;
 
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     const { data: product } = await supabase
       .from("products")
       .select("id, slug, stores(slug)")
-      .eq("id", id)
+      .eq(isUuid ? "id" : "slug", id)
       .maybeSingle();
 
     if (product) {

@@ -31,12 +31,15 @@ const fetchProductBySlugs = createServerFn({ method: "GET" })
       .maybeSingle();
 
     if (!product) {
-      const { data: fallbackProduct } = await supabase
-        .from("products")
-        .select("*, stores(id, owner_id, name, slug, primary_color, whatsapp_number, contact_email, contact_instagram, logo_url, favicon_url)")
-        .eq("id", data.itemSlug)
-        .maybeSingle();
-      product = fallbackProduct;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.itemSlug);
+      if (isUuid) {
+        const { data: fallbackProduct } = await supabase
+          .from("products")
+          .select("*, stores(id, owner_id, name, slug, primary_color, whatsapp_number, contact_email, contact_instagram, logo_url, favicon_url)")
+          .eq("id", data.itemSlug)
+          .maybeSingle();
+        product = fallbackProduct;
+      }
     }
     return product;
   });
@@ -107,12 +110,15 @@ function ProductPageContent() {
         .maybeSingle();
 
       if (!data) {
-         const { data: fallbackData } = await supabase
-          .from("products")
-          .select("*, stores(id, owner_id, name, slug, primary_color, whatsapp_number, contact_email, contact_instagram)")
-          .eq("id", itemSlug)
-          .maybeSingle();
-          data = fallbackData;
+         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(itemSlug);
+         if (isUuid) {
+           const { data: fallbackData } = await supabase
+            .from("products")
+            .select("*, stores(id, owner_id, name, slug, primary_color, whatsapp_number, contact_email, contact_instagram)")
+            .eq("id", itemSlug)
+            .maybeSingle();
+           data = fallbackData;
+         }
       }
       
       if (error && !data) throw error;

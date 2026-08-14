@@ -170,7 +170,7 @@ function Home() {
                 
                 <div className="flex flex-wrap gap-3.5 pt-2">
                   <Button asChild size="lg" className="glow font-semibold gap-2">
-                    <Link to="/vendedor">
+                    <Link to="/vendedor" search={{ tab: "produtos" }}>
                       <ShoppingBag className="size-4" /> Abrir minha loja
                     </Link>
                   </Button>
@@ -358,7 +358,7 @@ function Home() {
                 </ul>
                 <div className="pt-2">
                   <Button asChild className="glow w-full sm:w-auto">
-                    <Link to="/vendedor">Acessar Painel do Vendedor</Link>
+                    <Link to="/vendedor" search={{ tab: "produtos" }}>Acessar Painel do Vendedor</Link>
                   </Button>
                 </div>
               </div>
@@ -451,7 +451,7 @@ function Home() {
               </p>
               <div className="flex flex-wrap justify-center gap-4 pt-2">
                 <Button asChild size="lg" className="glow font-semibold gap-2">
-                  <Link to="/vendedor">
+                  <Link to="/vendedor" search={{ tab: "produtos" }}>
                     Abrir minha loja de miniaturas <ArrowRight className="size-4" />
                   </Link>
                 </Button>

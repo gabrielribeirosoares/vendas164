@@ -65,6 +65,11 @@ import { ProductsTab } from "@/components/vendedor/ProductManager";
 import { SellerOverview } from "@/components/vendedor/SellerOverview";
 
 export const Route = createFileRoute("/_authenticated/vendedor")({
+  validateSearch: (search) => {
+    return {
+      tab: search.tab,
+    };
+  },
   head: () => ({
     meta: [
       { title: "Painel do lojista" },
@@ -86,7 +91,10 @@ export const Route = createFileRoute("/_authenticated/vendedor")({
 function SellerDashboard() {
   const { user, loading: sessionLoading } = useSession();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("produtos");
+  const navigate = Route.useNavigate();
+  const search = Route.useSearch() as { tab?: string };
+  const activeTab = search.tab || "produtos";
+  const setActiveTab = (tab: string) => navigate({ search: { tab }, replace: true });
 
   const { data: store, isLoading } = useQuery({
     queryKey: ["my-store", user?.id],
@@ -357,13 +365,7 @@ function SellerDashboard() {
                 <ShieldCheck className="size-4" /> Moderação ({activeTab === "admin_moderation" ? "Aberta" : "Admin"})
               </Button>
             )}
-            <Button
-              variant={activeTab === "loja" ? "default" : "outline"}
-              className="gap-2"
-              onClick={() => setActiveTab("loja")}
-            >
-              <Palette className="size-4" /> Personalizar Loja
-            </Button>
+
             <Button
               variant="secondary"
               onClick={() => {
@@ -379,10 +381,9 @@ function SellerDashboard() {
         </div>
 
         <SmartNotifications products={products ?? []} orders={orders ?? []} />
-        <SellerOverview totals={totals} brandData={brandData} />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-10">
-          <TabsList className="w-full flex overflow-x-auto justify-start sm:justify-center whitespace-nowrap p-1 max-w-full bg-muted/30">
+          <TabsList className="hidden md:flex w-full overflow-x-auto justify-start sm:justify-center whitespace-nowrap p-1 max-w-full bg-muted/30">
             <TabsTrigger value="produtos" className="text-xs sm:text-sm">Estoque e pré-vendas</TabsTrigger>
             <TabsTrigger value="reservas" className="text-xs sm:text-sm">Reservas</TabsTrigger>
             <TabsTrigger value="clientes" className="text-xs sm:text-sm">Clientes</TabsTrigger>
@@ -395,7 +396,8 @@ function SellerDashboard() {
             <ProductsTab store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} />
           </TabsContent>
 
-          <TabsContent value="reservas" className="mt-5">
+          <TabsContent value="reservas" className="mt-5 space-y-6">
+            <SellerOverview totals={totals} brandData={brandData} />
             <OrdersTab storeId={store.id} storeColor={store.primary_color} products={products ?? []} orders={orders ?? []} />
           </TabsContent>
 

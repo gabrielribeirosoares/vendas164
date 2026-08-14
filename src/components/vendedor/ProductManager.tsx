@@ -416,19 +416,42 @@ export function ProductsTab({
                     className="bg-muted/20 border-border/30"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="down_payment" className="text-xs font-medium text-muted-foreground">Sinal (R$)</Label>
-                  <Input
-                    id="down_payment"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="Ex: 50"
-                    value={form.down_payment_amount}
-                    onChange={(e) => setForm({ ...form, down_payment_amount: e.target.value })}
-                    className="bg-muted/20 border-border/30"
-                  />
+                <div className="space-y-1.5 flex flex-col justify-end">
+                  <Label htmlFor="signal_rule" className="text-xs font-medium text-muted-foreground whitespace-nowrap">Exigência Sinal</Label>
+                  <Select 
+                    value={(form as any).signal_rule || (Number(form.down_payment_amount || 0) > 0 ? 'aguardando_sinal' : 'sem_sinal')} 
+                    onValueChange={(val) => {
+                      if (val === 'sem_sinal') {
+                        setForm({ ...form, signal_rule: 'sem_sinal', down_payment_amount: '', payment_deadline_date: '', payment_deadline_hours: '0' } as any);
+                      } else {
+                        setForm({ ...form, signal_rule: 'aguardando_sinal', payment_deadline_hours: '24' } as any);
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="signal_rule" className="h-9 text-xs bg-muted/20 border-border/30 w-full text-foreground">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="aguardando_sinal">Obrigatório</SelectItem>
+                      <SelectItem value="sem_sinal">Na chegada</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+                {((form as any).signal_rule === 'aguardando_sinal' || Number(form.down_payment_amount || 0) > 0) && ((form as any).signal_rule !== 'sem_sinal') && (
+                  <div className="space-y-1.5 flex flex-col justify-end">
+                    <Label htmlFor="down_payment" className="text-xs font-medium text-muted-foreground">Sinal (R$)</Label>
+                    <Input
+                      id="down_payment"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Ex: 50"
+                      value={form.down_payment_amount}
+                      onChange={(e) => setForm({ ...form, down_payment_amount: e.target.value })}
+                      className="bg-muted/20 border-border/30 h-9"
+                    />
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <Label htmlFor="stock" className="text-xs font-medium text-muted-foreground">Unidades</Label>
                   <Input
@@ -1132,19 +1155,42 @@ function EditProductDialog({
                 className="bg-muted/20 border-border/30"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-down-payment" className="text-xs font-medium text-muted-foreground">Sinal (R$)</Label>
-              <Input
-                id="edit-down-payment"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Ex: 50"
-                value={form.down_payment_amount}
-                onChange={(e) => setForm({ ...form, down_payment_amount: e.target.value })}
-                className="bg-muted/20 border-border/30"
-              />
+            <div className="space-y-1.5 flex flex-col justify-end">
+              <Label htmlFor="edit-signal-rule" className="text-xs font-medium text-muted-foreground whitespace-nowrap">Exigência Sinal</Label>
+              <Select 
+                value={(form as any).signal_rule || (Number(form.down_payment_amount || 0) > 0 ? 'aguardando_sinal' : 'sem_sinal')} 
+                onValueChange={(val) => {
+                  if (val === 'sem_sinal') {
+                    setForm({ ...form, signal_rule: 'sem_sinal', down_payment_amount: '', payment_deadline_date: '', payment_deadline_hours: '0' } as any);
+                  } else {
+                    setForm({ ...form, signal_rule: 'aguardando_sinal', payment_deadline_hours: '24' } as any);
+                  }
+                }}
+              >
+                <SelectTrigger id="edit-signal-rule" className="h-9 text-xs bg-muted/20 border-border/30 w-full text-foreground">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="aguardando_sinal">Obrigatório</SelectItem>
+                  <SelectItem value="sem_sinal">Na chegada</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            {((form as any).signal_rule === 'aguardando_sinal' || Number(form.down_payment_amount || 0) > 0) && ((form as any).signal_rule !== 'sem_sinal') && (
+              <div className="space-y-1.5 flex flex-col justify-end">
+                <Label htmlFor="edit-down-payment" className="text-xs font-medium text-muted-foreground">Sinal (R$)</Label>
+                <Input
+                  id="edit-down-payment"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Ex: 50"
+                  value={form.down_payment_amount}
+                  onChange={(e) => setForm({ ...form, down_payment_amount: e.target.value })}
+                  className="bg-muted/20 border-border/30 h-9"
+                />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="edit-stock" className="text-xs font-medium text-muted-foreground">Unidades</Label>
               <Input
