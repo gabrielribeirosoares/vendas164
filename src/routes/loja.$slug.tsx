@@ -19,6 +19,7 @@ import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 import { useCartStore } from "@/lib/cart";
 import { saveCustomerToCache } from "@/lib/customerCache";
+import { getStoreBanner, getProductBadge } from "@/lib/storeCustomizations";
 
 const fetchStoreBySlug = createServerFn({ method: "GET" })
   .validator((d: { slug: string }) => d)
@@ -385,6 +386,16 @@ function StorePageContent() {
   return (
     <div className="min-h-screen pb-16">
       <AppHeader store={store} />
+      {getStoreBanner(store.id) && (
+        <div 
+          className="w-full text-white text-xs sm:text-sm font-semibold py-2.5 px-4 text-center flex items-center justify-center gap-2 shadow-sm"
+          style={{ backgroundColor: store.primary_color || "#e11d48" }}
+        >
+          <Sparkles className="size-4 shrink-0 animate-pulse text-amber-300" />
+          <span>{getStoreBanner(store.id)}</span>
+          <Sparkles className="size-4 shrink-0 animate-pulse text-amber-300" />
+        </div>
+      )}
       <main className="mx-auto max-w-6xl px-4 py-8 sm:py-10">
         {/* Banner / Card da Loja */}
         <div
@@ -632,6 +643,24 @@ function StorePageContent() {
                       >
                         <Card className="flex h-full flex-col overflow-hidden border-border/30 bg-card/60 transition-transform group-hover:-translate-y-1 shadow-sm">
                           <div className="relative aspect-video w-full overflow-hidden bg-muted">
+                            {/* Badges Flutuantes no Canto Superior Esquerdo */}
+                            <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10 items-start pointer-events-none">
+                              {getProductBadge(p.id) && (
+                                <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-gradient-to-r from-amber-500 to-orange-600 border border-amber-400/30">
+                                  {getProductBadge(p.id)}
+                                </span>
+                              )}
+                              {p.stock > 0 && p.stock <= 2 && (
+                                <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-rose-600/90 border border-rose-400/30">
+                                  Últimas {p.stock} un.
+                                </span>
+                              )}
+                              {hasNoSignalRequirement(p) && (
+                                <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-emerald-600/90 border border-emerald-400/30">
+                                  Sem Sinal
+                                </span>
+                              )}
+                            </div>
                             {p.image_url ? (
                               <img
                                 src={p.image_url}

@@ -6,6 +6,7 @@ import { Loader2, Pencil, Plus, Search, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PhoneInput } from "@/components/PhoneInput";
 import { getCustomerFromCache, saveCustomerToCache } from "@/lib/customerCache";
+import { getProductBadge, saveProductBadge, PRESET_BADGES } from "@/lib/storeCustomizations";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -207,6 +208,14 @@ export function ProductsTab({
       saveStoreBrands(store.id, [...configuredBrands, form.brand.trim()]);
     }
 
+    if ((form as any).badge) {
+      // Tenta pegar o último produto criado pela loja para salvar o badge
+      const { data: latest } = await supabase.from("products").select("id").eq("store_id", store.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (latest) {
+        saveProductBadge(latest.id, (form as any).badge);
+      }
+    }
+
     setForm({ ...emptyProduct });
     setSheetOpen(false);
     setIsCustomBrand(false);
@@ -377,16 +386,36 @@ export function ProductsTab({
                   />
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="model" className="text-xs font-medium text-muted-foreground">Modelo</Label>
-                <Input
-                  id="model"
-                  required
-                  maxLength={80}
-                  value={form.model}
-                  onChange={(e) => setForm({ ...form, model: e.target.value })}
-                  className="bg-muted/20 border-border/30"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2 space-y-1.5">
+                  <Label htmlFor="model" className="text-xs font-medium text-muted-foreground">Modelo</Label>
+                  <Input
+                    id="model"
+                    required
+                    maxLength={80}
+                    value={form.model}
+                    onChange={(e) => setForm({ ...form, model: e.target.value })}
+                    className="bg-muted/20 border-border/30"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="badge" className="text-xs font-medium text-muted-foreground">Selo (Badge)</Label>
+                  <Select
+                    value={(form as any).badge || "__none"}
+                    onValueChange={(val) => setForm({ ...form, badge: val === "__none" ? "" : val } as any)}
+                  >
+                    <SelectTrigger id="badge" className="bg-muted/20 border-border/30">
+                      <SelectValue placeholder="Selo..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PRESET_BADGES.map((b) => (
+                        <SelectItem key={b.value || "__none"} value={b.value || "__none"}>
+                          {b.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div className="space-y-1.5">
@@ -926,7 +955,8 @@ function EditProductDialog({
         bulk_discount_price: (product as any).bulk_discount_price != null ? String((product as any).bulk_discount_price) : "",
         bulk_has_installment_surcharge: (product as any).bulk_has_installment_surcharge ? "true" : "false",
         bulk_installment_price: (product as any).bulk_installment_price != null ? String((product as any).bulk_installment_price) : "",
-      });
+        badge: getProductBadge(product.id),
+      } as any);
       setIsCustomBrand(false);
     }
   }, [product]);
@@ -1040,6 +1070,7 @@ function EditProductDialog({
       console.error("Erro ao editar miniatura:", error);
       return toast.error(`Não foi possível salvar as alterações: ${error.message || "Erro de permissão"}`);
     }
+    saveProductBadge(product.id, (form as any).badge || "");
     queryClient.invalidateQueries();
     toast.success("Miniatura atualizada com sucesso!");
     onClose();
@@ -1116,16 +1147,36 @@ function EditProductDialog({
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-model" className="text-xs font-medium text-muted-foreground">Modelo</Label>
-            <Input
-              id="edit-model"
-              required
-              maxLength={80}
-              value={form.model}
-              onChange={(e) => setForm({ ...form, model: e.target.value })}
-              className="bg-muted/20 border-border/30"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-2 space-y-1.5">
+              <Label htmlFor="edit-model" className="text-xs font-medium text-muted-foreground">Modelo</Label>
+              <Input
+                id="edit-model"
+                required
+                maxLength={80}
+                value={form.model}
+                onChange={(e) => setForm({ ...form, model: e.target.value })}
+                className="bg-muted/20 border-border/30"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-badge" className="text-xs font-medium text-muted-foreground">Selo (Badge)</Label>
+              <Select
+                value={(form as any).badge || "__none"}
+                onValueChange={(val) => setForm({ ...form, badge: val === "__none" ? "" : val } as any)}
+              >
+                <SelectTrigger id="edit-badge" className="bg-muted/20 border-border/30">
+                  <SelectValue placeholder="Selo..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRESET_BADGES.map((b) => (
+                    <SelectItem key={b.value || "__none"} value={b.value || "__none"}>
+                      {b.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

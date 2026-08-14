@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { PhoneInput } from '@/components/PhoneInput';
 import { DEFAULT_PRESET_BRANDS, getStoreBrands, saveStoreBrands } from '@/lib/brands';
+import { getStoreBanner, saveStoreBanner } from '@/lib/storeCustomizations';
 import { uploadImage } from '@/lib/upload';
 import { updateAppFavicon } from '@/components/AppHeader';
 import type { Tables } from '@/integrations/supabase/types';
@@ -33,6 +34,7 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
   const [form, setForm] = useState({
     name: store.name,
     description: store.description ?? "",
+    banner: getStoreBanner(store.id),
     whatsapp_number: store.whatsapp_number ?? "",
     pix_key: (store as any).pix_key ?? "",
     primary_color: store.primary_color || "#e11d48",
@@ -79,8 +81,9 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
 
     setSaving(true);
 
-    // Salvar marcas comercializadas
+    // Salvar marcas comercializadas e banner promocional
     saveStoreBrands(store.id, selectedBrands);
+    saveStoreBanner(store.id, form.banner);
 
     // Verificar se já existe OUTRA loja cadastrada com o mesmo slug
     const { data: existing } = await supabase
@@ -167,6 +170,23 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="b-banner" className="flex items-center gap-1.5 font-semibold text-foreground">
+                📢 Banner Promocional (Topo da Loja)
+              </Label>
+              <Input
+                id="b-banner"
+                maxLength={140}
+                placeholder="Ex: 🔥 Reservas com opção de pagamento na chegada! Envio para todo o Brasil."
+                value={form.banner}
+                onChange={(e) => setForm({ ...form, banner: e.target.value })}
+                className="bg-card"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Se preenchido, será exibido um banner destacado no topo da sua loja pública.
+              </p>
             </div>
 
             {/* SEÇÃO DE MARCAS COMERCIALIZADAS */}
