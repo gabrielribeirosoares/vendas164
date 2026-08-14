@@ -218,6 +218,8 @@ export type Database = {
       }
       stores: {
         Row: {
+          contact_email: string | null
+          contact_instagram: string | null
           created_at: string
           description: string | null
           favicon_url: string | null
@@ -233,6 +235,8 @@ export type Database = {
           whatsapp_number: string | null
         }
         Insert: {
+          contact_email?: string | null
+          contact_instagram?: string | null
           created_at?: string
           description?: string | null
           favicon_url?: string | null
@@ -248,6 +252,8 @@ export type Database = {
           whatsapp_number?: string | null
         }
         Update: {
+          contact_email?: string | null
+          contact_instagram?: string | null
           created_at?: string
           description?: string | null
           favicon_url?: string | null

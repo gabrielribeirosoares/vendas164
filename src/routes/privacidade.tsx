@@ -5,6 +5,58 @@ import { ShieldCheck, Lock, UserCheck, Eye, Database, FileCheck, ArrowLeft, Mail
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/privacidade")({
+  head: () => ({
+    meta: [
+      { title: "Política de Privacidade — Vendas 164" },
+      {
+        name: "description",
+        content:
+          "Política de privacidade e proteção de dados pessoais da plataforma Vendas 164, em conformidade com a LGPD (Lei nº 13.709/2018).",
+      },
+      { property: "og:title", content: "Política de Privacidade — Vendas 164" },
+      {
+        property: "og:description",
+        content: "Política de privacidade e proteção de dados da Vendas 164 (LGPD).",
+      },
+    ],
+    links: [
+      { rel: "canonical", href: "https://vendas164.com.br/privacidade" },
+    ],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "WebPage",
+          "name": "Política de Privacidade — Vendas 164",
+          "url": "https://vendas164.com.br/privacidade",
+          "datePublished": "2025-01-15T00:00:00-03:00",
+          "dateModified": "2026-07-26T00:00:00-03:00",
+        }),
+      },
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "name": "Início",
+              "item": "https://vendas164.com.br/",
+            },
+            {
+              "@type": "ListItem",
+              "position": 2,
+              "name": "Política de Privacidade",
+              "item": "https://vendas164.com.br/privacidade",
+            },
+          ],
+        }),
+      },
+    ],
+  }),
   component: PoliticaDePrivacidade,
 });
 

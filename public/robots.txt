@@ -1,2 +1,10 @@
 User-agent: *
 Allow: /
+Disallow: /painel
+Disallow: /vendedor
+
+Sitemap: https://vendas164.com.br/sitemap.xml
+
+# Documentação para LLMs e agentes de IA
+# https://vendas164.com.br/llms.txt
+# https://vendas164.com.br/llms-full.txt

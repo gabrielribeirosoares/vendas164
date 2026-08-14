@@ -38,6 +38,8 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
     primary_color: store.primary_color || "#e11d48",
     logo_url: store.logo_url ?? "",
     favicon_url: store.logo_url ?? store.favicon_url ?? "",
+    contact_email: store.contact_email ?? "",
+    contact_instagram: store.contact_instagram ?? "",
   });
   const [saving, setSaving] = useState(false);
   const [selectedBrands, setSelectedBrands] = useState<string[]>(() => getStoreBrands(store.id));
@@ -102,6 +104,8 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
       primary_color: form.primary_color,
       logo_url: logo,
       favicon_url: logo,
+      contact_email: form.contact_email.trim() || null,
+      contact_instagram: form.contact_instagram.trim() || null,
     };
     if (form.pix_key.trim()) {
       updatePayload.pix_key = form.pix_key.trim();
@@ -236,6 +240,31 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
                 value={form.whatsapp_number}
                 onChange={(val) => setForm({ ...form, whatsapp_number: val })}
               />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="b-email">E-mail de Contato</Label>
+                <Input
+                  id="b-email"
+                  type="email"
+                  placeholder="contato@sualoja.com.br"
+                  value={form.contact_email}
+                  onChange={(e) => setForm({ ...form, contact_email: e.target.value })}
+                  className="text-xs sm:text-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="b-insta">Perfil do Instagram</Label>
+                <Input
+                  id="b-insta"
+                  placeholder="@sualoja"
+                  value={form.contact_instagram}
+                  onChange={(e) => setForm({ ...form, contact_instagram: e.target.value })}
+                  className="text-xs sm:text-sm"
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -389,4 +418,4 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
     </div>
   );
 }
-
+

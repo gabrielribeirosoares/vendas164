@@ -7,6 +7,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { AppHeader, updateAppFavicon } from "@/components/AppHeader";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Badge } from "@/components/ui/badge";
+import { AppFooter } from "@/components/AppFooter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,7 +25,7 @@ const fetchStoreBySlug = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const { data: store } = await supabase
       .from("stores")
-      .select("id, name, slug, logo_url, favicon_url, description, primary_color")
+      .select("id, name, slug, logo_url, favicon_url, description, primary_color, whatsapp_number, contact_email, contact_instagram")
       .eq("slug", data.slug)
       .maybeSingle();
     return store;
@@ -55,7 +56,44 @@ export const Route = createFileRoute("/loja/$slug")({
         { name: "twitter:description", content: desc },
         { name: "twitter:image", content: img },
       ],
-      links: favicon ? [{ rel: "icon", href: favicon }] : [],
+      links: [
+        ...(favicon ? [{ rel: "icon", href: favicon }] : []),
+        { rel: "canonical", href: `https://vendas164.com.br/loja/${params.slug}` },
+      ],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Store",
+            "name": store?.name || params.slug,
+            "url": `https://vendas164.com.br/loja/${params.slug}`,
+            "description": desc,
+            ...(img ? { "image": img } : {}),
+          })
+        },
+        {
+          type: "application/ld+json",
+          children: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Início",
+                "item": "https://vendas164.com.br/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": store?.name || params.slug,
+                "item": `https://vendas164.com.br/loja/${params.slug}`
+              }
+            ]
+          })
+        }
+      ],
     };
   },
   component: StorePage,
@@ -703,6 +741,7 @@ function StorePageContent() {
           </div>
         )}
       </main>
+      <AppFooter storeInfo={data?.store || undefined} />
     </div>
   );
 }

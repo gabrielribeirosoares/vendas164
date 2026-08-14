@@ -12,7 +12,10 @@ import {
   ArrowRight,
   CheckCircle2,
   Car,
+  HelpCircle,
+  ChevronDown,
 } from "lucide-react";
+import { useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { AppFooter } from "@/components/AppFooter";
 import { Button } from "@/components/ui/button";
@@ -58,7 +61,7 @@ export const Route = createFileRoute("/")({
           "url": "https://vendas164.com.br/",
           "logo": "https://vendas164.com.br/og-image.png",
           "sameAs": [
-            "https://instagram.com/vendas164"
+            "https://www.instagram.com/vendas164.com.br"
           ]
         })
       },
@@ -68,8 +71,73 @@ export const Route = createFileRoute("/")({
           "@context": "https://schema.org",
           "@type": "WebPage",
           "name": "Vendas 164 — Pré-vendas e Reservas de Miniaturas 1/64",
-          "datePublished": "2024-01-01T00:00:00Z",
-          "dateModified": "2024-05-15T00:00:00Z"
+          "url": "https://vendas164.com.br/",
+          "datePublished": "2025-01-15T00:00:00-03:00",
+          "dateModified": "2026-07-26T00:00:00-03:00"
+        })
+      },
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "name": "Início",
+              "item": "https://vendas164.com.br/"
+            }
+          ]
+        })
+      },
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "Como funciona o Vendas 164?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "O lojista cadastra o lançamento com foto, preço e unidades disponíveis. Depois compartilha o link com seus colecionadores. O cliente escolhe a quantidade, paga o sinal via PIX e garante a reserva. Quando o lote chegar, o lojista notifica o comprador para receber o saldo restante."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Preciso pagar para usar a plataforma?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Para colecionadores, a plataforma é totalmente gratuita. Para lojistas, existe um plano de assinatura que libera todos os recursos de gestão de pré-vendas, estoque e financeiro."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Como o colecionador paga o sinal?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "O pagamento do sinal é feito via PIX com código copia e cola. O colecionador acessa o produto, copia a chave PIX e realiza o pagamento diretamente ao lojista."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "O que acontece se eu não pagar o sinal no prazo?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Se o comprador não confirmar o pagamento do sinal até a data limite configurada pelo lojista, a vaga é liberada automaticamente para outro colecionador."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Quais marcas de miniaturas posso encontrar?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "A plataforma é agnóstica quanto a fabricantes. As marcas mais comuns incluem Hot Wheels, Mini GT, Kaido House, Inno64, Tarmac Works, Majorette, POPRACE, BM Creations e Era Car."
+              }
+            }
+          ]
         })
       }
     ]
@@ -169,7 +237,7 @@ function Home() {
                 {
                   icon: Clock,
                   title: "Prazos & Cronômetro de Sinal",
-                  text: "Configure prazos de 12h, 24h ou 48h para confirmação do sinal. Caso o comprador não confirme dentro do tempo, a vaga é liberada automaticamente.",
+                  text: "Defina uma data limite para confirmação do sinal. Caso o comprador não confirme até a data estipulada, a vaga é liberada automaticamente.",
                 },
                 {
                   icon: Wallet,
@@ -328,6 +396,50 @@ function Home() {
             </div>
           </section>
 
+          {/* FAQ Section */}
+          <section className="border-t border-border/30 py-16">
+            <div className="mx-auto max-w-3xl px-4">
+              <div className="text-center max-w-2xl mx-auto mb-10">
+                <Badge variant="outline" className="border-border text-muted-foreground mb-3">
+                  <HelpCircle className="size-3 mr-1" /> Perguntas Frequentes
+                </Badge>
+                <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
+                  Dúvidas sobre a plataforma?
+                </h2>
+                <p className="mt-3 text-muted-foreground">
+                  Respostas rápidas para as perguntas mais comuns de lojistas e colecionadores.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {[
+                  {
+                    q: "Como funciona o Vendas 164?",
+                    a: "O lojista cadastra o lançamento com foto, preço e unidades disponíveis. Depois compartilha o link com seus colecionadores. O cliente escolhe a quantidade, paga o sinal via PIX e garante a reserva. Quando o lote chegar, o lojista notifica o comprador para receber o saldo restante.",
+                  },
+                  {
+                    q: "Preciso pagar para usar a plataforma?",
+                    a: "Para colecionadores, a plataforma é totalmente gratuita. Para lojistas, existe um plano de assinatura que libera todos os recursos de gestão de pré-vendas, estoque e financeiro.",
+                  },
+                  {
+                    q: "Como o colecionador paga o sinal?",
+                    a: "O pagamento do sinal é feito via PIX com código copia e cola. O colecionador acessa o produto, copia a chave PIX e realiza o pagamento diretamente ao lojista.",
+                  },
+                  {
+                    q: "O que acontece se eu não pagar o sinal no prazo?",
+                    a: "Se o comprador não confirmar o pagamento do sinal até a data limite configurada pelo lojista, a vaga é liberada automaticamente para outro colecionador.",
+                  },
+                  {
+                    q: "Quais marcas de miniaturas posso encontrar?",
+                    a: "A plataforma é agnóstica quanto a fabricantes. As marcas mais comuns incluem Hot Wheels, Mini GT, Kaido House, Inno64, Tarmac Works, Majorette, POPRACE, BM Creations e Era Car.",
+                  },
+                ].map((faq, i) => (
+                  <FaqItem key={i} question={faq.q} answer={faq.a} />
+                ))}
+              </div>
+            </div>
+          </section>
+
           {/* CTA Final */}
           <section className="border-t border-border/30 bg-card/30 py-16 text-center">
             <div className="mx-auto max-w-4xl px-4 space-y-6">
@@ -354,3 +466,26 @@ function Home() {
   );
 }
 
+function FaqItem({ question, answer }: { question: string; answer: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="rounded-2xl border border-border/40 bg-card/60 overflow-hidden transition-all">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left text-sm font-semibold text-foreground hover:bg-muted/30 transition-colors"
+      >
+        <span>{question}</span>
+        <ChevronDown
+          className={`size-4 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div className="border-t border-border/20 px-5 py-4 text-sm text-muted-foreground leading-relaxed animate-in fade-in-0 slide-in-from-top-1 duration-200">
+          {answer}
+        </div>
+      )}
+    </div>
+  );
+}

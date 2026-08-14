@@ -1,17 +1,27 @@
 # Vendas 1:64
 
-Plataforma de pré-vendas, estoque e financeiro para lojas de miniaturas 1/64.
+> Plataforma brasileira de pré-vendas, estoque e financeiro para lojas de miniaturas colecionáveis em escala 1/64.
+
 Este arquivo facilita o entendimento da nossa plataforma por agentes de IA e LLMs.
+
+## Sobre a Plataforma
+
+O Vendas 164 é uma plataforma SaaS (Software como Serviço) criada especificamente para o mercado de miniaturas colecionáveis em escala 1:64 no Brasil. Conectamos lojistas independentes a colecionadores, oferecendo ferramentas de gestão de pré-vendas, controle de estoque, cobranças por PIX e acompanhamento de reservas em tempo real.
 
 ## Intenções
 
-- Venda de miniaturas (Lojistas)
-- Compra e Reserva de miniaturas (Colecionadores)
-- Gestão Financeira e Estoque (Lojistas)
+- **Vender miniaturas** (Lojistas e vendedores independentes)
+- **Comprar e reservar miniaturas** (Colecionadores)
+- **Gerenciar estoque e financeiro** (Lojistas)
 
 ## Páginas Principais
 
-- [Início - Apresentação](https://vendas164.com.br/)
-- [Autenticação - Login e Cadastro](https://vendas164.com.br/auth)
-- [Termos de Uso](https://vendas164.com.br/termos)
-- [Política de Privacidade](https://vendas164.com.br/privacidade)
+- [Início](https://vendas164.com.br/): Apresentação da plataforma, funcionalidades e chamadas para ação.
+- [Autenticação](https://vendas164.com.br/auth): Login e cadastro de lojistas e colecionadores.
+- [Termos de Uso](https://vendas164.com.br/termos): Termos e condições de uso da plataforma.
+- [Política de Privacidade](https://vendas164.com.br/privacidade): Política de proteção de dados pessoais (LGPD).
+
+## Contato e Redes
+
+- Instagram: https://www.instagram.com/vendas164.com.br
+- Site: https://vendas164.com.br

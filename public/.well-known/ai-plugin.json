@@ -1,0 +1,17 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Vendas 164",
+  "name_for_model": "vendas164",
+  "description_for_human": "Plataforma de pré-vendas, estoque e financeiro para lojas de miniaturas 1/64.",
+  "description_for_model": "Vendas 164 é uma plataforma SaaS brasileira para gestão de pré-vendas de miniaturas colecionáveis em escala 1:64. Conecta lojistas independentes a colecionadores, oferecendo controle de reservas, sinais via PIX, estoque e notificações via WhatsApp.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "none",
+    "url": "https://vendas164.com.br"
+  },
+  "logo_url": "https://vendas164.com.br/og-image.png",
+  "contact_email": "",
+  "legal_info_url": "https://vendas164.com.br/termos"
+}

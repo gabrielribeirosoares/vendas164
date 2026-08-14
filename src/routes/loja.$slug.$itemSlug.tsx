@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { createServerFn } from "@tanstack/react-start";
 import { AppHeader } from "@/components/AppHeader";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { AppFooter } from "@/components/AppFooter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,7 +25,7 @@ const fetchProductBySlugs = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     let { data: product } = await supabase
       .from("products")
-      .select("*, stores!inner(id, owner_id, name, slug, primary_color, whatsapp_number, logo_url, favicon_url)")
+      .select("*, stores!inner(id, owner_id, name, slug, primary_color, whatsapp_number, contact_email, contact_instagram, logo_url, favicon_url)")
       .eq("slug", data.itemSlug)
       .eq("stores.slug", data.slug)
       .maybeSingle();
@@ -32,7 +33,7 @@ const fetchProductBySlugs = createServerFn({ method: "GET" })
     if (!product) {
       const { data: fallbackProduct } = await supabase
         .from("products")
-        .select("*, stores(id, owner_id, name, slug, primary_color, whatsapp_number, logo_url, favicon_url)")
+        .select("*, stores(id, owner_id, name, slug, primary_color, whatsapp_number, contact_email, contact_instagram, logo_url, favicon_url)")
         .eq("id", data.itemSlug)
         .maybeSingle();
       product = fallbackProduct;
@@ -100,7 +101,7 @@ function ProductPageContent() {
       // Tenta buscar por slug primeiro. Se não achar, tenta buscar por ID caso a pessoa tenha salvo a URL antiga ou seja um fallback.
       let { data, error } = await supabase
         .from("products")
-        .select("*, stores!inner(id, owner_id, name, slug, primary_color, whatsapp_number)")
+        .select("*, stores!inner(id, owner_id, name, slug, primary_color, whatsapp_number, contact_email, contact_instagram)")
         .eq("slug", itemSlug)
         .eq("stores.slug", slug)
         .maybeSingle();
@@ -108,7 +109,7 @@ function ProductPageContent() {
       if (!data) {
          const { data: fallbackData } = await supabase
           .from("products")
-          .select("*, stores(id, owner_id, name, slug, primary_color, whatsapp_number)")
+          .select("*, stores(id, owner_id, name, slug, primary_color, whatsapp_number, contact_email, contact_instagram)")
           .eq("id", itemSlug)
           .maybeSingle();
           data = fallbackData;
@@ -501,6 +502,7 @@ function ProductPageContent() {
           </div>
         </div>
       </main>
+      <AppFooter storeInfo={product?.stores || undefined} />
     </div>
   );
 }

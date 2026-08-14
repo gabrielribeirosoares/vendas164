@@ -5,6 +5,58 @@ import { ShieldCheck, FileText, ArrowLeft, Lock, Scale, HelpCircle } from "lucid
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/termos")({
+  head: () => ({
+    meta: [
+      { title: "Termos de Uso — Vendas 164" },
+      {
+        name: "description",
+        content:
+          "Termos e condições de uso da plataforma Vendas 164 para lojistas e colecionadores de miniaturas 1/64.",
+      },
+      { property: "og:title", content: "Termos de Uso — Vendas 164" },
+      {
+        property: "og:description",
+        content: "Termos e condições de uso da plataforma Vendas 164.",
+      },
+    ],
+    links: [
+      { rel: "canonical", href: "https://vendas164.com.br/termos" },
+    ],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "WebPage",
+          "name": "Termos de Uso — Vendas 164",
+          "url": "https://vendas164.com.br/termos",
+          "datePublished": "2025-01-15T00:00:00-03:00",
+          "dateModified": "2026-07-26T00:00:00-03:00",
+        }),
+      },
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "name": "Início",
+              "item": "https://vendas164.com.br/",
+            },
+            {
+              "@type": "ListItem",
+              "position": 2,
+              "name": "Termos de Uso",
+              "item": "https://vendas164.com.br/termos",
+            },
+          ],
+        }),
+      },
+    ],
+  }),
   component: TermosDeUso,
 });
 

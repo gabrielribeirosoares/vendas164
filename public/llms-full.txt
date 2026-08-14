@@ -1,0 +1,98 @@
+# Vendas 1:64 — Documentação Completa para LLMs
+
+> Plataforma brasileira de pré-vendas, estoque e financeiro para lojas de miniaturas colecionáveis em escala 1/64.
+
+---
+
+## 1. Visão Geral
+
+O **Vendas 164** é uma plataforma SaaS (Software como Serviço) criada especificamente para o mercado de miniaturas colecionáveis em escala 1:64 no Brasil. A plataforma conecta lojistas independentes a colecionadores, oferecendo um conjunto completo de ferramentas para:
+
+- Gerenciar pré-vendas e reservas de miniaturas
+- Controlar estoque e unidades disponíveis por modelo
+- Cobrar sinais e saldos via PIX com copia e cola
+- Enviar mensagens de cobrança e notificação via WhatsApp
+- Acompanhar faturamento projetado e saldo a receber
+
+## 2. Público-Alvo
+
+### Lojistas e Vendedores
+Vendedores independentes de miniaturas que operam em redes sociais (Instagram, WhatsApp, grupos de colecionadores). Eles cadastram lançamentos, definem preços, sinais e prazos, e compartilham links de catálogo para seus clientes.
+
+### Colecionadores
+Pessoas que colecionam miniaturas em escala 1:64 de marcas como Hot Wheels, Mini GT, Kaido House, Inno64, Tarmac Works, entre outras. Eles acessam o catálogo do lojista, reservam unidades pagando um sinal via PIX, e acompanham o status da encomenda.
+
+## 3. Funcionalidades Principais
+
+### 3.1. Cadastro de Produtos em Pré-Venda
+O lojista insere informações completas: foto do modelo, fabricante, marca, escala, preço total, valor do sinal, número de unidades disponíveis e prazo estimado de chegada.
+
+### 3.2. Cronômetro de Sinal
+O lojista define uma data limite para confirmação de pagamento do sinal. Se o comprador não confirmar até a data estipulada, a vaga é liberada automaticamente para outro colecionador.
+
+### 3.3. Gestão Financeira
+Dashboard com faturamento projetado, valor arrecadado em sinais, saldo a receber e histórico de transações.
+
+### 3.4. Mensagens via WhatsApp
+Mensagens pré-formatadas com dados do pedido e chave PIX para envio em 1 clique via WhatsApp.
+
+### 3.5. Links de Catálogo e Convite
+URLs diretas para a loja ou produto específico, prontas para compartilhar em redes sociais e grupos.
+
+### 3.6. Painel do Colecionador
+Área exclusiva onde o cliente consulta status das reservas, prazos de pagamento, fotos do produto e copia o código PIX.
+
+### 3.7. Carrinho de Compras
+Sistema de carrinho para que o colecionador selecione múltiplas miniaturas e finalize a reserva de uma vez.
+
+## 4. Fluxo de Uso
+
+1. **Lojista cadastra o lançamento**: Insere foto, marca, modelo, preço, sinal e unidades disponíveis.
+2. **Lojista compartilha o link**: Envia o catálogo ou produto para colecionadores via WhatsApp, Instagram, grupos.
+3. **Colecionador reserva**: Escolhe a quantidade, paga o sinal via PIX e garante a reserva.
+4. **Lojista acompanha**: Monitora reservas, sinais pagos e saldos pendentes no dashboard.
+5. **Miniatura chega**: Lojista notifica o comprador para pagamento do saldo restante.
+6. **Entrega**: Lojista despacha e registra código de rastreamento.
+
+## 5. Marcas de Miniaturas Suportadas
+
+A plataforma é agnóstica quanto a fabricantes, mas as marcas mais comuns incluem:
+- Hot Wheels (Mattel)
+- Mini GT (TSM / True Scale Miniatures)
+- Kaido House (colaboração com Mini GT)
+- Inno64 (Inno Models)
+- Tarmac Works
+- Majorette
+- POPRACE
+- BM Creations
+- Era Car
+
+## 6. Tecnologia
+
+- Frontend: React com TanStack Router e TanStack Start
+- Backend: Supabase (PostgreSQL + Auth + Storage)
+- Deploy: Vercel
+- Domínio: vendas164.com.br
+
+## 7. Páginas Públicas
+
+| Página | URL | Descrição |
+|---|---|---|
+| Início | https://vendas164.com.br/ | Landing page com apresentação e funcionalidades |
+| Autenticação | https://vendas164.com.br/auth | Login e cadastro |
+| Lojas | https://vendas164.com.br/loja/{slug} | Catálogo público de cada loja |
+| Produtos | https://vendas164.com.br/loja/{slug}/{itemSlug} | Página individual de produto |
+| Termos de Uso | https://vendas164.com.br/termos | Termos e condições |
+| Privacidade | https://vendas164.com.br/privacidade | Política de privacidade (LGPD) |
+
+## 8. Contato e Redes Sociais
+
+- **Site**: https://vendas164.com.br
+- **Instagram**: https://www.instagram.com/vendas164.com.br
+
+## 9. Informações Legais
+
+- Plataforma de intermediação tecnológica (SaaS)
+- Em conformidade com a LGPD (Lei nº 13.709/2018)
+- Marcas mencionadas pertencem aos respectivos proprietários
+- Pagamentos ocorrem diretamente entre lojista e comprador via PIX

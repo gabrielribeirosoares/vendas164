@@ -1,0 +1,17 @@
+{
+  "version": "1.0",
+  "skills": [
+    {
+      "name": "browse_catalog",
+      "description": "Navegar pelo catálogo de miniaturas colecionáveis de uma loja cadastrada na plataforma."
+    },
+    {
+      "name": "reserve_miniature",
+      "description": "Reservar uma miniatura colecionável 1:64 pagando o sinal via PIX."
+    },
+    {
+      "name": "track_order",
+      "description": "Acompanhar o status de uma reserva ou pré-venda já realizada."
+    }
+  ]
+}
