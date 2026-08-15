@@ -13,7 +13,7 @@ import { PhoneInput } from '@/components/PhoneInput';
 import { DEFAULT_PRESET_BRANDS, getStoreBrands, saveStoreBrands } from '@/lib/brands';
 import { getStoreBanner, saveStoreBanner } from '@/lib/storeCustomizations';
 import { uploadImage } from '@/lib/upload';
-import { updateAppFavicon } from '@/components/AppHeader';
+import { updateAppFavicon } from '@/lib/favicon';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Store = Tables<'stores'>;

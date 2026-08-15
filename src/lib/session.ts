@@ -11,11 +11,15 @@ export function useSession() {
     async function syncProfile(u: User | null | undefined) {
       if (!u) return;
 
-      const { data: existing } = await supabase
+      const { data: existing, error } = await supabase
         .from("profiles")
         .select("id, name, email, phone")
         .eq("id", u.id)
         .maybeSingle();
+
+      if (error) {
+        return;
+      }
 
       // Se já existe registro no banco, corrige se estiver sem e-mail ou com nome genérico "Cliente"
       if (existing) {
