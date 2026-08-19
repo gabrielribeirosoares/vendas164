@@ -114,9 +114,11 @@ export function ProductsTab({
       return toast.error("Por favor, selecione ou informe a marca da miniatura.");
     }
 
-    setSaving(true);
+    const isSemSinal = (form as any).signal_rule === "sem_sinal";
     let computedHours = 24;
-    if (form.payment_deadline_date) {
+    if (isSemSinal) {
+      computedHours = 0;
+    } else if (form.payment_deadline_date) {
       const targetDate = new Date(form.payment_deadline_date + "T23:59:59");
       computedHours = Math.max(0, Math.round((targetDate.getTime() - Date.now()) / (1000 * 60 * 60)));
     } else if (form.down_payment_amount === "" || Number(form.down_payment_amount || 0) === 0) {
@@ -139,8 +141,9 @@ export function ProductsTab({
       installment_price: instPrice,
       price_2x: maxInst === 2 ? instPrice : null,
       release_date: form.release_date ? (form.release_date.length === 7 ? form.release_date + "-01" : form.release_date) : null,
-      payment_deadline_date: form.payment_deadline_date || null,
-      payment_deadline_hours: computedHours,
+      payment_deadline_date: isSemSinal ? null : (form.payment_deadline_date || null),
+      payment_deadline_hours: isSemSinal ? 0 : computedHours,
+      down_payment_amount: isSemSinal || form.down_payment_amount === "" ? null : Number(form.down_payment_amount || 0),
       stock: Number(form.stock || 0),
       initial_stock: Number(form.stock || 0),
       image_url: form.image_url || null,
@@ -150,10 +153,6 @@ export function ProductsTab({
       bulk_has_installment_surcharge: (form as any).bulk_has_installment_surcharge === "true",
       bulk_installment_price: (form as any).bulk_has_installment_surcharge === "true" && (form as any).bulk_installment_price ? Number((form as any).bulk_installment_price) : null,
     };
-
-    if (form.down_payment_amount !== "") {
-      payload.down_payment_amount = Number(form.down_payment_amount || 0);
-    }
 
     let { error } = await supabase.from("products").insert(payload);
 
@@ -448,7 +447,7 @@ export function ProductsTab({
                 <div className="space-y-1.5 flex flex-col justify-end">
                   <Label htmlFor="signal_rule" className="text-xs font-medium text-muted-foreground whitespace-nowrap">Exigência Sinal</Label>
                   <Select 
-                    value={(form as any).signal_rule || (Number(form.down_payment_amount || 0) > 0 ? 'aguardando_sinal' : 'sem_sinal')} 
+                    value={(form as any).signal_rule || "aguardando_sinal"} 
                     onValueChange={(val) => {
                       if (val === 'sem_sinal') {
                         setForm({ ...form, signal_rule: 'sem_sinal', down_payment_amount: '', payment_deadline_date: '', payment_deadline_hours: '0' } as any);
@@ -462,11 +461,11 @@ export function ProductsTab({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="aguardando_sinal">Obrigatório</SelectItem>
-                      <SelectItem value="sem_sinal">Na chegada</SelectItem>
+                      <SelectItem value="sem_sinal">Não obrigatório (Na chegada)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                {((form as any).signal_rule === 'aguardando_sinal' || Number(form.down_payment_amount || 0) > 0) && ((form as any).signal_rule !== 'sem_sinal') && (
+                {((form as any).signal_rule !== 'sem_sinal') && (
                   <div className="space-y-1.5 flex flex-col justify-end">
                     <Label htmlFor="down_payment" className="text-xs font-medium text-muted-foreground">Sinal (R$)</Label>
                     <Input
@@ -474,7 +473,7 @@ export function ProductsTab({
                       type="number"
                       min="0"
                       step="0.01"
-                      placeholder="Ex: 50"
+                      placeholder="Ex: 50 (Padrão 20%)"
                       value={form.down_payment_amount}
                       onChange={(e) => setForm({ ...form, down_payment_amount: e.target.value })}
                       className="bg-muted/20 border-border/30 h-9"
@@ -935,6 +934,7 @@ function EditProductDialog({
       const rawInstPrice = (product as any).installment_price ?? rawPrice2x;
       const rawHasSurcharge = (product as any).has_installment_surcharge ?? (rawInstPrice != null && Number(rawInstPrice) > Number(product.price));
       const rawDeadlineDate = (product as any).payment_deadline_date;
+      const noSignal = hasNoSignalRequirement(product);
       setForm({
         brand: product.brand ?? "",
         model: product.model ?? "",
@@ -944,7 +944,8 @@ function EditProductDialog({
         max_installments: rawMaxInst != null ? String(rawMaxInst) : "1",
         has_surcharge: rawHasSurcharge ? "true" : "false",
         installment_price: rawInstPrice != null ? String(rawInstPrice) : "",
-        down_payment_amount: rawVal != null ? String(rawVal) : "",
+        down_payment_amount: rawVal != null && Number(rawVal) > 0 ? String(rawVal) : "",
+        signal_rule: noSignal ? "sem_sinal" : "aguardando_sinal",
         release_date: product.release_date ? product.release_date.substring(0, 7) : "",
         stock: product.stock != null ? String(product.stock) : "1",
         payment_deadline_date: rawDeadlineDate ?? "",
@@ -971,8 +972,11 @@ function EditProductDialog({
     }
 
     setSaving(true);
+    const isSemSinal = (form as any).signal_rule === "sem_sinal";
     let computedHours = 24;
-    if (form.payment_deadline_date) {
+    if (isSemSinal) {
+      computedHours = 0;
+    } else if (form.payment_deadline_date) {
       const targetDate = new Date(form.payment_deadline_date + "T23:59:59");
       computedHours = Math.max(0, Math.round((targetDate.getTime() - Date.now()) / (1000 * 60 * 60)));
     } else if (form.down_payment_amount === "" || Number(form.down_payment_amount || 0) === 0) {
@@ -1000,8 +1004,9 @@ function EditProductDialog({
       installment_price: instPrice,
       price_2x: maxInst === 2 ? instPrice : null,
       release_date: form.release_date ? (form.release_date.length === 7 ? form.release_date + "-01" : form.release_date) : null,
-      payment_deadline_date: form.payment_deadline_date || null,
-      payment_deadline_hours: computedHours,
+      payment_deadline_date: isSemSinal ? null : (form.payment_deadline_date || null),
+      payment_deadline_hours: isSemSinal ? 0 : computedHours,
+      down_payment_amount: isSemSinal || form.down_payment_amount === "" ? null : Number(form.down_payment_amount || 0),
       stock: newStock,
       initial_stock: newInitial,
       is_open: form.is_open,
@@ -1012,10 +1017,6 @@ function EditProductDialog({
       bulk_has_installment_surcharge: (form as any).bulk_has_installment_surcharge === "true",
       bulk_installment_price: (form as any).bulk_has_installment_surcharge === "true" && (form as any).bulk_installment_price ? Number((form as any).bulk_installment_price) : null,
     };
-
-    if (form.down_payment_amount !== "") {
-      payload.down_payment_amount = Number(form.down_payment_amount || 0);
-    }
 
     let { error } = await supabase
       .from("products")
@@ -1071,7 +1072,9 @@ function EditProductDialog({
       return toast.error(`Não foi possível salvar as alterações: ${error.message || "Erro de permissão"}`);
     }
     saveProductBadge(product.id, (form as any).badge || "");
-    queryClient.invalidateQueries();
+    queryClient.invalidateQueries({ queryKey: ["store-products"] });
+    queryClient.invalidateQueries({ queryKey: ["products"] });
+    queryClient.invalidateQueries({ queryKey: ["store-orders"] });
     toast.success("Miniatura atualizada com sucesso!");
     onClose();
   }
@@ -1209,7 +1212,7 @@ function EditProductDialog({
             <div className="space-y-1.5 flex flex-col justify-end">
               <Label htmlFor="edit-signal-rule" className="text-xs font-medium text-muted-foreground whitespace-nowrap">Exigência Sinal</Label>
               <Select 
-                value={(form as any).signal_rule || (Number(form.down_payment_amount || 0) > 0 ? 'aguardando_sinal' : 'sem_sinal')} 
+                value={(form as any).signal_rule || "aguardando_sinal"} 
                 onValueChange={(val) => {
                   if (val === 'sem_sinal') {
                     setForm({ ...form, signal_rule: 'sem_sinal', down_payment_amount: '', payment_deadline_date: '', payment_deadline_hours: '0' } as any);
@@ -1223,11 +1226,11 @@ function EditProductDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="aguardando_sinal">Obrigatório</SelectItem>
-                  <SelectItem value="sem_sinal">Na chegada</SelectItem>
+                  <SelectItem value="sem_sinal">Não obrigatório (Na chegada)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            {((form as any).signal_rule === 'aguardando_sinal' || Number(form.down_payment_amount || 0) > 0) && ((form as any).signal_rule !== 'sem_sinal') && (
+            {((form as any).signal_rule !== 'sem_sinal') && (
               <div className="space-y-1.5 flex flex-col justify-end">
                 <Label htmlFor="edit-down-payment" className="text-xs font-medium text-muted-foreground">Sinal (R$)</Label>
                 <Input
@@ -1235,7 +1238,7 @@ function EditProductDialog({
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder="Ex: 50"
+                  placeholder="Ex: 50 (Padrão 20%)"
                   value={form.down_payment_amount}
                   onChange={(e) => setForm({ ...form, down_payment_amount: e.target.value })}
                   className="bg-muted/20 border-border/30 h-9"
