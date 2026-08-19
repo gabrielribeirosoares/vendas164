@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Clock, Package, Share2, ArrowLeft, Store as StoreIcon, CreditCard, ShoppingBag } from "lucide-react";
+import { CalendarDays, Clock, Package, Share2, ArrowLeft, Store as StoreIcon, CreditCard, ShoppingBag, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { createServerFn } from "@tanstack/react-start";
 import { AppHeader } from "@/components/AppHeader";
@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement } from "@/lib/format";
+import { brl, formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
 import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 import { joinWaitlist, reservationErrorMessage } from "@/lib/reservations";
@@ -148,6 +148,7 @@ function ProductPageContent() {
     (product && product.stock > waitlistCount) || 
     (isOnWaitlist && product && userWaitlistIndex < product.stock);
 
+  const isPronta = isProntaEntrega(product);
   const hasNoSignal = hasNoSignalRequirement(product);
   const signalInfo = getProductSignalAmount(product, quantity);
 
@@ -167,7 +168,7 @@ function ProductPageContent() {
       return;
     }
     if (product.stores?.owner_id === user.id) {
-      toast.info("Você é o dono desta loja e não pode reservar unidades na sua própria pré-venda.");
+      toast.info("Você é o dono desta loja e não pode comprar na sua própria loja.");
       return;
     }
     if (product.stock > 0) {
@@ -182,6 +183,7 @@ function ProductPageContent() {
         downPaymentToPay: downPaymentToPay,
         remainingBalance: remainingBalanceCalculated,
         hasNoSignal,
+        isProntaEntrega: isProntaEntrega(product),
         productSnapshot: {
           model: product.model,
           brand: product.brand,
@@ -205,36 +207,23 @@ function ProductPageContent() {
   }
 
   function share() {
-    navigator.clipboard.writeText(`${window.location.origin}/loja/${slug}/${itemSlug}`);
+    navigator.clipboard.writeText(window.location.href);
     toast.success("Link do produto copiado!");
   }
-
-  useEffect(() => {
-    if (!product) return;
-    document.title = `${product.model} — ${product.brand} | Vendas 1:64`;
-    const metaDescription = document.querySelector('meta[name="description"]');
-    if (metaDescription) {
-      metaDescription.setAttribute(
-        "content",
-        `Pré-venda de ${product.brand} ${product.model} — ${product.stock} unidades disponíveis. ${product.is_open ? "Pré-venda aberta." : "Pré-venda fechada."}`,
-      );
-    }
-  }, [product]);
 
   if (isLoading) {
     return (
       <div className="min-h-screen">
         <AppHeader />
         <main className="mx-auto max-w-5xl px-4 py-10">
-          <div className="grid gap-4 md:gap-8 md:grid-cols-2">
-            <div className="aspect-square w-full rounded-3xl bg-muted">
-              <Skeleton className="h-full w-full" />
-            </div>
+          <Skeleton className="h-6 w-32" />
+          <div className="mt-6 grid gap-8 md:grid-cols-2">
+            <Skeleton className="aspect-square w-full rounded-2xl" />
             <div className="space-y-4">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-4 w-48" />
-              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-8 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-12 w-full" />
             </div>
           </div>
         </main>
@@ -246,7 +235,17 @@ function ProductPageContent() {
     return (
       <div className="min-h-screen">
         <AppHeader />
-        <p className="p-8 text-center text-sm text-muted-foreground">Produto não encontrado.</p>
+        <main className="mx-auto max-w-5xl px-4 py-10 text-center">
+          <h1 className="text-xl font-bold">Produto não encontrado</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            O item que você procura não está disponível ou o link está incorreto.
+          </p>
+          <Button asChild className="mt-4" variant="outline">
+            <Link to="/loja/$slug" params={{ slug }}>
+              Ir para a página da loja
+            </Link>
+          </Button>
+        </main>
       </div>
     );
   }
@@ -265,7 +264,7 @@ function ProductPageContent() {
         </div>
         <div className="grid gap-8 md:grid-cols-2">
           <div className="overflow-hidden rounded-3xl border border-border/30 bg-card/60">
-            <div className="aspect-square w-full bg-muted">
+            <div className="aspect-square w-full bg-muted relative">
               {product.image_url ? (
                 <img
                   src={product.image_url}
@@ -276,6 +275,13 @@ function ProductPageContent() {
               ) : (
                 <div className="flex h-full items-center justify-center text-muted-foreground">
                   <Package className="size-12" />
+                </div>
+              )}
+              {isPronta && (
+                <div className="absolute top-4 left-4 z-10">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-bold text-white shadow-lg bg-emerald-600 border border-emerald-400/40 backdrop-blur-md">
+                    <Zap className="size-3.5 fill-current" /> Pronta Entrega
+                  </span>
                 </div>
               )}
             </div>
@@ -318,7 +324,14 @@ function ProductPageContent() {
               })()}
 
               {/* Destaque das condições de Sinal e Saldo */}
-              {!hasNoSignal ? (
+              {isPronta ? (
+                <div className="pt-2">
+                  <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                    <Zap className="size-4 fill-current" />
+                    <span>Pronta Entrega — Envio imediato após confirmação do pagamento</span>
+                  </div>
+                </div>
+              ) : !hasNoSignal ? (
                 <div className="flex flex-wrap items-center gap-2.5 pt-2">
                   <div className="rounded-xl border border-primary/20 bg-primary/5 px-3.5 py-2">
                     <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">Sinal para garantir:</span>
@@ -342,16 +355,22 @@ function ProductPageContent() {
 
             <div className="mt-5 flex flex-wrap gap-2">
               <Badge variant={product.is_open ? "secondary" : "outline"} className="border-border/30">
-                {product.is_open ? "Pré-venda aberta" : "Pré-venda fechada"}
+                {isPronta
+                  ? product.is_open ? "Disponível para compra" : "Indisponível"
+                  : product.is_open ? "Pré-venda aberta" : "Pré-venda fechada"}
               </Badge>
               <Badge variant="outline" className="border-border/30">
                 {formatStockRemaining(product)}
               </Badge>
-              {hasNoSignal && (
+              {isPronta ? (
+                <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                  ⚡ Envio Imediato
+                </Badge>
+              ) : hasNoSignal ? (
                 <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
                   Sem sinal
                 </Badge>
-              )}
+              ) : null}
             </div>
 
             {/* Controles de Quantidade e Parcelamento */}
@@ -379,16 +398,6 @@ function ProductPageContent() {
                           ))}
                         </SelectContent>
                       </Select>
-                      {(product as any).bulk_discount_threshold > 0 && quantity < (product as any).bulk_discount_threshold && (
-                        <p className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold pt-1">
-                          Desconto a partir de {(product as any).bulk_discount_threshold} unidades!
-                        </p>
-                      )}
-                      {(product as any).bulk_discount_threshold > 0 && quantity >= (product as any).bulk_discount_threshold && (
-                        <p className="text-[11px] text-green-600 dark:text-green-500 font-semibold pt-1">
-                          Desconto de atacado aplicado!
-                        </p>
-                      )}
                     </div>
 
                     {/* Seletor de Parcelamento */}
@@ -419,7 +428,7 @@ function ProductPageContent() {
                   {/* Resumo Atualizado do Pedido */}
                   <div className="rounded-lg bg-background/80 p-4 border border-border/20 text-xs space-y-2">
                     <div className="flex justify-between items-center text-muted-foreground">
-                      <span>Total da reserva ({quantity} {quantity === 1 ? "unidade" : "unidades"}):</span>
+                      <span>Total ({quantity} {quantity === 1 ? "unidade" : "unidades"}):</span>
                       <span className="font-semibold text-foreground text-sm">{brl(totalPriceCalculated)}</span>
                     </div>
                     {selectedInstallment > 1 && (
@@ -429,7 +438,11 @@ function ProductPageContent() {
                       </div>
                     )}
                     <div className="border-t border-border/20 pt-2 flex justify-between items-center">
-                      {hasNoSignal ? (
+                      {isPronta ? (
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                          Pagamento total direto no carrinho
+                        </span>
+                      ) : hasNoSignal ? (
                         <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                           Sem sinal agora (Pague na chegada)
                         </span>
@@ -440,7 +453,7 @@ function ProductPageContent() {
                         </>
                       )}
                     </div>
-                    {!hasNoSignal && (
+                    {!isPronta && !hasNoSignal && (
                       <div className="flex justify-between items-center text-muted-foreground text-[11px]">
                         <span>Saldo a pagar na chegada:</span>
                         <span className="font-medium text-foreground">{brl(remainingBalanceCalculated)}</span>
@@ -451,27 +464,42 @@ function ProductPageContent() {
               </Card>
             )}
 
-            <Card className="mt-6 border-border/30 bg-muted/10">
-              <CardContent className="space-y-3 p-5 text-sm">
-                <p className="flex items-center gap-2.5 text-muted-foreground">
-                  <Clock className="size-4 text-primary" />
-                  {hasNoSignal ? (
-                    <span className="font-semibold text-foreground">Sem necessidade de sinal (reserva garantida)</span>
-                  ) : (product as any).payment_deadline_date ? (
-                    <span>Data limite para pagar o sinal: <strong className="text-foreground">{new Date((product as any).payment_deadline_date + "T00:00:00").toLocaleDateString("pt-BR")}</strong></span>
-                  ) : (
-                    <span>Prazo para pagar o sinal: {formatDeadlineHours(product.payment_deadline_hours)} após a reserva</span>
-                  )}
-                </p>
-                <p className="flex items-center gap-2.5 text-muted-foreground">
-                  <CalendarDays className="size-4 text-primary" />
-                  Previsão de chegada:{" "}
-                  {product.release_date
-                    ? new Date(product.release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })
-                    : "a definir"}
-                </p>
-              </CardContent>
-            </Card>
+            {isPronta ? (
+              <Card className="mt-6 border-emerald-500/20 bg-emerald-500/5">
+                <CardContent className="space-y-3 p-5 text-sm">
+                  <p className="flex items-center gap-2.5 text-emerald-600 dark:text-emerald-400 font-semibold">
+                    <Zap className="size-4 fill-current" />
+                    Item a Pronta Entrega — Disponível em estoque físico para envio imediato.
+                  </p>
+                  <p className="flex items-center gap-2.5 text-muted-foreground text-xs">
+                    <Package className="size-4 text-primary" />
+                    Pagamento integral direto sem necessidade de sinal prévio ou espera de lançamento.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="mt-6 border-border/30 bg-muted/10">
+                <CardContent className="space-y-3 p-5 text-sm">
+                  <p className="flex items-center gap-2.5 text-muted-foreground">
+                    <Clock className="size-4 text-primary" />
+                    {hasNoSignal ? (
+                      <span className="font-semibold text-foreground">Sem necessidade de sinal (reserva garantida)</span>
+                    ) : (product as any).payment_deadline_date ? (
+                      <span>Data limite para pagar o sinal: <strong className="text-foreground">{new Date((product as any).payment_deadline_date + "T00:00:00").toLocaleDateString("pt-BR")}</strong></span>
+                    ) : (
+                      <span>Prazo para pagar o sinal: {formatDeadlineHours(product.payment_deadline_hours)} após a reserva</span>
+                    )}
+                  </p>
+                  <p className="flex items-center gap-2.5 text-muted-foreground">
+                    <CalendarDays className="size-4 text-primary" />
+                    Previsão de chegada:{" "}
+                    {product.release_date
+                      ? new Date(product.release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })
+                      : "a definir"}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <Button
@@ -487,13 +515,15 @@ function ProductPageContent() {
                 }
               >
                 {!product.is_open
-                  ? "Pré-venda fechada"
+                  ? isPronta ? "Item indisponível" : "Pré-venda fechada"
                   : product.stock > 0
                     ? isEligibleToBuyWaitlist
                       ? (
                           <div className="flex items-center justify-center gap-2">
                             <ShoppingBag className="size-5" />
-                            {quantity > 1 ? `Adicionar ${quantity} ao Carrinho` : "Adicionar ao Carrinho"}
+                            {isPronta
+                              ? quantity > 1 ? `Comprar ${quantity} un. (Carrinho)` : "Adicionar ao Carrinho"
+                              : quantity > 1 ? `Adicionar ${quantity} ao Carrinho` : "Adicionar ao Carrinho"}
                           </div>
                         )
                       : "Estoque reservado p/ fila"

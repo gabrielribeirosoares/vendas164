@@ -1,61 +1,28 @@
-
-
+import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Clock, Copy, Loader2, Palette, ShieldAlert, ShieldCheck, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Copy, Loader2, Package, Palette, ShieldAlert, ShieldCheck, XCircle, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { PhoneInput } from "@/components/PhoneInput";
 import { getCustomerFromCache } from "@/lib/customerCache";
-
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-
 import { Badge } from "@/components/ui/badge";
-
-
-
-
-
-
-
-
-
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, slugify } from "@/lib/format";
 import { useSession } from "@/lib/session";
-
-
-
-
-
 
 import { OrdersTab, type OrderRow } from "@/components/vendedor/OrderManager";
 import { BrandingTab } from "@/components/vendedor/StoreSettings";
@@ -85,9 +52,6 @@ export const Route = createFileRoute("/_authenticated/vendedor")({
   component: SellerDashboard,
 });
 
-
-
-
 function SellerDashboard() {
   const { user, loading: sessionLoading } = useSession();
   const queryClient = useQueryClient();
@@ -109,6 +73,22 @@ function SellerDashboard() {
       return data;
     },
   });
+
+  useEffect(() => {
+    if (store?.name) {
+      if (activeTab === "reservas") {
+        document.title = `${store.name} — Reservas`;
+      } else if (activeTab === "loja") {
+        document.title = `${store.name} — Personalização`;
+      } else if (activeTab === "pronta_entrega") {
+        document.title = `${store.name} — Pronta Entrega`;
+      } else if (activeTab === "clientes") {
+        document.title = `${store.name} — Clientes`;
+      } else {
+        document.title = `${store.name} — Pré-vendas`;
+      }
+    }
+  }, [store?.name, activeTab]);
 
   const { data: profile } = useQuery({
     queryKey: ["my-profile-admin", user?.id],
@@ -384,7 +364,12 @@ function SellerDashboard() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-10">
           <TabsList className="hidden md:flex w-full overflow-x-auto justify-start sm:justify-center whitespace-nowrap p-1 max-w-full bg-muted/30">
-            <TabsTrigger value="produtos" className="text-xs sm:text-sm">Estoque e pré-vendas</TabsTrigger>
+            <TabsTrigger value="produtos" className="gap-1.5 text-xs sm:text-sm">
+              <Package className="size-3.5" /> Pré-vendas
+            </TabsTrigger>
+            <TabsTrigger value="pronta_entrega" className="gap-1.5 text-xs sm:text-sm text-emerald-600 dark:text-emerald-400 font-semibold">
+              <Zap className="size-3.5 fill-emerald-500 text-emerald-500" /> Pronta Entrega
+            </TabsTrigger>
             <TabsTrigger value="reservas" className="text-xs sm:text-sm">Reservas</TabsTrigger>
             <TabsTrigger value="clientes" className="text-xs sm:text-sm">Clientes</TabsTrigger>
             <TabsTrigger value="loja" className="gap-1.5 text-xs sm:text-sm">
@@ -393,7 +378,11 @@ function SellerDashboard() {
           </TabsList>
 
           <TabsContent value="produtos" className="mt-5">
-            <ProductsTab store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} />
+            <ProductsTab mode="pre_venda" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} />
+          </TabsContent>
+
+          <TabsContent value="pronta_entrega" className="mt-5">
+            <ProductsTab mode="pronta_entrega" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} />
           </TabsContent>
 
           <TabsContent value="reservas" className="mt-5 space-y-6">

@@ -1,10 +1,28 @@
+import { getProductCategory, getProductBadge } from "./storeCustomizations";
+
 const brlFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 export const brl = (value: number | null | undefined) =>
   brlFormatter.format(Number(value ?? 0));
 
+export function isProntaEntrega(product: any): boolean {
+  if (!product) return false;
+  if (product.category === "pronta_entrega") return true;
+  if (product.id && getProductCategory(product.id) === "pronta_entrega") return true;
+  if (product.id && getProductBadge(product.id) === "Pronta Entrega") return true;
+  
+  const hasDownPayment = Number(product.down_payment_amount ?? 0) > 0;
+  const hasDeadlineDate = Boolean(product.payment_deadline_date);
+  const hasDeadlineHours = Number(product.payment_deadline_hours ?? 0) > 0;
+  const isDirectSemSinal = !hasDownPayment && !hasDeadlineDate && !hasDeadlineHours;
+
+  if (!product.release_date && isDirectSemSinal) return true;
+  return false;
+}
+
 export function hasNoSignalRequirement(product: any): boolean {
   if (!product) return false;
+  if (isProntaEntrega(product)) return true;
   const hasDownPayment = Number(product.down_payment_amount ?? 0) > 0;
   const hasDeadlineDate = Boolean(product.payment_deadline_date);
   const hasDeadlineHours = Number(product.payment_deadline_hours ?? 0) > 0;
@@ -29,6 +47,7 @@ export const paymentLabels: Record<string, string> = {
   aguardando_sinal: "Aguardando sinal",
   sem_sinal: "Sem sinal / Pagar na chegada",
   pagar_na_chegada: "Sem sinal / Pagar na chegada",
+  pronta_entrega: "Pronta Entrega",
   sinal_pago: "Sinal pago",
   quitado: "Quitado",
   cancelado: "Cancelado",

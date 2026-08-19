@@ -40,8 +40,29 @@ export function saveProductBadge(productId: string, badge: string) {
   }
 }
 
+export function getProductCategory(productId: string): "pre_venda" | "pronta_entrega" {
+  if (!productId) return "pre_venda";
+  try {
+    const val = localStorage.getItem(`minipre_product_category_${productId}`);
+    if (val === "pronta_entrega") return "pronta_entrega";
+  } catch (e) {
+    // ignore
+  }
+  return "pre_venda";
+}
+
+export function saveProductCategory(productId: string, category: "pre_venda" | "pronta_entrega") {
+  if (!productId) return;
+  try {
+    localStorage.setItem(`minipre_product_category_${productId}`, category);
+  } catch (e) {
+    // ignore
+  }
+}
+
 export const PRESET_BADGES = [
   { label: "Nenhum", value: "" },
+  { label: "⚡ Pronta Entrega", value: "Pronta Entrega" },
   { label: "🔥 Lançamento", value: "Lançamento" },
   { label: "⭐ Edição Limitada", value: "Edição Limitada" },
   { label: "💎 Destaque", value: "Destaque" },

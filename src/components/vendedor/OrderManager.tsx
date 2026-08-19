@@ -1,10 +1,10 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { brl, whatsappLink } from '@/lib/format';
+import { brl, isProntaEntrega, whatsappLink } from '@/lib/format';
 import { toast } from 'sonner';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink } from 'lucide-react';
+import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -34,7 +34,8 @@ function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: stri
   const total = Number(o.total_price) * quantity;
   const customSignal = Number((o.products as any)?.down_payment_amount || 0);
   const expectedSignal = (customSignal > 0 ? customSignal : Math.round(Number(o.total_price) * 0.2 * 100) / 100) * quantity;
-  const isSemSinal = o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada";
+  const isPronta = o.payment_status === "pronta_entrega" || isProntaEntrega(o.products);
+  const isSemSinal = o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada" || isPronta;
 
   let msg = `Olá ${displayName},\n\nAqui é o resumo da sua reserva:\n- Miniatura: *${modelName}*\n`;
   if (quantity > 1) msg += `- Quantidade: ${quantity}x\n`;
@@ -46,6 +47,8 @@ function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: stri
     msg += `- Sinal pago: *${brl(Number(o.down_payment) * quantity)}*\n- Saldo restante: *${brl(Number(o.remaining_balance) * quantity)}*\n`;
   } else if (o.payment_status === "quitado") {
     msg += `- Status: *Totalmente Quitado*\n`;
+  } else if (o.payment_status === "pronta_entrega" || (isPronta && isSemSinal)) {
+    msg += `- Status: *Pronta Entrega (Envio Imediato)*\n`;
   } else if (isSemSinal) {
     msg += `- Pagamento na chegada do produto.\n`;
   }
@@ -210,6 +213,7 @@ export function OrdersTab({
   const [endDate, setEndDate] = useState("");
   const [paymentFilter, setPaymentFilter] = useState<string>("todos");
   const [deliveryFilter, setDeliveryFilter] = useState<string>("todos");
+  const [categoryFilter, setCategoryFilter] = useState<"todos" | "pre_venda" | "pronta_entrega">("todos");
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
 
@@ -218,6 +222,19 @@ export function OrdersTab({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [trackingDrafts, setTrackingDrafts] = useState<Record<string, string>>({});
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
+  const activeOrders = useMemo(
+    () => orders.filter((o) => o.payment_status !== "cancelado" && o.delivery_status !== "cancelado"),
+    [orders]
+  );
+  const activeOrdersCount = activeOrders.length;
+  const prontaEntregaOrdersCount = useMemo(
+    () => activeOrders.filter((o) => isProntaEntrega(o.products)).length,
+    [activeOrders]
+  );
+  const preVendaOrdersCount = useMemo(
+    () => activeOrders.filter((o) => !isProntaEntrega(o.products)).length,
+    [activeOrders]
+  );
 
   async function handleTrackingSave(ids: string[], code: string) {
     const { error } = await supabase
@@ -248,6 +265,13 @@ export function OrdersTab({
       if (endDate) {
         const end = new Date(`${endDate}T23:59:59.999Z`);
         if (new Date(o.created_at) > end) return false;
+      }
+
+      // Filtro por tipo de produto (Pré-venda vs Pronta Entrega)
+      if (categoryFilter === "pronta_entrega") {
+        if (!isProntaEntrega(o.products)) return false;
+      } else if (categoryFilter === "pre_venda") {
+        if (isProntaEntrega(o.products)) return false;
       }
 
       // Ocultar cancelados por padrão caso o usuário não tenha filtrado especificamente por 'cancelado'
@@ -291,7 +315,7 @@ export function OrdersTab({
         trackingCode.includes(q)
       );
     });
-  }, [orders, searchQuery, startDate, endDate, paymentFilter, deliveryFilter]);
+  }, [orders, searchQuery, startDate, endDate, paymentFilter, deliveryFilter, categoryFilter]);
 
   type GroupedOrderRow = { order: OrderRow; quantity: number; ids: string[] };
 
@@ -409,7 +433,7 @@ export function OrdersTab({
       downPayment = totalPrice;
       patch.down_payment = downPayment;
       patch.reservation_expires_at = null;
-    } else if (newStatus === "sem_sinal") {
+    } else if (newStatus === "pronta_entrega" || newStatus === "sem_sinal") {
       downPayment = 0;
       patch.down_payment = 0;
       patch.reservation_expires_at = null;
@@ -450,7 +474,6 @@ export function OrdersTab({
     } else if (wasCancelled && !isNowCancelled) {
       await adjustStockOnCancel(o.product_id, false, quantity);
     }
-
     await updateGroup(ids, { delivery_status: newStatus });
 
     if (!wasCancelled && isNowCancelled) {
@@ -492,6 +515,7 @@ export function OrdersTab({
   const kanbanBoard = useMemo(() => {
     const cols = {
       aguardando_sinal: { title: "Aguardando Sinal", items: [] as GroupedOrderRow[] },
+      pronta_entrega: { title: "Pronta Entrega", items: [] as GroupedOrderRow[] },
       sem_sinal: { title: "Sem Sinal / Chegada", items: [] as GroupedOrderRow[] },
       sinal_pago: { title: "Sinal Pago", items: [] as GroupedOrderRow[] },
       quitado: { title: "Quitado", items: [] as GroupedOrderRow[] },
@@ -510,6 +534,8 @@ export function OrdersTab({
         cols.quitado.items.push(item);
       } else if (o.payment_status === "sinal_pago") {
         cols.sinal_pago.items.push(item);
+      } else if (o.payment_status === "pronta_entrega" || (isProntaEntrega(o.products) && (o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada"))) {
+        cols.pronta_entrega.items.push(item);
       } else if (o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada") {
         cols.sem_sinal.items.push(item);
       } else {
@@ -554,9 +580,42 @@ export function OrdersTab({
 
   return (
     <div className="space-y-6">
-      
-
       <Card className="border-border/60 panel relative">
+        {/* FILTRO POR TIPO DE PEDIDO (PRÉ-VENDA VS PRONTA ENTREGA) */}
+        <div className="flex flex-wrap items-center gap-2 p-4 pb-0">
+          <Button
+            type="button"
+            size="sm"
+            variant={categoryFilter === "todos" ? "default" : "outline"}
+            onClick={() => { setCategoryFilter("todos"); setPage(0); }}
+            className="h-8 text-xs rounded-lg font-medium"
+          >
+            Todos ({activeOrdersCount})
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={categoryFilter === "pre_venda" ? "default" : "outline"}
+            onClick={() => { setCategoryFilter("pre_venda"); setPage(0); }}
+            className="h-8 text-xs rounded-lg font-medium gap-1.5"
+          >
+            <Package className="size-3.5 text-amber-500" /> Pré-vendas ({preVendaOrdersCount})
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={categoryFilter === "pronta_entrega" ? "default" : "outline"}
+            onClick={() => { setCategoryFilter("pronta_entrega"); setPage(0); }}
+            className={`h-8 text-xs rounded-lg font-medium gap-1.5 ${
+              categoryFilter === "pronta_entrega" 
+                ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
+                : "text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+            }`}
+          >
+            <Zap className="size-3.5 fill-current text-emerald-500" /> Pronta Entrega ({prontaEntregaOrdersCount})
+          </Button>
+        </div>
+
         {/* BARRA DE PESQUISA E FILTROS DE CLIENTE / WHATSAPP / STATUS */}
         <div className="flex flex-col gap-3 border-b border-border/60 p-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -630,74 +689,171 @@ export function OrdersTab({
             </div>
           </div>
 
-          {storeId && (
-            <Button
-              size="sm"
-              onClick={() => setManualDialogOpen(true)}
-              className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs font-semibold"
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/40">
+            {storeId && (
+              <Button
+                size="sm"
+                onClick={() => setManualDialogOpen(true)}
+                className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs font-semibold"
+              >
+                <Plus className="size-4" />
+                <span>Nova Reserva</span>
+              </Button>
+            )}
+            <Filter className="size-4 text-muted-foreground ml-1" />
+            <Select
+              value={paymentFilter}
+              onValueChange={(v) => {
+                setPaymentFilter(v);
+                setPage(0);
+              }}
             >
-              <Plus className="size-4" />
-              <span>Nova Reserva</span>
-            </Button>
-          )}
-          <Filter className="size-4 text-muted-foreground" />
-          <Select
-            value={paymentFilter}
-            onValueChange={(v) => {
-              setPaymentFilter(v);
-              setPage(0);
-            }}
-          >
-            <SelectTrigger className="h-9 w-[160px] text-xs">
-              <SelectValue placeholder="Pagamento" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Qualquer pagamento</SelectItem>
-              <SelectItem value="sem_sinal">Sem sinal</SelectItem>
-              <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
-              <SelectItem value="atrasado">Sinal Atrasado</SelectItem>
-              <SelectItem value="sinal_pago">Sinal pago</SelectItem>
-              <SelectItem value="quitado">Quitado</SelectItem>
-              <SelectItem value="cancelado">Cancelados</SelectItem>
-            </SelectContent>
-          </Select>
+              <SelectTrigger className="h-9 w-[160px] text-xs">
+                <SelectValue placeholder="Pagamento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Qualquer pagamento</SelectItem>
+                <SelectItem value="pronta_entrega">Pronta Entrega</SelectItem>
+                <SelectItem value="sem_sinal">Sem sinal</SelectItem>
+                <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
+                <SelectItem value="atrasado">Sinal Atrasado</SelectItem>
+                <SelectItem value="sinal_pago">Sinal pago</SelectItem>
+                <SelectItem value="quitado">Quitado</SelectItem>
+                <SelectItem value="cancelado">Cancelados</SelectItem>
+              </SelectContent>
+            </Select>
 
-          <Select
-            value={deliveryFilter}
-            onValueChange={(v) => {
-              setDeliveryFilter(v);
-              setPage(0);
-            }}
-          >
-            <SelectTrigger className="h-9 w-[130px] text-xs">
-              <SelectValue placeholder="Envio" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Qualquer envio</SelectItem>
-              <SelectItem value="pendente">Pendente</SelectItem>
-              <SelectItem value="enviado">Enviado</SelectItem>
-              <SelectItem value="entregue">Entregue</SelectItem>
-              <SelectItem value="cancelado">Cancelado</SelectItem>
-            </SelectContent>
-          </Select>
+            <Select
+              value={deliveryFilter}
+              onValueChange={(v) => {
+                setDeliveryFilter(v);
+                setPage(0);
+              }}
+            >
+              <SelectTrigger className="h-9 w-[130px] text-xs">
+                <SelectValue placeholder="Envio" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Qualquer envio</SelectItem>
+                <SelectItem value="pendente">Pendente</SelectItem>
+                <SelectItem value="enviado">Enviado</SelectItem>
+                <SelectItem value="entregue">Entregue</SelectItem>
+                <SelectItem value="cancelado">Cancelado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-      <CardContent className="p-0">
-        {viewMode === "kanban" ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 min-h-[500px] p-4 bg-muted/5">
-            {Object.entries(kanbanBoard).map(([statusKey, col]) => (
-              <div 
-                key={statusKey} 
-                className="flex flex-col gap-3 w-full bg-muted/20 rounded-xl p-3 border border-border/50"
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, statusKey === "entregue" ? "entregue" : statusKey)}
-              >
-                <div className="flex items-center justify-between px-1">
-                  <h3 className="font-semibold text-sm">{col.title}</h3>
-                  <Badge variant="secondary" className="text-xs">{col.items.length}</Badge>
+        <CardContent className="p-0">
+          {viewMode === "kanban" ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 min-h-[500px] p-4 bg-muted/5">
+              {Object.entries(kanbanBoard).map(([statusKey, col]) => (
+                <div 
+                  key={statusKey} 
+                  className="flex flex-col gap-3 w-full bg-muted/20 rounded-xl p-3 border border-border/50"
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, statusKey === "entregue" ? "entregue" : statusKey)}
+                >
+                  <div className="flex items-center justify-between px-1">
+                    <h3 className="font-semibold text-sm">{col.title}</h3>
+                    <Badge variant="secondary" className="text-xs">{col.items.length}</Badge>
+                  </div>
+                  <div className="flex flex-col gap-3 flex-1 overflow-y-auto">
+                    {col.items.map(item => {
+                      const { order: o, quantity, ids } = item;
+                      const groupId = ids[0];
+                      let guestMeta: { name?: string; phone?: string } | null = null;
+                      if (o.pix_key && typeof o.pix_key === "string") {
+                        if (o.pix_key.startsWith("GUEST:")) {
+                          try { guestMeta = JSON.parse(o.pix_key.replace(/^GUEST:/, "")); } catch {}
+                        } else if (o.pix_key.startsWith('{"manual_guest":true')) {
+                          try { guestMeta = JSON.parse(o.pix_key); } catch {}
+                        }
+                      }
+                      const cached = getCustomerFromCache(o.id) || getCustomerFromCache(o.user_id);
+                      const displayName =
+                        guestMeta?.name ||
+                        (o.profiles?.name && o.profiles.name !== "Cliente" && o.profiles.name !== "Cliente cadastrado"
+                          ? o.profiles.name
+                          : cached?.name) ||
+                        (o.profiles?.email ? o.profiles.email.split("@")[0] : null) ||
+                        (guestMeta?.phone || o.profiles?.phone || cached?.phone ? `Cliente (${guestMeta?.phone || o.profiles?.phone || cached?.phone})` : "Cliente sem nome");
+                      
+                      const clientPhone = guestMeta?.phone || o.profiles?.phone || cached?.phone;
+
+                      return (
+                        <div 
+                          key={groupId} 
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, item)}
+                          className={`bg-card rounded-lg p-3 border shadow-sm cursor-grab active:cursor-grabbing hover:border-primary/50 transition-colors ${selectedOrders.has(groupId) ? 'border-primary ring-1 ring-primary' : 'border-border'}`}
+                        >
+                          <div className="flex items-start gap-2 mb-2 relative">
+                            <div className="absolute -top-1 -right-1 z-10">
+                              <Checkbox checked={selectedOrders.has(groupId)} onCheckedChange={() => toggleSelection(groupId)} />
+                            </div>
+                            <div className="size-10 shrink-0 rounded bg-muted border border-border overflow-hidden">
+                               {o.products?.image_url ? (
+                                  <img src={o.products.image_url} alt={o.products.model || ""} className="w-full h-full object-cover" />
+                               ) : <Package className="size-4 m-auto mt-3 text-muted-foreground" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1 mb-0.5">
+                                {isProntaEntrega(o.products) ? (
+                                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[9px] px-1 py-0 h-3.5 gap-0.5">
+                                    <Zap className="size-2.5 fill-current text-emerald-500" /> Pronta Entrega
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-muted-foreground border-border/80 text-[9px] px-1 py-0 h-3.5 gap-0.5">
+                                    <Package className="size-2.5" /> Pré-venda
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs font-semibold leading-tight line-clamp-2">{o.products?.model || "Miniatura"}</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{displayName}</p>
+                            </div>
+                          </div>
+                          <div className="flex justify-between items-center mt-2 border-t border-border/40 pt-2">
+                            <span className="text-xs font-semibold">{brl(Number(o.total_price) * quantity)}</span>
+                            <div className="flex items-center gap-1">
+                              {quantity > 1 && <Badge variant="outline" className="text-[9px] px-1 h-4">{quantity}x</Badge>}
+                              {clientPhone && (
+                                <OrderWhatsAppDropdown
+                                  order={o}
+                                  quantity={quantity}
+                                  displayName={displayName}
+                                  phone={clientPhone}
+                                  variant="icon"
+                                />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {col.items.length === 0 && (
+                      <div className="h-full flex items-center justify-center border-2 border-dashed border-border/50 rounded-lg p-4">
+                        <p className="text-xs text-muted-foreground text-center">Arraste para cá</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex flex-col gap-3 flex-1 overflow-y-auto">
-                  {col.items.map(item => {
+              ))}
+            </div>
+          ) : (
+            <>
+              {/* VISÃO PARA CELULAR (CARDS INDIVIDUAIS COM ESPAÇAMENTO CLARO) */}
+              <div ref={parentRef} className="md:hidden bg-muted/20 h-[65dvh] overflow-y-auto px-4">
+                <div
+                  style={{
+                    height: `${rowVirtualizer.getTotalSize() + 32}px`,
+                    width: '100%',
+                position: 'relative',
+                    marginTop: '16px'
+                  }}
+                >
+                  {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const item = rows[virtualRow.index];
                     const { order: o, quantity, ids } = item;
                     const groupId = ids[0];
                     let guestMeta: { name?: string; phone?: string } | null = null;
@@ -716,251 +872,178 @@ export function OrdersTab({
                         : cached?.name) ||
                       (o.profiles?.email ? o.profiles.email.split("@")[0] : null) ||
                       (guestMeta?.phone || o.profiles?.phone || cached?.phone ? `Cliente (${guestMeta?.phone || o.profiles?.phone || cached?.phone})` : "Cliente sem nome");
-                    
+
                     const clientPhone = guestMeta?.phone || o.profiles?.phone || cached?.phone;
 
                     return (
                       <div 
-                        key={groupId} 
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, item)}
-                        className={`bg-card rounded-lg p-3 border shadow-sm cursor-grab active:cursor-grabbing hover:border-primary/50 transition-colors ${selectedOrders.has(groupId) ? 'border-primary ring-1 ring-primary' : 'border-border'}`}
+                        key={virtualRow.key} 
+                        data-index={virtualRow.index}
+                        ref={rowVirtualizer.measureElement}
+                        className="pb-4"
+                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${virtualRow.start}px)` }}
                       >
-                        <div className="flex items-start gap-2 mb-2 relative">
-                          <div className="absolute -top-1 -right-1 z-10">
+                        <div className="rounded-2xl border border-border/70 bg-card p-4 space-y-3.5 shadow-sm">
+                        {/* Cliente e WhatsApp */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-3">
                             <Checkbox checked={selectedOrders.has(groupId)} onCheckedChange={() => toggleSelection(groupId)} />
+                            <div>
+                              <p className="font-semibold text-base">{displayName}</p>
+                              {o.profiles?.email && !guestMeta && (
+                                <p className="text-xs text-muted-foreground">{o.profiles.email}</p>
+                              )}
+                              <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{groupId.slice(0, 8)}</p>
+                            </div>
                           </div>
-                          <div className="size-10 shrink-0 rounded bg-muted border border-border overflow-hidden">
-                             {o.products?.image_url ? (
-                                <img src={o.products.image_url} alt={o.products.model || ""} className="w-full h-full object-cover" />
-                             ) : <Package className="size-4 m-auto mt-3 text-muted-foreground" />}
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold leading-tight line-clamp-2">{o.products?.model || "Miniatura"}</p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">{displayName}</p>
-                          </div>
+                          <OrderWhatsAppDropdown
+                            order={o}
+                            quantity={quantity}
+                            displayName={displayName}
+                            phone={clientPhone}
+                            variant="badge"
+                          />
                         </div>
-                        <div className="flex justify-between items-center mt-2 border-t border-border/40 pt-2">
-                          <span className="text-xs font-semibold">{brl(Number(o.total_price) * quantity)}</span>
-                          <div className="flex items-center gap-1">
-                            {quantity > 1 && <Badge variant="outline" className="text-[9px] px-1 h-4">{quantity}x</Badge>}
-                            {clientPhone && (
-                              <OrderWhatsAppDropdown
-                                order={o}
-                                quantity={quantity}
-                                displayName={displayName}
-                                phone={clientPhone}
-                                variant="icon"
+
+                        {/* Produto / Miniatura */}
+                        <div className="flex items-center gap-3 rounded-xl bg-muted/30 p-2.5 border border-border/40">
+                          <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50">
+                            {o.products?.image_url ? (
+                              <img
+                                src={o.products.image_url}
+                                alt={o.products.model || "Miniatura"}
+                                loading="lazy"
+                                className="h-full w-full object-cover"
                               />
+                            ) : (
+                              <div className="flex h-full items-center justify-center text-muted-foreground">
+                                <Package className="size-5" />
+                              </div>
                             )}
                           </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs text-muted-foreground uppercase font-semibold tracking-wide flex items-center gap-1.5 flex-wrap">
+                              <span>{o.products?.brand}</span>
+                              {isProntaEntrega(o.products) ? (
+                                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[9px] px-1 py-0 h-4 gap-0.5">
+                                  <Zap className="size-2.5 fill-current text-emerald-500" /> Pronta Entrega
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-muted-foreground border-border/80 text-[9px] px-1 py-0 h-4 gap-0.5">
+                                  <Package className="size-2.5" /> Pré-venda
+                                </Badge>
+                              )}
+                              {quantity > 1 && (
+                                <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[10px] px-1.5 py-0 border-primary/20">
+                                  {quantity}x
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="font-semibold text-sm truncate flex items-center gap-1">
+                              {o.products?.model || "Miniatura"}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                  {col.items.length === 0 && (
-                    <div className="h-full flex items-center justify-center border-2 border-dashed border-border/50 rounded-lg p-4">
-                      <p className="text-xs text-muted-foreground text-center">Arraste para cá</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-        <>
-        {/* VISÃO PARA CELULAR (CARDS INDIVIDUAIS COM ESPAÇAMENTO CLARO) */}
-        <div ref={parentRef} className="md:hidden bg-muted/20 h-[65dvh] overflow-y-auto px-4">
-          <div
-            style={{
-              height: `${rowVirtualizer.getTotalSize() + 32}px`,
-              width: '100%',
-              position: 'relative',
-              marginTop: '16px'
-            }}
-          >
-            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const item = rows[virtualRow.index];
-            const { order: o, quantity, ids } = item;
-            const groupId = ids[0];
-            let guestMeta: { name?: string; phone?: string } | null = null;
-            if (o.pix_key && typeof o.pix_key === "string") {
-              if (o.pix_key.startsWith("GUEST:")) {
-                try { guestMeta = JSON.parse(o.pix_key.replace(/^GUEST:/, "")); } catch {}
-              } else if (o.pix_key.startsWith('{"manual_guest":true')) {
-                try { guestMeta = JSON.parse(o.pix_key); } catch {}
-              }
-            }
-            const cached = getCustomerFromCache(o.id) || getCustomerFromCache(o.user_id);
-            const displayName =
-              guestMeta?.name ||
-              (o.profiles?.name && o.profiles.name !== "Cliente" && o.profiles.name !== "Cliente cadastrado"
-                ? o.profiles.name
-                : cached?.name) ||
-              (o.profiles?.email ? o.profiles.email.split("@")[0] : null) ||
-              (guestMeta?.phone || o.profiles?.phone || cached?.phone ? `Cliente (${guestMeta?.phone || o.profiles?.phone || cached?.phone})` : "Cliente sem nome");
 
-            const clientPhone = guestMeta?.phone || o.profiles?.phone || cached?.phone;
-
-            return (
-              <div 
-                key={virtualRow.key} 
-                data-index={virtualRow.index}
-                ref={rowVirtualizer.measureElement}
-                className="pb-4"
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${virtualRow.start}px)` }}
-              >
-                <div className="rounded-2xl border border-border/70 bg-card p-4 space-y-3.5 shadow-sm">
-                {/* Cliente e WhatsApp */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <Checkbox checked={selectedOrders.has(groupId)} onCheckedChange={() => toggleSelection(groupId)} />
-                    <div>
-                      <p className="font-semibold text-base">{displayName}</p>
-                      {o.profiles?.email && !guestMeta && (
-                        <p className="text-xs text-muted-foreground">{o.profiles.email}</p>
-                      )}
-                      <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{groupId.slice(0, 8)}</p>
-                    </div>
-                  </div>
-                  <OrderWhatsAppDropdown
-                    order={o}
-                    quantity={quantity}
-                    displayName={displayName}
-                    phone={clientPhone}
-                    variant="badge"
-                  />
-                </div>
-
-                {/* Produto / Miniatura */}
-                <div className="flex items-center gap-3 rounded-xl bg-muted/30 p-2.5 border border-border/40">
-                  <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50">
-                    {o.products?.image_url ? (
-                      <img
-                        src={o.products.image_url}
-                        alt={o.products.model || "Miniatura"}
-                        loading="lazy"
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-muted-foreground">
-                        <Package className="size-5" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs text-muted-foreground uppercase font-semibold tracking-wide flex items-center gap-1.5">
-                      <span>{o.products?.brand}</span>
-                      {quantity > 1 && (
-                        <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[10px] px-1.5 py-0 border-primary/20">
-                          {quantity}x
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="font-semibold text-sm truncate flex items-center gap-1">
-                      {o.products?.model || "Miniatura"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Valores (Total / Sinal / Saldo) */}
-                <div className="grid grid-cols-3 gap-2 rounded-xl bg-muted/20 p-2.5 text-center text-xs border border-border/30">
-                  <div>
-                    <p className="text-muted-foreground">Total {o.installment_count && o.installment_count > 1 ? `(${o.installment_count}x)` : ""}</p>
-                    <p className="font-semibold text-sm">{brl(Number(o.total_price) * quantity)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Sinal (un.)</p>
-                    <div className="flex items-center justify-center gap-1 mt-0.5">
-                      <Input
-                        className="h-7 w-16 text-center text-xs px-1"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={drafts[groupId] ?? String(o.down_payment)}
-                        onChange={(e) => setDrafts({ ...drafts, [groupId]: e.target.value })}
-                      />
-                      <Button
-                        size="icon"
-                        variant="secondary"
-                        className="size-7 text-[10px]"
-                        onClick={() => updateGroup(ids, { down_payment: Number(drafts[groupId] ?? o.down_payment) })}
-                      >
-                        OK
-                      </Button>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Saldo</p>
-                    <p className="font-bold text-sm text-primary">{brl(Number(o.remaining_balance) * quantity)}</p>
-                  </div>
-                </div>
-
-                {/* Status e Prazo */}
-                {(() => {
-                  const currentPaymentStatus = o.payment_status;
-                  return (
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <PaymentBadge status={currentPaymentStatus} />
-                        <Select
-                          value={currentPaymentStatus}
-                          onValueChange={(v) => handlePaymentStatusChange(item, v)}
-                        >
-                          <SelectTrigger className="h-8 text-xs w-36">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="sem_sinal">Sem sinal / Pagar na chegada</SelectItem>
-                            <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
-                            <SelectItem value="sinal_pago">Sinal pago</SelectItem>
-                            <SelectItem value="quitado">Quitado</SelectItem>
-                            <SelectItem value="cancelado">Cancelado</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Select
-                          value={o.delivery_status}
-                          onValueChange={(v) => handleDeliveryStatusChange(item, v)}
-                        >
-                          <SelectTrigger className="h-8 text-xs w-32">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="pendente">Pendente</SelectItem>
-                            <SelectItem value="em_transito">Em trânsito</SelectItem>
-                            <SelectItem value="entregue">Entregue</SelectItem>
-                            <SelectItem value="cancelado">Cancelado</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                          title="Excluir reserva permanentemente"
-                          onClick={() => handleDeleteGroup(item)}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-
-                      {currentPaymentStatus === "aguardando_sinal" && o.reservation_expires_at ? (
-                        <div className="text-xs">
-                          <Countdown expiresAt={o.reservation_expires_at} />
+                        {/* Valores (Total / Sinal / Saldo) */}
+                        <div className="grid grid-cols-3 gap-2 rounded-xl bg-muted/20 p-2.5 text-center text-xs border border-border/30">
+                          <div>
+                            <p className="text-muted-foreground">Total {o.installment_count && o.installment_count > 1 ? `(${o.installment_count}x)` : ""}</p>
+                            <p className="font-semibold text-sm">{brl(Number(o.total_price) * quantity)}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Sinal (un.)</p>
+                            <div className="flex items-center justify-center gap-1 mt-0.5">
+                              <Input
+                                className="h-7 w-16 text-center text-xs px-1"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={drafts[groupId] ?? String(o.down_payment)}
+                                onChange={(e) => setDrafts({ ...drafts, [groupId]: e.target.value })}
+                              />
+                              <Button
+                                size="icon"
+                                variant="secondary"
+                                className="size-7 text-[10px]"
+                                onClick={() => updateGroup(ids, { down_payment: Number(drafts[groupId] ?? o.down_payment) })}
+                              >
+                                OK
+                              </Button>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Saldo</p>
+                            <p className="font-bold text-sm text-primary">{brl(Number(o.remaining_balance) * quantity)}</p>
+                          </div>
                         </div>
-                      ) : (currentPaymentStatus === "sem_sinal" || currentPaymentStatus === "pagar_na_chegada") && (o.products as any)?.release_date ? (
-                        <div className="text-xs text-right">
-                          <span className="font-semibold text-purple-600 dark:text-purple-400 block text-[11px]">Pagar na chegada</span>
-                          <span className="text-muted-foreground font-mono text-[10px]">
-                            {new Date((o.products as any).release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}
-                          </span>
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })()}
 
-                {/* Código de Rastreio dos Correios (Mobile) */}
-                <div className="flex items-center gap-2 pt-2 border-t border-border/40">
+                        {/* Status e Prazo */}
+                        {(() => {
+                          const currentPaymentStatus = o.payment_status;
+                          return (
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <PaymentBadge status={currentPaymentStatus} />
+                                <Select
+                                  value={currentPaymentStatus}
+                                  onValueChange={(v) => handlePaymentStatusChange(item, v)}
+                                >
+                                  <SelectTrigger className="h-8 text-xs w-36">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="pronta_entrega">Pronta Entrega</SelectItem>
+                                    <SelectItem value="sem_sinal">Sem sinal / Pagar na chegada</SelectItem>
+                                    <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
+                                    <SelectItem value="sinal_pago">Sinal pago</SelectItem>
+                                    <SelectItem value="quitado">Quitado</SelectItem>
+                                    <SelectItem value="cancelado">Cancelado</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Select
+                                  value={o.delivery_status}
+                                  onValueChange={(v) => handleDeliveryStatusChange(item, v)}
+                                >
+                                  <SelectTrigger className="h-8 text-xs w-32">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="pendente">Pendente</SelectItem>
+                                    <SelectItem value="em_transito">Em trânsito</SelectItem>
+                                    <SelectItem value="entregue">Entregue</SelectItem>
+                                    <SelectItem value="cancelado">Cancelado</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                  title="Excluir reserva permanentemente"
+                                  onClick={() => handleDeleteGroup(item)}
+                                >
+                                  <Trash2 className="size-4" />
+                                </Button>
+                              </div>
+
+                              {currentPaymentStatus === "aguardando_sinal" && o.reservation_expires_at ? (
+                                <div className="text-xs">
+                                  <Countdown expiresAt={o.reservation_expires_at} />
+                                </div>
+                              ) : (currentPaymentStatus === "sem_sinal" || currentPaymentStatus === "pagar_na_chegada") && (o.products as any)?.release_date ? (
+                                <div className="text-xs text-right">
+                                  <span className="font-semibold text-purple-600 dark:text-purple-400 block text-[11px]">Pagar na chegada</span>
+                                  <span className="text-muted-foreground font-mono text-[10px]">
+                                    {new Date((o.products as any).release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}
+                                  </span>
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })()}
+
+                        {/* Código de Rastreio dos Correios (Mobile) */}
+                        <div className="flex items-center gap-2 pt-2 border-t border-border/40">
                   <Truck className="size-4 text-primary shrink-0" />
                   <Input
                     className="h-8 text-xs font-mono flex-1"
@@ -1056,51 +1139,60 @@ export function OrdersTab({
                       </div>
                       <p className="text-[10px] text-muted-foreground/50 font-mono mt-1">#{groupId.slice(0, 8)}</p>
                     </TableCell>
-                  <TableCell className="min-w-[250px] max-w-[400px]">
-                    <div className="flex items-center gap-3">
-                      <div className="size-11 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50">
-                        {o.products?.image_url ? (
-                          <img
-                            src={o.products.image_url}
-                            alt={o.products.model || "Miniatura"}
-                            loading="lazy"
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center text-muted-foreground">
-                            <Package className="size-5" />
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-sm flex items-center gap-1">
-                          {o.products?.model || "Miniatura"}
-                        </p>
-                        <div className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                          <span>{o.products?.brand}</span>
-                          {quantity > 1 && (
-                            <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[10px] px-1.5 py-0 border-primary/20">
-                              {quantity}x
-                            </Badge>
+                    <TableCell className="min-w-[250px] max-w-[400px]">
+                      <div className="flex items-center gap-3">
+                        <div className="size-11 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50">
+                          {o.products?.image_url ? (
+                            <img
+                              src={o.products.image_url}
+                              alt={o.products.model || "Miniatura"}
+                              loading="lazy"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center text-muted-foreground">
+                              <Package className="size-5" />
+                            </div>
                           )}
                         </div>
+                        <div>
+                          <p className="font-semibold text-sm flex items-center gap-1">
+                            {o.products?.model || "Miniatura"}
+                          </p>
+                          <div className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 flex-wrap">
+                            <span>{o.products?.brand}</span>
+                            {isProntaEntrega(o.products) ? (
+                              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[9px] px-1 py-0 h-4 gap-0.5">
+                                <Zap className="size-2.5 fill-current text-emerald-500" /> Pronta Entrega
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-muted-foreground border-border/80 text-[9px] px-1 py-0 h-4 gap-0.5">
+                                <Package className="size-2.5" /> Pré-venda
+                              </Badge>
+                            )}
+                            {quantity > 1 && (
+                              <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[10px] px-1.5 py-0 border-primary/20">
+                                {quantity}x
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {brl(Number(o.total_price) * quantity)}
-                    {quantity > 1 && <span className="block text-[10px] text-muted-foreground font-mono">({quantity}x {brl(Number(o.total_price))})</span>}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1.5">
-                      <Input
-                        className="h-8 w-24"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={drafts[groupId] ?? String(o.down_payment)}
-                        onChange={(e) => setDrafts({ ...drafts, [groupId]: e.target.value })}
-                      />
+                    </TableCell>
+                    <TableCell>
+                      {brl(Number(o.total_price) * quantity)}
+                      {quantity > 1 && <span className="block text-[10px] text-muted-foreground font-mono">({quantity}x {brl(Number(o.total_price))})</span>}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <Input
+                          className="h-8 w-24"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={drafts[groupId] ?? String(o.down_payment)}
+                          onChange={(e) => setDrafts({ ...drafts, [groupId]: e.target.value })}
+                        />
                       <Button
                         size="sm"
                         variant="secondary"
@@ -1126,6 +1218,7 @@ export function OrdersTab({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="pronta_entrega">Pronta Entrega</SelectItem>
                           <SelectItem value="sem_sinal">Sem sinal / Pagar na chegada</SelectItem>
                           <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
                           <SelectItem value="sinal_pago">Sinal pago</SelectItem>

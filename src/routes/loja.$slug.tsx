@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate, Outlet, useMatchRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpDown, BookmarkCheck, Check, Copy, Package, Search, Sparkles, Store as StoreIcon, X, ShoppingCart, LayoutGrid, List, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowUpDown, BookmarkCheck, Check, Copy, Package, Search, Sparkles, Store as StoreIcon, X, ShoppingCart, LayoutGrid, List, ChevronLeft, ChevronRight, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { createServerFn } from "@tanstack/react-start";
 import { AppHeader } from "@/components/AppHeader";
@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement } from "@/lib/format";
+import { brl, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
 import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 import { useCartStore } from "@/lib/cart";
@@ -121,6 +121,7 @@ function StorePageContent() {
   const queryClient = useQueryClient();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<"all" | "pre_venda" | "pronta_entrega">("all");
   const [selectedBrand, setSelectedBrand] = useState<string>("all");
   const [selectedScale, setSelectedScale] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"name" | "recent" | "price_asc" | "price_desc">("name");
@@ -232,6 +233,7 @@ function StorePageContent() {
 
   function resetFilters() {
     setSearchQuery("");
+    setSelectedCategory("all");
     setSelectedBrand("all");
     setSelectedScale("all");
     setSortBy("recent");
@@ -262,6 +264,7 @@ function StorePageContent() {
       downPaymentToPay,
       remainingBalance: p.price - downPaymentToPay,
       hasNoSignal,
+      isProntaEntrega: isProntaEntrega(p),
       productSnapshot: {
         model: p.model,
         brand: p.brand,
@@ -277,6 +280,10 @@ function StorePageContent() {
   const isOwner = !!(user && store?.owner_id === user.id);
   const storeStatus = (store as any)?.status || "active";
 
+  const totalOpenCount = useMemo(() => products.filter((p) => p.is_open).length, [products]);
+  const preVendaCount = useMemo(() => products.filter((p) => p.is_open && !isProntaEntrega(p)).length, [products]);
+  const prontaEntregaCount = useMemo(() => products.filter((p) => p.is_open && isProntaEntrega(p)).length, [products]);
+
   // Extração de marcas e escalas disponíveis
   const availableScales = useMemo(
     () => Array.from(new Set(products.map((p) => p.scale).filter(Boolean))).sort(),
@@ -287,6 +294,9 @@ function StorePageContent() {
     return products.filter((p) => {
       if (!p.is_open) return false;
       if (onlyInStock && p.stock <= 0) return false;
+
+      if (selectedCategory === "pronta_entrega" && !isProntaEntrega(p)) return false;
+      if (selectedCategory === "pre_venda" && isProntaEntrega(p)) return false;
 
       const matchBrand = selectedBrand === "all" || (p.brand || "Outros").trim() === selectedBrand;
       const matchScale = selectedScale === "all" || p.scale === selectedScale;
@@ -311,14 +321,14 @@ function StorePageContent() {
       if (brandCompare !== 0) return brandCompare;
       return (a.model || "").localeCompare(b.model || "");
     });
-  }, [products, selectedBrand, selectedScale, searchQuery, onlyInStock, sortBy]);
+  }, [products, selectedCategory, selectedBrand, selectedScale, searchQuery, onlyInStock, sortBy]);
 
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [itemsPerPage, setItemsPerPage] = useState<number>(12);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedBrand, selectedScale, searchQuery, onlyInStock, sortBy, itemsPerPage]);
+  }, [selectedCategory, selectedBrand, selectedScale, searchQuery, onlyInStock, sortBy, itemsPerPage]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / itemsPerPage));
 
@@ -339,9 +349,18 @@ function StorePageContent() {
   }, [paginatedProducts]);
 
   const allAvailableBrands = useMemo(() => {
-    const set = new Set(products.filter((p) => p.is_open).map((p) => (p.brand || "Outros").trim()));
+    const set = new Set(
+      products
+        .filter((p) => {
+          if (!p.is_open) return false;
+          if (selectedCategory === "pronta_entrega" && !isProntaEntrega(p)) return false;
+          if (selectedCategory === "pre_venda" && isProntaEntrega(p)) return false;
+          return true;
+        })
+        .map((p) => (p.brand || "Outros").trim())
+    );
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [products]);
+  }, [products, selectedCategory]);
 
   const brandList = useMemo(() => Object.keys(brandsMap).sort((a, b) => a.localeCompare(b)), [brandsMap]);
   const filteredBrands = useMemo(
@@ -349,7 +368,7 @@ function StorePageContent() {
     [brandList, selectedBrand]
   );
 
-  const hasActiveFilters = searchQuery.trim() !== "" || selectedBrand !== "all" || selectedScale !== "all" || onlyInStock || sortBy !== "recent";
+  const hasActiveFilters = selectedCategory !== "all" || searchQuery.trim() !== "" || selectedBrand !== "all" || selectedScale !== "all" || onlyInStock || sortBy !== "recent";
 
   if (isLoading) {
     return (
@@ -569,6 +588,47 @@ function StorePageContent() {
             </div>
           </div>
 
+          {/* Filtro Principal de Tipo: Todas / Pré-Vendas / Pronta Entrega */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setSelectedCategory("all")}
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all border ${
+                selectedCategory === "all"
+                  ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                  : "bg-card/70 text-muted-foreground border-border/40 hover:bg-muted/50"
+              }`}
+            >
+              Todas ({totalOpenCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedCategory("pre_venda")}
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all border flex items-center gap-1.5 ${
+                selectedCategory === "pre_venda"
+                  ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                  : "bg-card/70 text-muted-foreground border-border/40 hover:bg-muted/50"
+              }`}
+            >
+              <Package className="size-3.5" />
+              <span>Pré-Vendas</span>
+              <span className="text-[11px] opacity-75">({preVendaCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedCategory("pronta_entrega")}
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all border flex items-center gap-1.5 ${
+                selectedCategory === "pronta_entrega"
+                  ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                  : "bg-card/70 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+              }`}
+            >
+              <Zap className="size-3.5 fill-current" />
+              <span>Pronta Entrega</span>
+              <span className="text-[11px] opacity-75">({prontaEntregaCount})</span>
+            </button>
+          </div>
+
           {/* Filtro de Escalas */}
           {availableScales.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -747,11 +807,15 @@ function StorePageContent() {
                                     <span className="text-[10px] uppercase font-bold text-muted-foreground">
                                       {p.brand} · {p.scale}
                                     </span>
-                                    {customBadge && (
+                                    {isProntaEntrega(p) ? (
+                                      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.2 text-[9px] font-bold text-white bg-emerald-600">
+                                        <Zap className="size-2.5 fill-current" /> Pronta Entrega
+                                      </span>
+                                    ) : customBadge ? (
                                       <span className="rounded px-1.5 py-0.2 text-[9px] font-bold text-white bg-gradient-to-r from-amber-500 to-orange-600">
                                         {customBadge}
                                       </span>
-                                    )}
+                                    ) : null}
                                     {p.stock > 0 && p.stock <= 2 && (
                                       <span className="rounded px-1.5 py-0.2 text-[9px] font-bold text-white bg-rose-600">
                                         Últimas {p.stock} un.
@@ -768,7 +832,11 @@ function StorePageContent() {
                                       {formatStockRemaining(p)}
                                     </Badge>
 
-                                    {signal.isSemSinal ? (
+                                    {isProntaEntrega(p) ? (
+                                      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                                        <Zap className="size-3 fill-current" /> Envio imediato
+                                      </span>
+                                    ) : signal.isSemSinal ? (
                                       <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
                                         Sem sinal (Pagar na chegada)
                                       </span>
@@ -808,7 +876,7 @@ function StorePageContent() {
                                     variant={p.is_open && p.stock > 0 ? "default" : "outline"}
                                   >
                                     <BookmarkCheck className="size-3.5" />
-                                    <span>Reservar</span>
+                                    <span>{isProntaEntrega(p) ? "Comprar" : "Reservar"}</span>
                                   </Button>
                                 </div>
                               </div>
@@ -830,17 +898,21 @@ function StorePageContent() {
                             <div className="relative aspect-video w-full overflow-hidden bg-muted">
                               {/* Badges Flutuantes no Canto Superior Esquerdo */}
                               <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10 items-start pointer-events-none">
-                                {getProductBadge(p.id) && (
+                                {isProntaEntrega(p) ? (
+                                  <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-emerald-600 border border-emerald-400/40">
+                                    <Zap className="size-2.5 fill-current" /> Pronta Entrega
+                                  </span>
+                                ) : getProductBadge(p.id) ? (
                                   <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-gradient-to-r from-amber-500 to-orange-600 border border-amber-400/30">
                                     {getProductBadge(p.id)}
                                   </span>
-                                )}
+                                ) : null}
                                 {p.stock > 0 && p.stock <= 2 && (
                                   <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-rose-600/90 border border-rose-400/30">
                                     Últimas {p.stock} un.
                                   </span>
                                 )}
-                                {hasNoSignalRequirement(p) && (
+                                {!isProntaEntrega(p) && hasNoSignalRequirement(p) && (
                                   <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-emerald-600/90 border border-emerald-400/30">
                                     Sem Sinal
                                   </span>
@@ -897,6 +969,14 @@ function StorePageContent() {
                                   </div>
 
                                   {(() => {
+                                    if (isProntaEntrega(p)) {
+                                      return (
+                                        <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                                          <Zap className="size-3 fill-current" />
+                                          <span>Pronta entrega (Envio imediato)</span>
+                                        </div>
+                                      );
+                                    }
                                     const signal = getProductSignalAmount(p);
                                     if (signal.isSemSinal) {
                                       return (
@@ -938,10 +1018,10 @@ function StorePageContent() {
                                 >
                                   <BookmarkCheck className="size-4 shrink-0" />
                                   {!p.is_open
-                                    ? "Pré-venda fechada"
+                                    ? "Item fechado"
                                     : p.stock > 0
-                                      ? "Reservar unidade"
-                                      : "Entrar na fila"}
+                                      ? isProntaEntrega(p) ? "Comprar agora" : "Reservar unidade"
+                                      : "Entrar na fila de espera"}
                                 </Button>
                               </div>
                             </CardContent>
