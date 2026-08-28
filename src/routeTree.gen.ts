@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as PrivacidadeRouteImport } from './routes/privacidade'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as TermosRouteImport } from './routes/termos'
+import { Route as UpdatePasswordRouteImport } from './routes/update-password'
 import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated/painel'
 import { Route as AuthenticatedVendedorRouteImport } from './routes/_authenticated/vendedor'
 import { Route as LojaSlugRouteImport } from './routes/loja.$slug'
@@ -50,6 +51,11 @@ const TermosRoute = TermosRouteImport.update({
   path: '/termos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UpdatePasswordRoute = UpdatePasswordRouteImport.update({
+  id: '/update-password',
+  path: '/update-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedPainelRoute = AuthenticatedPainelRouteImport.update({
   id: '/painel',
   path: '/painel',
@@ -82,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/privacidade': typeof PrivacidadeRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/termos': typeof TermosRoute
+  '/update-password': typeof UpdatePasswordRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/vendedor': typeof AuthenticatedVendedorRoute
   '/loja/$slug': typeof LojaSlugRouteWithChildren
@@ -94,6 +101,7 @@ export interface FileRoutesByTo {
   '/privacidade': typeof PrivacidadeRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/termos': typeof TermosRoute
+  '/update-password': typeof UpdatePasswordRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/vendedor': typeof AuthenticatedVendedorRoute
   '/loja/$slug': typeof LojaSlugRouteWithChildren
@@ -108,6 +116,7 @@ export interface FileRoutesById {
   '/privacidade': typeof PrivacidadeRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/termos': typeof TermosRoute
+  '/update-password': typeof UpdatePasswordRoute
   '/_authenticated/painel': typeof AuthenticatedPainelRoute
   '/_authenticated/vendedor': typeof AuthenticatedVendedorRoute
   '/loja/$slug': typeof LojaSlugRouteWithChildren
@@ -122,6 +131,7 @@ export interface FileRouteTypes {
     | '/privacidade'
     | '/sitemap.xml'
     | '/termos'
+    | '/update-password'
     | '/painel'
     | '/vendedor'
     | '/loja/$slug'
@@ -134,6 +144,7 @@ export interface FileRouteTypes {
     | '/privacidade'
     | '/sitemap.xml'
     | '/termos'
+    | '/update-password'
     | '/painel'
     | '/vendedor'
     | '/loja/$slug'
@@ -147,6 +158,7 @@ export interface FileRouteTypes {
     | '/privacidade'
     | '/sitemap.xml'
     | '/termos'
+    | '/update-password'
     | '/_authenticated/painel'
     | '/_authenticated/vendedor'
     | '/loja/$slug'
@@ -161,6 +173,7 @@ export interface RootRouteChildren {
   PrivacidadeRoute: typeof PrivacidadeRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermosRoute: typeof TermosRoute
+  UpdatePasswordRoute: typeof UpdatePasswordRoute
   LojaSlugRoute: typeof LojaSlugRouteWithChildren
   ProdutoIdRoute: typeof ProdutoIdRoute
 }
@@ -207,6 +220,13 @@ declare module '@tanstack/react-router' {
       path: '/termos'
       fullPath: '/termos'
       preLoaderRoute: typeof TermosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/update-password': {
+      id: '/update-password'
+      path: '/update-password'
+      fullPath: '/update-password'
+      preLoaderRoute: typeof UpdatePasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/painel': {
@@ -279,6 +299,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacidadeRoute: PrivacidadeRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermosRoute: TermosRoute,
+  UpdatePasswordRoute: UpdatePasswordRoute,
   LojaSlugRoute: LojaSlugRouteWithChildren,
   ProdutoIdRoute: ProdutoIdRoute,
 }
