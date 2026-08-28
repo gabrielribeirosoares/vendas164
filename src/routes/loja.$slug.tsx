@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate, Outlet, useMatchRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpDown, BookmarkCheck, Check, Copy, Package, Search, Sparkles, Store as StoreIcon, X, ShoppingCart, LayoutGrid, List, ChevronLeft, ChevronRight, Zap } from "lucide-react";
+import { ArrowUpDown, BookmarkCheck, Check, Copy, Package, Search, Sparkles, Store as StoreIcon, X, ShoppingCart, LayoutGrid, List, ChevronLeft, ChevronRight, ListFilter, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import { createServerFn } from "@tanstack/react-start";
 import { AppHeader } from "@/components/AppHeader";
@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
+import { brl, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement } from "@/lib/format";
 import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 import { useCartStore } from "@/lib/cart";
@@ -121,12 +121,13 @@ function StorePageContent() {
   const queryClient = useQueryClient();
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<"all" | "pre_venda" | "pronta_entrega">("all");
   const [selectedBrand, setSelectedBrand] = useState<string>("all");
+  const [selectedType, setSelectedType] = useState<"all" | "pre" | "pronta">("all");
   const [selectedScale, setSelectedScale] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<"name" | "recent" | "price_asc" | "price_desc">("name");
+  const [sortBy, setSortBy] = useState<"name" | "recent" | "price_asc" | "price_desc">("recent");
   const [onlyInStock, setOnlyInStock] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [showFilters, setShowFilters] = useState<boolean>(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["store", slug],
@@ -233,8 +234,8 @@ function StorePageContent() {
 
   function resetFilters() {
     setSearchQuery("");
-    setSelectedCategory("all");
     setSelectedBrand("all");
+    setSelectedType("all");
     setSelectedScale("all");
     setSortBy("recent");
     setOnlyInStock(false);
@@ -264,7 +265,6 @@ function StorePageContent() {
       downPaymentToPay,
       remainingBalance: p.price - downPaymentToPay,
       hasNoSignal,
-      isProntaEntrega: isProntaEntrega(p),
       productSnapshot: {
         model: p.model,
         brand: p.brand,
@@ -280,10 +280,6 @@ function StorePageContent() {
   const isOwner = !!(user && store?.owner_id === user.id);
   const storeStatus = (store as any)?.status || "active";
 
-  const totalOpenCount = useMemo(() => products.filter((p) => p.is_open).length, [products]);
-  const preVendaCount = useMemo(() => products.filter((p) => p.is_open && !isProntaEntrega(p)).length, [products]);
-  const prontaEntregaCount = useMemo(() => products.filter((p) => p.is_open && isProntaEntrega(p)).length, [products]);
-
   // Extração de marcas e escalas disponíveis
   const availableScales = useMemo(
     () => Array.from(new Set(products.map((p) => p.scale).filter(Boolean))).sort(),
@@ -295,8 +291,8 @@ function StorePageContent() {
       if (!p.is_open) return false;
       if (onlyInStock && p.stock <= 0) return false;
 
-      if (selectedCategory === "pronta_entrega" && !isProntaEntrega(p)) return false;
-      if (selectedCategory === "pre_venda" && isProntaEntrega(p)) return false;
+      if (selectedType === "pre" && hasNoSignalRequirement(p)) return false;
+      if (selectedType === "pronta" && !hasNoSignalRequirement(p)) return false;
 
       const matchBrand = selectedBrand === "all" || (p.brand || "Outros").trim() === selectedBrand;
       const matchScale = selectedScale === "all" || p.scale === selectedScale;
@@ -321,14 +317,14 @@ function StorePageContent() {
       if (brandCompare !== 0) return brandCompare;
       return (a.model || "").localeCompare(b.model || "");
     });
-  }, [products, selectedCategory, selectedBrand, selectedScale, searchQuery, onlyInStock, sortBy]);
+  }, [products, selectedBrand, selectedScale, selectedType, searchQuery, onlyInStock, sortBy]);
 
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [itemsPerPage, setItemsPerPage] = useState<number>(12);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCategory, selectedBrand, selectedScale, searchQuery, onlyInStock, sortBy, itemsPerPage]);
+  }, [selectedBrand, selectedScale, selectedType, searchQuery, onlyInStock, sortBy, itemsPerPage]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / itemsPerPage));
 
@@ -349,18 +345,9 @@ function StorePageContent() {
   }, [paginatedProducts]);
 
   const allAvailableBrands = useMemo(() => {
-    const set = new Set(
-      products
-        .filter((p) => {
-          if (!p.is_open) return false;
-          if (selectedCategory === "pronta_entrega" && !isProntaEntrega(p)) return false;
-          if (selectedCategory === "pre_venda" && isProntaEntrega(p)) return false;
-          return true;
-        })
-        .map((p) => (p.brand || "Outros").trim())
-    );
+    const set = new Set(products.filter((p) => p.is_open).map((p) => (p.brand || "Outros").trim()));
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [products, selectedCategory]);
+  }, [products]);
 
   const brandList = useMemo(() => Object.keys(brandsMap).sort((a, b) => a.localeCompare(b)), [brandsMap]);
   const filteredBrands = useMemo(
@@ -368,7 +355,7 @@ function StorePageContent() {
     [brandList, selectedBrand]
   );
 
-  const hasActiveFilters = selectedCategory !== "all" || searchQuery.trim() !== "" || selectedBrand !== "all" || selectedScale !== "all" || onlyInStock || sortBy !== "recent";
+  const hasActiveFilters = searchQuery.trim() !== "" || selectedBrand !== "all" || selectedScale !== "all" || selectedType !== "all" || onlyInStock || sortBy !== "recent";
 
   if (isLoading) {
     return (
@@ -500,77 +487,153 @@ function StorePageContent() {
         {/* BARRA DE PESQUISA & FILTROS INTELIGENTES */}
         <div className="mt-8 space-y-4">
           <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-            {/* Live Search Input */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por modelo, marca ou detalhe..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 pr-8 h-10 text-sm bg-card/60"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
-                  title="Limpar busca"
-                >
-                  <X className="size-4" />
-                </button>
-              )}
+            <div className="flex items-center gap-2 flex-1">
+              {/* Live Search Input */}
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por produto"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 pr-8 h-10 text-sm bg-card/60 rounded-lg"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
+                    title="Limpar busca"
+                  >
+                    <X className="size-4" />
+                  </button>
+                )}
+              </div>
+              
+              {/* Mobile Filter Toggle */}
+              <Button 
+                variant="outline" 
+                onClick={() => setShowFilters(!showFilters)}
+                className="sm:hidden h-10 px-3 flex items-center gap-2 bg-card/60"
+              >
+                <ListFilter className="size-4" /> Filtros {showFilters ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+              </Button>
             </div>
 
-            {/* Ordenação e Filtro de Estoque */}
-            <div className="flex items-center gap-2 shrink-0">
-              <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
-                <SelectTrigger className="h-10 text-xs sm:text-sm w-44 bg-card/60">
-                  <ArrowUpDown className="size-3.5 mr-1.5 text-muted-foreground" />
-                  <SelectValue placeholder="Ordenar por..." />
+            {/* Selects Row */}
+            <div className={`sm:flex flex-wrap items-center gap-2 ${showFilters ? "grid grid-cols-2 mt-2 sm:mt-0" : "hidden"}`}>
+              <Select value={selectedType} onValueChange={(v: any) => setSelectedType(v)}>
+                <SelectTrigger className="h-10 text-xs sm:text-sm w-full sm:w-36 bg-card/60" style={selectedType !== "all" ? { borderColor: store.primary_color } : undefined}>
+                  <SelectValue placeholder="Tipo">{selectedType === "all" ? "Tipo" : undefined}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="pre">Pré-venda</SelectItem>
+                  <SelectItem value="pronta">Pronta entrega</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={selectedBrand} onValueChange={(v: any) => setSelectedBrand(v)}>
+                <SelectTrigger className="h-10 text-xs sm:text-sm w-full sm:w-36 bg-card/60" style={selectedBrand !== "all" ? { borderColor: store.primary_color } : undefined}>
+                  <SelectValue placeholder="Marca">{selectedBrand === "all" ? "Marca" : undefined}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  {allAvailableBrands.map(b => (
+                    <SelectItem key={b} value={b}>{b}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+                <SelectTrigger className="h-10 text-xs sm:text-sm w-full sm:w-48 bg-card/60 col-span-2 sm:col-span-1">
+                  <SelectValue placeholder="Ordenação" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recent">Mais novo ao mais antigo</SelectItem>
                   <SelectItem value="name">Nome (A - Z)</SelectItem>
-                  <SelectItem value="recent">Mais Recentes</SelectItem>
                   <SelectItem value="price_asc">Menor Preço</SelectItem>
                   <SelectItem value="price_desc">Maior Preço</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+            {/* Pills Type selection */}
+            <div className="flex flex-wrap items-center gap-1 border border-border/20 p-1 rounded-full bg-card/30 w-fit">
+               <button
+                  type="button"
+                  onClick={() => setSelectedType("all")}
+                  className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
+                    selectedType === "all"
+                      ? "text-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  style={selectedType === "all" ? { backgroundColor: store.primary_color } : undefined}
+                >
+                  Todos
+               </button>
+               <button
+                  type="button"
+                  onClick={() => setSelectedType("pre")}
+                  className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
+                    selectedType === "pre"
+                      ? "text-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  style={selectedType === "pre" ? { backgroundColor: store.primary_color } : undefined}
+                >
+                  Pré-venda
+               </button>
+               <button
+                  type="button"
+                  onClick={() => setSelectedType("pronta")}
+                  className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
+                    selectedType === "pronta"
+                      ? "text-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  style={selectedType === "pronta" ? { backgroundColor: store.primary_color } : undefined}
+                >
+                  Pronta entrega
+               </button>
+            </div>
 
-              <Button
+            <div className="flex items-center gap-2 shrink-0">
+               <Button
                 variant={onlyInStock ? "default" : "outline"}
                 size="sm"
-                className="h-10 text-xs px-3 gap-1.5"
+                className="h-9 text-xs px-3 gap-1.5 rounded-full"
                 onClick={() => setOnlyInStock(!onlyInStock)}
                 style={onlyInStock ? { backgroundColor: store.primary_color, color: "#fff" } : undefined}
               >
-                <span>Em estoque</span>
+                <span>Somente em estoque</span>
               </Button>
 
-              {/* Alternador de Visualização (Grade vs Lista Compacta) */}
-              <div className="flex items-center rounded-lg border border-border/40 p-0.5 bg-card/60">
+              <div className="flex items-center rounded-full border border-border/40 p-0.5 bg-card/60">
                 <button
                   type="button"
                   onClick={() => setViewMode("grid")}
-                  className={`flex items-center justify-center p-1.5 rounded-md transition-all ${
+                  className={`flex items-center justify-center p-1.5 rounded-full transition-all ${
                     viewMode === "grid"
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                   title="Visualização em Grade"
                 >
-                  <LayoutGrid className="size-4" />
+                  <LayoutGrid className="size-3.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode("list")}
-                  className={`flex items-center justify-center p-1.5 rounded-md transition-all ${
+                  className={`flex items-center justify-center p-1.5 rounded-full transition-all ${
                     viewMode === "list"
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                   title="Visualização em Lista Compacta"
                 >
-                  <List className="size-4" />
+                  <List className="size-3.5" />
                 </button>
               </div>
 
@@ -579,124 +642,14 @@ function StorePageContent() {
                   variant="ghost"
                   size="sm"
                   onClick={resetFilters}
-                  className="h-10 text-xs text-muted-foreground hover:text-foreground px-2"
+                  className="h-9 text-xs text-muted-foreground hover:text-foreground px-2"
                   title="Limpar todos os filtros"
                 >
-                  <X className="size-3.5 mr-1" /> Limpar
+                  <X className="size-3 mr-1" /> Limpar
                 </Button>
               )}
             </div>
           </div>
-
-          {/* Filtro Principal de Tipo: Todas / Pré-Vendas / Pronta Entrega */}
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => setSelectedCategory("all")}
-              className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all border ${
-                selectedCategory === "all"
-                  ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                  : "bg-card/70 text-muted-foreground border-border/40 hover:bg-muted/50"
-              }`}
-            >
-              Todas ({totalOpenCount})
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedCategory("pre_venda")}
-              className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all border flex items-center gap-1.5 ${
-                selectedCategory === "pre_venda"
-                  ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                  : "bg-card/70 text-muted-foreground border-border/40 hover:bg-muted/50"
-              }`}
-            >
-              <Package className="size-3.5" />
-              <span>Pré-Vendas</span>
-              <span className="text-[11px] opacity-75">({preVendaCount})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedCategory("pronta_entrega")}
-              className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all border flex items-center gap-1.5 ${
-                selectedCategory === "pronta_entrega"
-                  ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
-                  : "bg-card/70 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
-              }`}
-            >
-              <Zap className="size-3.5 fill-current" />
-              <span>Pronta Entrega</span>
-              <span className="text-[11px] opacity-75">({prontaEntregaCount})</span>
-            </button>
-          </div>
-
-          {/* Filtro de Escalas */}
-          {availableScales.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className="text-xs font-semibold text-muted-foreground mr-1">Escala:</span>
-              <button
-                type="button"
-                onClick={() => setSelectedScale("all")}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all border ${
-                  selectedScale === "all"
-                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                    : "bg-muted/30 text-muted-foreground border-border/30 hover:bg-muted/50"
-                }`}
-              >
-                Todas escalas
-              </button>
-              {availableScales.map((scale) => (
-                <button
-                  type="button"
-                  key={scale}
-                  onClick={() => setSelectedScale(scale)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all border ${
-                    selectedScale === scale
-                      ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                      : "bg-muted/30 text-muted-foreground border-border/30 hover:bg-muted/50"
-                  }`}
-                >
-                  {scale}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Filtro de Marcas */}
-          {allAvailableBrands.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 border-b border-border/20 pb-4">
-              <span className="text-xs font-semibold text-muted-foreground mr-1">Marca:</span>
-              <button
-                type="button"
-                onClick={() => setSelectedBrand("all")}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
-                  selectedBrand === "all"
-                    ? "text-white shadow-md scale-105"
-                    : "bg-muted/50 text-muted-foreground hover:bg-muted/70 border border-transparent"
-                }`}
-                style={selectedBrand === "all" ? { backgroundColor: store.primary_color } : undefined}
-              >
-                Todas ({products.filter((p) => p.is_open).length})
-              </button>
-              {allAvailableBrands.map((brand) => {
-                const count = products.filter((p) => p.is_open && (p.brand || "Outros").trim() === brand).length;
-                return (
-                  <button
-                    type="button"
-                    key={brand}
-                    onClick={() => setSelectedBrand(brand)}
-                    className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
-                      selectedBrand === brand
-                        ? "text-white shadow-md scale-105"
-                        : "bg-muted/50 text-muted-foreground hover:bg-muted/70 border border-transparent"
-                    }`}
-                    style={selectedBrand === brand ? { backgroundColor: store.primary_color } : undefined}
-                  >
-                    {brand} ({count})
-                  </button>
-                );
-              })}
-            </div>
-          )}
         </div>
 
         {/* Resumo de Resultados & Itens por Página */}
@@ -807,15 +760,11 @@ function StorePageContent() {
                                     <span className="text-[10px] uppercase font-bold text-muted-foreground">
                                       {p.brand} · {p.scale}
                                     </span>
-                                    {isProntaEntrega(p) ? (
-                                      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.2 text-[9px] font-bold text-white bg-emerald-600">
-                                        <Zap className="size-2.5 fill-current" /> Pronta Entrega
-                                      </span>
-                                    ) : customBadge ? (
+                                    {customBadge && (
                                       <span className="rounded px-1.5 py-0.2 text-[9px] font-bold text-white bg-gradient-to-r from-amber-500 to-orange-600">
                                         {customBadge}
                                       </span>
-                                    ) : null}
+                                    )}
                                     {p.stock > 0 && p.stock <= 2 && (
                                       <span className="rounded px-1.5 py-0.2 text-[9px] font-bold text-white bg-rose-600">
                                         Últimas {p.stock} un.
@@ -832,11 +781,7 @@ function StorePageContent() {
                                       {formatStockRemaining(p)}
                                     </Badge>
 
-                                    {isProntaEntrega(p) ? (
-                                      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                                        <Zap className="size-3 fill-current" /> Envio imediato
-                                      </span>
-                                    ) : signal.isSemSinal ? (
+                                    {signal.isSemSinal ? (
                                       <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
                                         Sem sinal (Pagar na chegada)
                                       </span>
@@ -876,7 +821,7 @@ function StorePageContent() {
                                     variant={p.is_open && p.stock > 0 ? "default" : "outline"}
                                   >
                                     <BookmarkCheck className="size-3.5" />
-                                    <span>{isProntaEntrega(p) ? "Comprar" : "Reservar"}</span>
+                                    <span>Reservar</span>
                                   </Button>
                                 </div>
                               </div>
@@ -886,7 +831,7 @@ function StorePageContent() {
                       })}
                     </div>
                   ) : (
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
                       {brandProducts.map((p) => (
                         <Link
                           key={p.id}
@@ -898,21 +843,17 @@ function StorePageContent() {
                             <div className="relative aspect-video w-full overflow-hidden bg-muted">
                               {/* Badges Flutuantes no Canto Superior Esquerdo */}
                               <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10 items-start pointer-events-none">
-                                {isProntaEntrega(p) ? (
-                                  <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-emerald-600 border border-emerald-400/40">
-                                    <Zap className="size-2.5 fill-current" /> Pronta Entrega
-                                  </span>
-                                ) : getProductBadge(p.id) ? (
+                                {getProductBadge(p.id) && (
                                   <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-gradient-to-r from-amber-500 to-orange-600 border border-amber-400/30">
                                     {getProductBadge(p.id)}
                                   </span>
-                                ) : null}
+                                )}
                                 {p.stock > 0 && p.stock <= 2 && (
                                   <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-rose-600/90 border border-rose-400/30">
                                     Últimas {p.stock} un.
                                   </span>
                                 )}
-                                {!isProntaEntrega(p) && hasNoSignalRequirement(p) && (
+                                {hasNoSignalRequirement(p) && (
                                   <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-emerald-600/90 border border-emerald-400/30">
                                     Sem Sinal
                                   </span>
@@ -969,14 +910,6 @@ function StorePageContent() {
                                   </div>
 
                                   {(() => {
-                                    if (isProntaEntrega(p)) {
-                                      return (
-                                        <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                                          <Zap className="size-3 fill-current" />
-                                          <span>Pronta entrega (Envio imediato)</span>
-                                        </div>
-                                      );
-                                    }
                                     const signal = getProductSignalAmount(p);
                                     if (signal.isSemSinal) {
                                       return (
@@ -1018,10 +951,10 @@ function StorePageContent() {
                                 >
                                   <BookmarkCheck className="size-4 shrink-0" />
                                   {!p.is_open
-                                    ? "Item fechado"
+                                    ? "Pré-venda fechada"
                                     : p.stock > 0
-                                      ? isProntaEntrega(p) ? "Comprar agora" : "Reservar unidade"
-                                      : "Entrar na fila de espera"}
+                                      ? "Reservar unidade"
+                                      : "Entrar na fila"}
                                 </Button>
                               </div>
                             </CardContent>

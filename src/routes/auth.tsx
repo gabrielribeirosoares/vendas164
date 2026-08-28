@@ -267,6 +267,22 @@ function AuthPageContent() {
     }
   }
 
+  async function handleResetPassword() {
+    if (!email.trim()) {
+      return toast.error("Por favor, preencha seu e-mail acima para recuperar a senha.");
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/update-password`,
+    });
+    setLoading(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Enviamos um link de recuperação para seu e-mail!");
+    }
+  }
+
   return (
     <div className="min-h-screen">
       <AppHeader store={invitedStore} />
@@ -304,7 +320,17 @@ function AuthPageContent() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="login-password">Senha</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="login-password">Senha</Label>
+                      <button
+                        type="button"
+                        onClick={handleResetPassword}
+                        className="text-[11px] font-medium text-primary hover:underline"
+                        disabled={loading}
+                      >
+                        Esqueceu a senha?
+                      </button>
+                    </div>
                     <Input
                       id="login-password"
                       type="password"
