@@ -260,36 +260,71 @@ function SellerDashboard() {
     );
   }
 
+  const [trialDismissed, setTrialDismissed] = useState(false);
+
+  const { isTrialActive, daysRemaining } = useMemo(() => {
+    if (!store?.created_at) return { isTrialActive: false, daysRemaining: 0 };
+    const createdTime = new Date(store.created_at).getTime();
+    const now = Date.now();
+    const diffDays = (now - createdTime) / (1000 * 60 * 60 * 24);
+    const remaining = Math.max(0, Math.ceil(14 - diffDays));
+    return {
+      isTrialActive: diffDays <= 14,
+      daysRemaining: remaining,
+    };
+  }, [store?.created_at]);
+
+  const showTrialBanner = isTrialActive && !trialDismissed && !localStorage.getItem(`dismiss_trial_${store?.id}`);
+
+  const handleDismissTrial = () => {
+    if (store?.id) {
+      localStorage.setItem(`dismiss_trial_${store.id}`, "true");
+    }
+    setTrialDismissed(true);
+  };
+
   return (
     <div className="min-h-screen">
       <AppHeader store={store} />
       <main className="mx-auto max-w-6xl px-4 py-10">
-        {/* Banner de Boas-Vindas / Trial Liberado */}
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-background to-primary/10 p-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-xl bg-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
-              <Sparkles className="size-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-sm text-foreground">Período de Teste Gratuito Ativo (14 Dias)</span>
-                <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 bg-emerald-500/10 text-[10px]">
-                  Acesso Total Liberado
-                </Badge>
+        {/* Banner de Boas-Vindas / Trial Liberado (Apenas nos primeiros 14 dias para novas lojas) */}
+        {showTrialBanner && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-background to-primary/10 p-4 shadow-sm relative">
+            <div className="flex items-center gap-3 pr-6 sm:pr-0">
+              <div className="size-10 rounded-xl bg-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
+                <Sparkles className="size-5" />
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Cadastre seus lançamentos e pronta entrega, compartilhe o link com colecionadores e receba pagamentos via PIX sem taxas.
-              </p>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-sm text-foreground">Período de Teste Gratuito ({daysRemaining} {daysRemaining === 1 ? "dia restante" : "dias restantes"})</span>
+                  <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 bg-emerald-500/10 text-[10px]">
+                    Acesso Total Liberado
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Cadastre seus lançamentos e pronta entrega, compartilhe o link com colecionadores e receba pagamentos via PIX sem taxas.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                className="glow font-semibold gap-1.5 shrink-0 bg-primary text-primary-foreground text-xs"
+                onClick={() => setQuickStartOpen(true)}
+              >
+                <Zap className="size-3.5" /> Cadastro Rápido (60s)
+              </Button>
+              <button
+                type="button"
+                onClick={handleDismissTrial}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted/40 transition-colors"
+                title="Fechar aviso"
+              >
+                <XCircle className="size-4" />
+              </button>
             </div>
           </div>
-          <Button
-            size="sm"
-            className="glow font-semibold gap-1.5 shrink-0 bg-primary text-primary-foreground text-xs"
-            onClick={() => setQuickStartOpen(true)}
-          >
-            <Zap className="size-3.5" /> Cadastro Rápido (60s)
-          </Button>
-        </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
