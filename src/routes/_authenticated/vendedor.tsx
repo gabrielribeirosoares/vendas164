@@ -581,9 +581,24 @@ function AdminModerationPanel() {
     queryClient.invalidateQueries();
   }
 
+  function getStoreTrialInfo(createdAt: string) {
+    if (!createdAt) return { isTrial: false, remaining: 0, expiredDays: 0, label: "N/A" };
+    const createdTime = new Date(createdAt).getTime();
+    const diffDays = (Date.now() - createdTime) / (1000 * 60 * 60 * 24);
+    const remaining = Math.max(0, Math.ceil(14 - diffDays));
+    if (remaining > 0) {
+      return { isTrial: true, remaining, expiredDays: 0, label: `${remaining}d restantes` };
+    }
+    const expiredDays = Math.max(1, Math.floor(diffDays - 14));
+    return { isTrial: false, remaining: 0, expiredDays, label: `Expirado (+${expiredDays}d)` };
+  }
+
   const pendingStores = (allStores ?? []).filter((s: any) => s.status === "pending" || !s.status);
   const activeStores = (allStores ?? []).filter((s: any) => s.status === "active");
   const rejectedStores = (allStores ?? []).filter((s: any) => s.status === "rejected");
+
+  const trialActiveStores = activeStores.filter((s: any) => getStoreTrialInfo(s.created_at).isTrial);
+  const trialExpiredStores = activeStores.filter((s: any) => !getStoreTrialInfo(s.created_at).isTrial);
 
   if (isLoading) {
     return (
@@ -598,23 +613,28 @@ function AdminModerationPanel() {
   return (
     <div className="space-y-6">
       {/* METRICAS GLOBAIS DA PLATAFORMA */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-4">
         <Card className="panel border-primary/30 bg-primary/5 p-4">
           <p className="text-xs font-semibold text-muted-foreground uppercase">Total de Lojas</p>
           <p className="text-2xl font-bold text-foreground mt-1">{(allStores ?? []).length}</p>
           <p className="text-[11px] text-muted-foreground mt-1">
-            {activeStores.length} ativas · {pendingStores.length} pendentes · {rejectedStores.length} suspensas
+            {activeStores.length} ativas · {pendingStores.length} pendentes
           </p>
         </Card>
         <Card className="panel border-emerald-500/30 bg-emerald-500/5 p-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase">Lojas Ativas</p>
-          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{activeStores.length}</p>
-          <p className="text-[11px] text-muted-foreground mt-1">Visíveis e com catálogo liberado</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase">Em Teste (Trial Ativo)</p>
+          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{trialActiveStores.length}</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Primeiros 14 dias liberados</p>
         </Card>
         <Card className="panel border-amber-500/30 bg-amber-500/5 p-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase">Solicitações Pendentes</p>
-          <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{pendingStores.length}</p>
-          <p className="text-[11px] text-muted-foreground mt-1">Aguardando autorização</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase">Trial Expirado (+14d)</p>
+          <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{trialExpiredStores.length}</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Prontas para fechar assinatura</p>
+        </Card>
+        <Card className="panel border-border/60 bg-card p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase">Pendentes / Bloqueadas</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{pendingStores.length + rejectedStores.length}</p>
+          <p className="text-[11px] text-muted-foreground mt-1">{pendingStores.length} em análise · {rejectedStores.length} suspensas</p>
         </Card>
       </div>
 
@@ -631,7 +651,7 @@ function AdminModerationPanel() {
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground mb-4">
-            Aqui você controla os pedidos de autorização para novas lojas. Apenas lojas <strong>Aprovadas (Ativas)</strong> ficam visíveis ao público.
+            Aqui você controla os pedidos de autorização e acompanha o tempo de teste gratuito de cada lojista.
           </p>
 
           {/* LOJAS PENDENTES */}
@@ -646,46 +666,52 @@ function AdminModerationPanel() {
               </p>
             ) : (
               <div className="grid gap-3">
-                {pendingStores.map((st: any) => (
-                  <div
-                    key={st.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-amber-500/30 bg-background p-4 shadow-sm"
-                  >
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-bold text-base text-foreground">{st.name}</h4>
-                        <span className="font-mono text-xs text-muted-foreground">/loja/{st.slug}</span>
+                {pendingStores.map((st: any) => {
+                  const trialInfo = getStoreTrialInfo(st.created_at);
+                  return (
+                    <div
+                      key={st.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-amber-500/30 bg-background p-4 shadow-sm"
+                    >
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-base text-foreground">{st.name}</h4>
+                          <span className="font-mono text-xs text-muted-foreground">/loja/{st.slug}</span>
+                          <Badge variant="outline" className="text-[10px] py-0 border-amber-500/40 text-amber-600 bg-amber-500/10">
+                            {trialInfo.label}
+                          </Badge>
+                        </div>
+                        {st.description && <p className="text-xs text-muted-foreground line-clamp-1">{st.description}</p>}
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground pt-1">
+                          <span>👤 Dono: <strong>{st.owner?.name || "Não informado"}</strong></span>
+                          <span>📧 {st.owner?.email || "Sem e-mail"}</span>
+                          {st.whatsapp_number && <span>📱 Whats: {st.whatsapp_number}</span>}
+                          <span>📅 {new Date(st.created_at).toLocaleDateString("pt-BR")}</span>
+                        </div>
                       </div>
-                      {st.description && <p className="text-xs text-muted-foreground line-clamp-1">{st.description}</p>}
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground pt-1">
-                        <span>👤 Dono: <strong>{st.owner?.name || "Não informado"}</strong></span>
-                        <span>📧 {st.owner?.email || "Sem e-mail"}</span>
-                        {st.whatsapp_number && <span>📱 Whats: {st.whatsapp_number}</span>}
-                        <span>📅 {new Date(st.created_at).toLocaleDateString("pt-BR")}</span>
-                      </div>
-                    </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        size="sm"
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
-                        disabled={submitting}
-                        onClick={() => updateStoreStatus(st.id, "active")}
-                      >
-                        <CheckCircle2 className="size-4" /> Aprovar Loja
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        disabled={submitting}
-                        onClick={() => setRejectingStore(st)}
-                        className="gap-1.5"
-                      >
-                        <XCircle className="size-4" /> Recusar
-                      </Button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                          disabled={submitting}
+                          onClick={() => updateStoreStatus(st.id, "active")}
+                        >
+                          <CheckCircle2 className="size-4" /> Aprovar Loja
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={submitting}
+                          onClick={() => setRejectingStore(st)}
+                          className="gap-1.5"
+                        >
+                          <XCircle className="size-4" /> Recusar
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -695,7 +721,17 @@ function AdminModerationPanel() {
       {/* LOJAS ATIVAS */}
       <Card className="panel border-border/60">
         <CardHeader>
-          <CardTitle className="text-lg font-bold">Lojas Ativas e Aprovadas ({activeStores.length})</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg font-bold">Lojas Ativas ({activeStores.length})</CardTitle>
+            <div className="flex gap-2">
+              <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 bg-emerald-500/10 text-xs">
+                {trialActiveStores.length} em teste
+              </Badge>
+              <Badge variant="outline" className="border-amber-500/40 text-amber-600 bg-amber-500/10 text-xs">
+                {trialExpiredStores.length} expirados
+              </Badge>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {activeStores.length === 0 ? (
@@ -703,43 +739,80 @@ function AdminModerationPanel() {
               Nenhuma loja ativa no momento.
             </p>
           ) : (
-            <div className="space-y-2">
-              {activeStores.map((st: any) => (
-                <div key={st.id} className="flex items-center justify-between border-b border-border/40 pb-2 pt-1 text-xs">
-                  <div>
-                    <span className="font-bold text-foreground">{st.name}</span>{" "}
-                    <span className="text-muted-foreground">(/loja/{st.slug})</span>
-                    <div className="text-muted-foreground mt-0.5">
-                      Dono: {st.owner?.name || "N/A"} ({st.owner?.email || "Sem e-mail"})
-                      {st.owner?.phone && <span className="ml-2 text-emerald-600 font-medium">📱 Whats: {st.owner.phone}</span>}
+            <div className="space-y-3">
+              {activeStores.map((st: any) => {
+                const trialInfo = getStoreTrialInfo(st.created_at);
+                const cleanPhone = (st.whatsapp_number || st.owner?.phone || "").replace(/\D/g, "");
+                const waMessage = encodeURIComponent(
+                  `Olá ${st.owner?.name || "Lojista"}! Sou o administrador do Vendas 164. Vi que sua loja (${st.name}) está cadastrada na plataforma. Como estão suas pré-vendas?`
+                );
+
+                return (
+                  <div key={st.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/40 pb-3 pt-1 text-xs">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-foreground">{st.name}</span>
+                        <span className="text-muted-foreground font-mono text-[11px]">(/loja/{st.slug})</span>
+                        {trialInfo.isTrial ? (
+                          <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 bg-emerald-500/10 text-[10px] py-0 font-medium">
+                            🟢 Trial: {trialInfo.label}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="border-amber-500/40 text-amber-600 bg-amber-500/10 text-[10px] py-0 font-medium">
+                            🟡 Trial Expirado (+{trialInfo.expiredDays}d)
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-muted-foreground">
+                        Dono: <strong>{st.owner?.name || "N/A"}</strong> ({st.owner?.email || "Sem e-mail"})
+                        {(st.whatsapp_number || st.owner?.phone) && (
+                          <span className="ml-2 text-emerald-600 font-medium">
+                            📱 {st.whatsapp_number || st.owner?.phone}
+                          </span>
+                        )}
+                        <span className="ml-2 text-muted-foreground/80">
+                          · Criada em: {new Date(st.created_at).toLocaleDateString("pt-BR")}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <Badge variant="secondary" className="text-[10px] py-0">
+                          {st.sales?.total_orders || 0} reservas
+                        </Badge>
+                        <Badge variant="secondary" className="text-[10px] py-0 text-emerald-600">
+                          {st.sales?.has_cost ? `Lucro: ${brl(st.sales.total_profit)}` : `Vendas: ${brl(st.sales?.total_amount || 0)}`}
+                        </Badge>
+                      </div>
                     </div>
-                    <div className="text-muted-foreground mt-0.5 mb-1 flex flex-col gap-1">
-                      <span className="font-mono text-[10px] break-all">ID Dono: {st.owner_id}</span>
-                    </div>
-                    <div className="mt-1 flex items-center gap-2">
-                      <Badge variant="secondary" className="text-[10px] py-0">
-                        {st.sales?.total_orders || 0} negociações
-                      </Badge>
-                      <Badge variant="secondary" className="text-[10px] py-0 text-emerald-600">
-                        {st.sales?.has_cost ? `Lucro: ${brl(st.sales.total_profit)}` : `Vendas: ${brl(st.sales?.total_amount || 0)}`}
-                      </Badge>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {cleanPhone && (
+                        <Button
+                          asChild
+                          size="sm"
+                          variant="outline"
+                          className="text-xs gap-1 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+                        >
+                          <a
+                            href={`https://wa.me/55${cleanPhone.replace(/^55/, "")}?text=${waMessage}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            📱 WhatsApp
+                          </a>
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-xs text-destructive hover:bg-destructive/10"
+                        onClick={() => updateStoreStatus(st.id, "rejected", "Loja suspensa pelo administrador.")}
+                      >
+                        Suspender
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 bg-emerald-500/10">
-                      Ativa
-                    </Badge>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-xs text-destructive hover:bg-destructive/10"
-                      onClick={() => updateStoreStatus(st.id, "rejected", "Loja suspensa pelo administrador.")}
-                    >
-                      Suspender
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
