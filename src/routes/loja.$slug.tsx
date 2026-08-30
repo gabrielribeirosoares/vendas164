@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate, Outlet, useMatchRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpDown, BookmarkCheck, Check, Copy, Package, Search, Sparkles, Store as StoreIcon, X, ShoppingCart, LayoutGrid, List, ChevronLeft, ChevronRight, ListFilter, ChevronDown, ChevronUp } from "lucide-react";
+import { BookmarkCheck, Check, Copy, Package, Search, Sparkles, Store as StoreIcon, X, ShoppingCart, LayoutGrid, List, ChevronLeft, ChevronRight, ListFilter, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import { createServerFn } from "@tanstack/react-start";
 import { AppHeader } from "@/components/AppHeader";
@@ -279,12 +279,6 @@ function StorePageContent() {
   const products = data?.products ?? [];
   const isOwner = !!(user && store?.owner_id === user.id);
   const storeStatus = (store as any)?.status || "active";
-
-  // Extração de marcas e escalas disponíveis
-  const availableScales = useMemo(
-    () => Array.from(new Set(products.map((p) => p.scale).filter(Boolean))).sort(),
-    [products]
-  );
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {

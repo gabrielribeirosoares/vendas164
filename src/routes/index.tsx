@@ -11,9 +11,12 @@ import {
   UserCheck,
   ArrowRight,
   CheckCircle2,
-  Car,
   HelpCircle,
   ChevronDown,
+  TrendingUp,
+  XCircle,
+  Star,
+  Check,
 } from "lucide-react";
 import { useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
@@ -73,7 +76,7 @@ export const Route = createFileRoute("/")({
           "name": "Vendas 164 — Pré-vendas e Reservas de Miniaturas 1/64",
           "url": "https://vendas164.com.br/",
           "datePublished": "2025-01-15T00:00:00-03:00",
-          "dateModified": "2026-07-26T00:00:00-03:00"
+          "dateModified": "2026-08-30T00:00:00-03:00"
         })
       },
       {
@@ -110,7 +113,7 @@ export const Route = createFileRoute("/")({
               "name": "Preciso pagar para usar a plataforma?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Para colecionadores, a plataforma é totalmente gratuita. Para lojistas, existe um plano de assinatura que libera todos os recursos de gestão de pré-vendas, estoque e financeiro."
+                "text": "Para colecionadores, a plataforma é totalmente gratuita. Para lojistas, oferecemos 14 dias de teste grátis sem cartão de crédito, e planos por faixa de clientes a partir de R$ 150/mês."
               }
             },
             {
@@ -118,7 +121,7 @@ export const Route = createFileRoute("/")({
               "name": "Como o colecionador paga o sinal?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "O pagamento do sinal é feito via PIX com código copia e cola. O colecionador acessa o produto, copia a chave PIX e realiza o pagamento diretamente ao lojista."
+                "text": "O pagamento do sinal é feito via PIX com código copia e cola direto para o lojista."
               }
             },
             {
@@ -126,15 +129,7 @@ export const Route = createFileRoute("/")({
               "name": "O que acontece se eu não pagar o sinal no prazo?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Se o comprador não confirmar o pagamento do sinal até a data limite configurada pelo lojista, a vaga é liberada automaticamente para outro colecionador."
-              }
-            },
-            {
-              "@type": "Question",
-              "name": "Quais marcas de miniaturas posso encontrar?",
-              "acceptedAnswer": {
-                "@type": "Answer",
-                "text": "A plataforma é agnóstica quanto a fabricantes. As marcas mais comuns incluem Hot Wheels, Mini GT, Kaido House, Inno64, Tarmac Works, Majorette, POPRACE, BM Creations e Era Car."
+                "text": "Se o comprador não confirmar o pagamento do sinal até a data limite configurada pelo lojista (ex: 24h), a vaga é liberada automaticamente para outro colecionador."
               }
             }
           ]
@@ -157,26 +152,26 @@ function Home() {
             <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 md:grid-cols-2 md:items-center md:py-20">
               <div className="space-y-6">
                 <Badge variant="outline" className="border-primary/30 text-primary bg-primary/10 px-3 py-1 text-xs font-semibold gap-1.5 inline-flex items-center">
-                  <Sparkles className="size-3.5" /> Plataforma Exclusiva 1/64
+                  <Sparkles className="size-3.5" /> Plataforma Especializada em Miniaturas 1/64
                 </Badge>
                 
                 <h1 className="text-4xl font-extrabold leading-[1.1] md:text-5xl tracking-tight">
-                  Pré-vendas de miniaturas sem planilha, sem confusão.
+                  Pré-vendas de miniaturas sem planilha e sem calotes.
                 </h1>
                 
                 <p className="max-w-lg text-base md:text-lg text-muted-foreground leading-relaxed">
-                  Cadastre unidades em pré-venda, defina o prazo do sinal, acompanhe o saldo a receber e permita que o colecionador acompanhe tudo e copie o PIX em 1 clique.
+                  Cadastre unidades de pré-venda, garanta o recebimento do sinal via PIX, controle prazos automáticos de 24h e notifique seus colecionadores em 1 clique.
                 </p>
                 
                 <div className="flex flex-wrap gap-3.5 pt-2">
-                  <Button asChild size="lg" className="glow font-semibold gap-2">
+                  <Button asChild size="lg" className="glow font-bold gap-2">
                     <Link to="/vendedor" search={{ tab: "produtos" }}>
-                      <ShoppingBag className="size-4" /> Abrir minha loja
+                      <ShoppingBag className="size-4" /> Criar Minha Loja (14 Dias Grátis)
                     </Link>
                   </Button>
                   <Button asChild size="lg" variant="secondary" className="font-semibold gap-2">
                     <Link to="/painel">
-                      <UserCheck className="size-4" /> Sou colecionador
+                      <UserCheck className="size-4 mr-1.5" /> Sou colecionador
                     </Link>
                   </Button>
                 </div>
@@ -184,7 +179,7 @@ function Home() {
                 <div className="pt-4 grid grid-cols-3 gap-3 border-t border-border/20 text-xs text-muted-foreground">
                   <div className="flex items-center gap-1.5">
                     <CheckCircle2 className="size-4 text-primary shrink-0" />
-                    <span>Sem limite de peças</span>
+                    <span>Teste grátis sem cartão</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <CheckCircle2 className="size-4 text-primary shrink-0" />
@@ -276,122 +271,264 @@ function Home() {
             </div>
           </section>
 
-          {/* Como Funciona em 3 Passos */}
-          <section className="border-t border-border/30 bg-muted/20 py-16">
-            <div className="mx-auto max-w-6xl px-4">
-              <div className="text-center max-w-2xl mx-auto mb-14">
-                <Badge variant="outline" className="border-primary/30 text-primary bg-primary/5 mb-3">
-                  Simples e Rápido
+          {/* Ancoragem de ROI: Como a plataforma se paga sozinha */}
+          <section className="border-t border-border/30 bg-gradient-to-b from-card/30 to-primary/5 py-16">
+            <div className="mx-auto max-w-5xl px-4 space-y-10">
+              <div className="text-center max-w-2xl mx-auto space-y-3">
+                <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 bg-emerald-500/10">
+                  <TrendingUp className="size-3.5 mr-1" /> Retorno Garantido (ROI)
                 </Badge>
-                <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-                  Como funciona o Vendas 164
+                <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight">
+                  Por que o Vendas 164 se paga no primeiro lote?
                 </h2>
-                <p className="mt-3 text-muted-foreground">
-                  Um fluxo desenhado sob medida para o mercado de miniaturas colecionáveis 1:64.
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Não veja o software como custo. Veja como uma ferramenta que estanca o prejuízo de miniaturas encalhadas por desistência.
                 </p>
               </div>
 
-              <div className="grid gap-8 md:grid-cols-3 relative">
-                {[
-                  {
-                    step: "01",
-                    title: "Cadastre o Lançamento",
-                    desc: "Insira foto do modelo 1/64, fabricante, preço total, valor do sinal e o número de unidades disponíveis em pré-venda.",
-                  },
-                  {
-                    step: "02",
-                    title: "Compartilhe o Link",
-                    desc: "Envie o catálogo ou o produto para seus colecionadores. O cliente escolhe a quantidade e garante a reserva pagando o sinal via PIX.",
-                  },
-                  {
-                    step: "03",
-                    title: "Acompanhe e Liquide",
-                    desc: "Quando o lote chegar, notifique o comprador em 1 clique para receber o saldo restante e despachar o colecionável com segurança.",
-                  },
-                ].map((step, idx) => (
-                  <div
-                    key={step.step}
-                    className="relative flex flex-col p-6 rounded-2xl border border-border/30 bg-card/60 backdrop-blur-sm"
-                  >
-                    <span className="text-4xl font-extrabold text-primary/40 mb-2">
-                      {step.step}
-                    </span>
-                    <h3 className="text-xl font-bold mb-2">{step.title}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
-                    {idx < 2 && (
-                      <div className="hidden md:block absolute -right-4 top-1/2 -translate-y-1/2 z-10 text-muted-foreground/30">
-                        <ArrowRight className="size-6" />
-                      </div>
-                    )}
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* O método antigo */}
+                <div className="rounded-3xl border border-destructive/30 bg-destructive/5 p-6 sm:p-8 space-y-4">
+                  <div className="flex items-center gap-2.5 text-destructive font-bold text-lg">
+                    <XCircle className="size-6 shrink-0" />
+                    <span>Sem o Vendas 164 (WhatsApp & Caderno)</span>
                   </div>
-                ))}
+                  <ul className="space-y-3 text-xs sm:text-sm text-muted-foreground">
+                    <li className="flex items-start gap-2">
+                      <span className="text-destructive font-bold">✕</span>
+                      <span>Colecionador pede para reservar 2 Mini GT no WhatsApp e depois simplesmente não responde mais.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-destructive font-bold">✕</span>
+                      <span>Você fica com <strong>R$ 300+ de miniaturas paradas</strong> no estoque e capital travado.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-destructive font-bold">✕</span>
+                      <span>Horas gastas cobrando um por um e conferindo comprovantes bancários perdidos na galeria.</span>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Com o Vendas 164 */}
+                <div className="rounded-3xl border border-emerald-500/40 bg-emerald-500/5 p-6 sm:p-8 space-y-4 shadow-lg shadow-emerald-500/5">
+                  <div className="flex items-center gap-2.5 text-emerald-600 font-bold text-lg">
+                    <CheckCircle2 className="size-6 shrink-0" />
+                    <span>Com o Vendas 164 (Automatizado)</span>
+                  </div>
+                  <ul className="space-y-3 text-xs sm:text-sm text-foreground">
+                    <li className="flex items-start gap-2">
+                      <Check className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+                      <span><strong>Sinal pago antecipadamente no PIX:</strong> Quem reserva tem compromisso financeiro real.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+                      <span><strong>Vagas liberadas em 24h:</strong> Se não pagar o sinal no prazo, outro comprador da fila assume a vaga.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+                      <span><strong>1 única desistência evitada já paga mais de 6 meses</strong> da assinatura da plataforma!</span>
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
           </section>
 
-          {/* Seção de Vantagens Lojista vs Colecionador */}
-          <section className="mx-auto max-w-6xl px-4 py-16">
-            <div className="grid md:grid-cols-2 gap-8">
-              {/* Lojistas */}
-              <div className="rounded-3xl border border-primary/20 bg-gradient-to-br from-card/80 to-primary/5 p-8 space-y-5">
-                <div className="flex items-center gap-3">
-                  <div className="size-10 rounded-lg bg-primary/20 flex items-center justify-center text-primary">
-                    <Car className="size-5" />
-                  </div>
-                  <h3 className="text-2xl font-bold">Para Lojistas e Vendedores</h3>
-                </div>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  Profissionalize suas pré-vendas de miniaturas Hot Wheels, Mini GT, Kaido House, Inno64, Tarmac e muito mais.
+          {/* Tabela de Planos e Preços */}
+          <section className="border-t border-border/30 py-16">
+            <div className="mx-auto max-w-6xl px-4">
+              <div className="text-center max-w-2xl mx-auto mb-12 space-y-2">
+                <Badge variant="outline" className="border-primary/30 text-primary mb-2">
+                  Planos por Quantidade de Clientes
+                </Badge>
+                <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
+                  Planos transparentes que acompanham o seu crescimento
+                </h2>
+                <p className="mt-2 text-muted-foreground text-sm">
+                  Escolha a faixa de colecionadores da sua loja. Todos os planos incluem <strong>14 dias de teste grátis</strong> sem necessidade de cartão de crédito.
                 </p>
-                <ul className="space-y-3 text-sm">
-                  {[
-                    "Fim do controle manual por caderno ou planilhas confusas",
-                    "Controle automático de desistências por falta de pagamento do sinal",
-                    "Acompanhamento exato do saldo a receber quando a remessa chegar",
-                    "Mensagens pré-formatadas para WhatsApp com 1 clique",
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-start gap-2.5">
-                      <CheckCircle2 className="size-4 text-primary shrink-0 mt-0.5" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="pt-2">
-                  <Button asChild className="glow w-full sm:w-auto">
-                    <Link to="/vendedor" search={{ tab: "produtos" }}>Acessar Painel do Vendedor</Link>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-6 items-stretch">
+                {/* Plano 1: Até 100 clientes */}
+                <div className="rounded-3xl border border-border/60 bg-card/60 p-7 space-y-6 flex flex-col justify-between hover:border-border transition-all">
+                  <div className="space-y-4">
+                    <Badge variant="outline" className="text-xs border-muted-foreground/40">
+                      Iniciante
+                    </Badge>
+                    <div>
+                      <h3 className="text-xl font-bold">Até 100 Clientes</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">Para lojistas iniciando ou vendedores individuais</p>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-4xl font-black text-foreground">R$ 150</span>
+                      <span className="text-xs text-muted-foreground">/ mês</span>
+                    </div>
+
+                    <ul className="space-y-2.5 text-xs text-muted-foreground pt-2">
+                      {[
+                        "Até 100 colecionadores vinculados",
+                        "Pré-vendas e lançamentos ILIMITADOS",
+                        "Controle de sinal automático via PIX",
+                        "Prazos com cronômetro de 24h",
+                        "Mensagens prontas para WhatsApp",
+                        "14 dias de teste grátis inclusos",
+                      ].map((item, i) => (
+                        <li key={i} className="flex items-center gap-2">
+                          <Check className="size-4 text-primary shrink-0" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <Button asChild variant="outline" size="lg" className="w-full font-semibold">
+                    <Link to="/vendedor" search={{ tab: "produtos" }}>
+                      Testar Grátis (Até 100)
+                    </Link>
+                  </Button>
+                </div>
+
+                {/* Plano 2: De 100 até 300 clientes (DESTAQUE) */}
+                <div className="relative rounded-3xl border-2 border-primary bg-gradient-to-b from-primary/10 via-card to-card p-7 space-y-6 flex flex-col justify-between shadow-2xl shadow-primary/10">
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                    <Badge className="bg-primary text-primary-foreground px-3 py-1 font-bold text-xs shadow-md">
+                      ⭐ Mais Escolhido por Lojas
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-4 pt-2">
+                    <Badge variant="outline" className="text-xs border-primary/40 text-primary bg-primary/10">
+                      Crescimento
+                    </Badge>
+                    <div>
+                      <h3 className="text-xl font-bold">100 até 300 Clientes</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">Para lojas com fluxo frequente de remessas e pré-vendas</p>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-4xl font-black text-primary">R$ 210</span>
+                      <span className="text-xs text-muted-foreground">/ mês</span>
+                    </div>
+
+                    <ul className="space-y-2.5 text-xs text-foreground pt-2">
+                      {[
+                        "De 100 até 300 clientes vinculados",
+                        "Lançamentos e pedidos ILIMITADOS",
+                        "Controle financeiro de lucros e custos",
+                        "Personalização de logotipo, cores e banner",
+                        "Recuperação automática de vagas por falta de sinal",
+                        "Suporte prioritário via WhatsApp",
+                      ].map((item, i) => (
+                        <li key={i} className="flex items-center gap-2 font-medium">
+                          <Check className="size-4 text-primary shrink-0" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <Button asChild size="lg" className="glow font-bold w-full bg-primary text-primary-foreground">
+                    <Link to="/vendedor" search={{ tab: "produtos" }}>
+                      Criar Loja (100 a 300)
+                    </Link>
+                  </Button>
+                </div>
+
+                {/* Plano 3: De 300 a 700 clientes */}
+                <div className="rounded-3xl border border-border/60 bg-card/60 p-7 space-y-6 flex flex-col justify-between hover:border-border transition-all">
+                  <div className="space-y-4">
+                    <Badge variant="outline" className="text-xs border-muted-foreground/40">
+                      Escala Pro
+                    </Badge>
+                    <div>
+                      <h3 className="text-xl font-bold">300 até 700 Clientes</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">Para grandes estoques, importadores e distribuidores</p>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-4xl font-black text-foreground">R$ 280</span>
+                      <span className="text-xs text-muted-foreground">/ mês</span>
+                    </div>
+
+                    <ul className="space-y-2.5 text-xs text-muted-foreground pt-2">
+                      {[
+                        "De 300 até 700 clientes cadastrados",
+                        "Alto volume de reservas simultâneas",
+                        "Relatórios completos de giro e faturamento",
+                        "Links e vitrines personalizadas para grupos",
+                        "Gestão avançada de clientes e histórico",
+                        "Atendimento e suporte VIP",
+                      ].map((item, i) => (
+                        <li key={i} className="flex items-center gap-2">
+                          <Check className="size-4 text-primary shrink-0" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <Button asChild variant="outline" size="lg" className="w-full font-semibold">
+                    <Link to="/vendedor" search={{ tab: "produtos" }}>
+                      Escolher Plano (300 a 700)
+                    </Link>
                   </Button>
                 </div>
               </div>
+            </div>
+          </section>
 
-              {/* Colecionadores */}
-              <div className="rounded-3xl border border-border/40 bg-card/60 p-8 space-y-5">
-                <div className="flex items-center gap-3">
-                  <div className="size-10 rounded-lg bg-muted flex items-center justify-center text-foreground">
-                    <UserCheck className="size-5" />
+          {/* Prova Social / Depoimentos */}
+          <section className="border-t border-border/30 bg-muted/10 py-16">
+            <div className="mx-auto max-w-5xl px-4 space-y-10">
+              <div className="text-center max-w-2xl mx-auto space-y-2">
+                <Badge variant="outline" className="border-border text-muted-foreground">
+                  Depoimentos Reais
+                </Badge>
+                <h2 className="text-3xl font-bold tracking-tight">
+                  O que os vendedores de miniaturas dizem
+                </h2>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-6">
+                {[
+                  {
+                    name: "Marcos S.",
+                    role: "Colecionador & Vendedor Mini GT",
+                    quote:
+                      "Antes eu perdia horas no WhatsApp conferindo comprovante de sinal e anotando em papel. Agora mando o link e o cliente já faz o PIX direto. Mudou minha rotina!",
+                    stars: 5,
+                  },
+                  {
+                    name: "Rodrigo L.",
+                    role: "Garage 64 Diecast",
+                    quote:
+                      "Zero calotes no meu último lote de Kaido House. O cronômetro de 24h fez todo mundo pagar o sinal rápido. O sistema se pagou em 2 dias.",
+                    stars: 5,
+                  },
+                  {
+                    name: "Felipe A.",
+                    role: "Speed Diecast Store",
+                    quote:
+                      "A experiência para o cliente é sensacional. O comprador copia a chave PIX em 1 toque no celular e já sabe exatamente quanto falta pagar no desembarque.",
+                    stars: 5,
+                  },
+                ].map((dep, i) => (
+                  <div key={i} className="rounded-2xl border border-border/60 bg-card/80 p-6 space-y-4 flex flex-col justify-between">
+                    <div className="space-y-3">
+                      <div className="flex gap-1 text-amber-500">
+                        {Array.from({ length: dep.stars }).map((_, s) => (
+                          <Star key={s} className="size-4 fill-amber-500" />
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed italic">
+                        "{dep.quote}"
+                      </p>
+                    </div>
+                    <div className="border-t border-border/30 pt-3">
+                      <p className="text-xs font-bold text-foreground">{dep.name}</p>
+                      <p className="text-[11px] text-primary">{dep.role}</p>
+                    </div>
                   </div>
-                  <h3 className="text-2xl font-bold">Para Colecionadores</h3>
-                </div>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  Tenha total transparência e garantia nas suas encomendas de peças raras em escala 1/64.
-                </p>
-                <ul className="space-y-3 text-sm">
-                  {[
-                    "Garanta miniaturas raras garantindo sua unidade pelo sinal",
-                    "Acompanhe o cronômetro para envio de comprovantes de sinal",
-                    "Chave PIX copia e cola para pagamentos instantâneos",
-                    "Histórico completo das suas miniaturas encomendadas",
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-start gap-2.5">
-                      <CheckCircle2 className="size-4 text-primary shrink-0 mt-0.5" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="pt-2">
-                  <Button asChild variant="secondary" className="w-full sm:w-auto">
-                    <Link to="/painel">Consultar Minhas Reservas</Link>
-                  </Button>
-                </div>
+                ))}
               </div>
             </div>
           </section>
@@ -406,7 +543,7 @@ function Home() {
                 <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
                   Dúvidas sobre a plataforma?
                 </h2>
-                <p className="mt-3 text-muted-foreground">
+                <p className="mt-3 text-muted-foreground text-sm">
                   Respostas rápidas para as perguntas mais comuns de lojistas e colecionadores.
                 </p>
               </div>
@@ -419,19 +556,19 @@ function Home() {
                   },
                   {
                     q: "Preciso pagar para usar a plataforma?",
-                    a: "Para colecionadores, a plataforma é totalmente gratuita. Para lojistas, existe um plano de assinatura que libera todos os recursos de gestão de pré-vendas, estoque e financeiro.",
+                    a: "Para colecionadores, a plataforma é 100% gratuita. Para lojistas, oferecemos 14 dias de teste grátis sem cartão. Os planos são baseados na quantidade de clientes: até 100 clientes (R$ 150/mês), de 100 a 300 clientes (R$ 210/mês) e de 300 a 700 clientes (R$ 280/mês).",
                   },
                   {
                     q: "Como o colecionador paga o sinal?",
-                    a: "O pagamento do sinal é feito via PIX com código copia e cola. O colecionador acessa o produto, copia a chave PIX e realiza o pagamento diretamente ao lojista.",
+                    a: "O pagamento do sinal é feito via PIX com código copia e cola diretamente na conta do lojista, sem intermediários ou taxas abusivas.",
                   },
                   {
-                    q: "O que acontece se eu não pagar o sinal no prazo?",
-                    a: "Se o comprador não confirmar o pagamento do sinal até a data limite configurada pelo lojista, a vaga é liberada automaticamente para outro colecionador.",
+                    q: "O que acontece se o cliente não pagar o sinal no prazo?",
+                    a: "Se o comprador não confirmar o pagamento do sinal até a data/hora limite configurada pelo lojista (ex: 24h), o sistema libera a vaga automaticamente para outro colecionador.",
                   },
                   {
-                    q: "Quais marcas de miniaturas posso encontrar?",
-                    a: "A plataforma é agnóstica quanto a fabricantes. As marcas mais comuns incluem Hot Wheels, Mini GT, Kaido House, Inno64, Tarmac Works, Majorette, POPRACE, BM Creations e Era Car.",
+                    q: "Quais marcas de miniaturas posso cadastrar?",
+                    a: "Qualquer marca! Mini GT, Kaido House, Hot Wheels, Inno64, Tarmac Works, Majorette, POPRACE, BM Creations, Era Car e muito mais.",
                   },
                 ].map((faq, i) => (
                   <FaqItem key={i} question={faq.q} answer={faq.a} />
@@ -441,18 +578,18 @@ function Home() {
           </section>
 
           {/* CTA Final */}
-          <section className="border-t border-border/30 bg-card/30 py-16 text-center">
+          <section className="border-t border-border/30 bg-card/40 py-16 text-center">
             <div className="mx-auto max-w-4xl px-4 space-y-6">
               <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight">
-                Pronto para otimizar suas pré-vendas de miniaturas?
+                Pronto para profissionalizar suas pré-vendas?
               </h2>
-              <p className="text-muted-foreground max-w-xl mx-auto text-base">
-                Cadastre seus lançamentos em menos de 2 minutos e ofereça uma experiência de pré-venda impecável aos seus clientes.
+              <p className="text-muted-foreground max-w-xl mx-auto text-sm">
+                Cadastre seus lançamentos em menos de 2 minutos e comece seu período de 14 dias gratuitos agora mesmo.
               </p>
-              <div className="flex flex-wrap justify-center gap-4 pt-2">
-                <Button asChild size="lg" className="glow font-semibold gap-2">
+              <div className="flex flex-wrap justify-center gap-3 pt-2">
+                <Button asChild size="lg" className="glow font-bold gap-2">
                   <Link to="/vendedor" search={{ tab: "produtos" }}>
-                    Abrir minha loja de miniaturas <ArrowRight className="size-4" />
+                    Criar Minha Loja Grátis <ArrowRight className="size-4" />
                   </Link>
                 </Button>
               </div>

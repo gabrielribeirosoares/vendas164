@@ -1,62 +1,28 @@
-
-
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Clock, Copy, Loader2, Palette, ShieldAlert, ShieldCheck, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Copy, Loader2, Palette, ShieldAlert, ShieldCheck, XCircle, Zap, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { PhoneInput } from "@/components/PhoneInput";
 import { getCustomerFromCache } from "@/lib/customerCache";
-
-
+import { QuickStartModal } from "@/components/vendedor/QuickStartModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-
 import { Badge } from "@/components/ui/badge";
-
-
-
-
-
-
-
-
-
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, slugify } from "@/lib/format";
 import { useSession } from "@/lib/session";
-
-
-
-
-
-
 import { OrdersTab, type OrderRow } from "@/components/vendedor/OrderManager";
 import { BrandingTab } from "@/components/vendedor/StoreSettings";
 import { ClientsTab } from "@/components/vendedor/ClientsManager";
@@ -85,9 +51,6 @@ export const Route = createFileRoute("/_authenticated/vendedor")({
   component: SellerDashboard,
 });
 
-
-
-
 function SellerDashboard() {
   const { user, loading: sessionLoading } = useSession();
   const queryClient = useQueryClient();
@@ -95,6 +58,7 @@ function SellerDashboard() {
   const search = Route.useSearch() as { tab?: string };
   const activeTab = search.tab || "produtos";
   const setActiveTab = (tab: string) => navigate({ search: { tab }, replace: true });
+  const [quickStartOpen, setQuickStartOpen] = useState(false);
 
   const { data: store, isLoading } = useQuery({
     queryKey: ["my-store", user?.id],
@@ -119,7 +83,7 @@ function SellerDashboard() {
     },
   });
 
-  // Verificar se o usuário atual é SuperAdmin (gabrielribeirosoares@hotmail.com)
+  // Verificar se o usuário atual é SuperAdmin
   const isAdmin =
     (profile as any)?.is_admin === true ||
     user?.id === "5fb17599-28a0-4c1c-92cf-38176f7d57a2" ||
@@ -194,11 +158,10 @@ function SellerDashboard() {
     };
   }, [orders]);
 
-  
   const brandData = useMemo(() => {
     const counts: Record<string, number> = {};
     (orders || []).forEach(o => {
-      if (o.payment_status === "cancelado" || o.delivery_status === "cancelado") return;
+      if (o.payment_status === "cancelado" || (o as any).delivery_status === "cancelado") return;
       const b = o.products?.brand || "Outros";
       counts[b] = (counts[b] || 0) + 1;
     });
@@ -220,8 +183,15 @@ function SellerDashboard() {
     }
   }, [store?.name, activeTab]);
 
-
-
+  useEffect(() => {
+    if (products && products.length === 0 && store?.id) {
+      const key = `qs_auto_opened_${store.id}`;
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, "true");
+        setQuickStartOpen(true);
+      }
+    }
+  }, [products, store?.id]);
 
   if (sessionLoading || isLoading) {
     return (
@@ -252,50 +222,7 @@ function SellerDashboard() {
     );
   }
 
-  // Se a coluna status ainda não existir no banco, assumimos "pending" se não for admin
-  const storeStatus = (store as any).status ?? (isAdmin ? "active" : "pending");
-
-  if (storeStatus === "pending" && !isAdmin) {
-    return (
-      <div className="min-h-screen">
-        <AppHeader store={store} />
-        <main className="mx-auto max-w-2xl px-4 py-12">
-          <Card className="panel border-amber-500/30 bg-amber-500/5">
-            <CardHeader className="text-center">
-              <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-amber-500/10 text-amber-500 mb-2">
-                <Clock className="size-8 animate-pulse" />
-              </div>
-              <CardTitle className="text-2xl font-bold">Solicitação em Análise</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-center">
-              <p className="text-muted-foreground text-sm leading-relaxed">
-                Sua loja <strong className="text-foreground">{store.name}</strong> foi cadastrada com sucesso e seu pedido de autorização foi enviado para análise do administrador do site.
-              </p>
-              <div className="rounded-xl border border-border/60 bg-background/50 p-4 text-left space-y-2 text-xs">
-                <div className="flex justify-between border-b border-border/40 pb-2">
-                  <span className="text-muted-foreground">Nome da loja:</span>
-                  <span className="font-semibold">{store.name}</span>
-                </div>
-                <div className="flex justify-between border-b border-border/40 pb-2">
-                  <span className="text-muted-foreground">Endereço da loja:</span>
-                  <span className="font-mono font-semibold">/loja/{store.slug}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Status atual:</span>
-                  <Badge variant="outline" className="border-amber-500/40 text-amber-600 bg-amber-500/10">
-                    Aguardando Aprovação
-                  </Badge>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground pt-2">
-                Assim que sua loja for aprovada pelo administrador, seu painel de cadastro de pré-vendas e vendas será liberado automaticamente.
-              </p>
-            </CardContent>
-          </Card>
-        </main>
-      </div>
-    );
-  }
+  const storeStatus = (store as any).status ?? "active";
 
   if (storeStatus === "rejected") {
     return (
@@ -333,33 +260,51 @@ function SellerDashboard() {
     <div className="min-h-screen">
       <AppHeader store={store} />
       <main className="mx-auto max-w-6xl px-4 py-10">
-        {isAdmin && storeStatus === "pending" && (
-          <div className="mb-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-            <div className="flex items-center gap-2.5">
-              <Clock className="size-5 shrink-0 animate-pulse text-amber-500" />
-              <div className="text-xs sm:text-sm text-foreground">
-                <strong>Esta loja está aguardando aprovação!</strong> Usuários comuns verão apenas a mensagem de análise até você aprová-la no painel de moderação.
-              </div>
+        {/* Banner de Boas-Vindas / Trial Liberado */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-background to-primary/10 p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-xl bg-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
+              <Sparkles className="size-5" />
             </div>
-            <Button
-              size="sm"
-              className="bg-amber-600 hover:bg-amber-700 text-white shrink-0"
-              onClick={() => setActiveTab("admin_moderation")}
-            >
-              <ShieldCheck className="size-4 mr-1.5" /> Ir para Moderação
-            </Button>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-foreground">Período de Teste Gratuito Ativo (14 Dias)</span>
+                <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 bg-emerald-500/10 text-[10px]">
+                  Acesso Total Liberado
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Cadastre seus lançamentos, compartilhe o link com colecionadores e receba sinais via PIX sem taxas.
+              </p>
+            </div>
           </div>
-        )}
+          <Button
+            size="sm"
+            className="glow font-semibold gap-1.5 shrink-0 bg-primary text-primary-foreground text-xs"
+            onClick={() => setQuickStartOpen(true)}
+          >
+            <Zap className="size-3.5" /> Cadastro Rápido (60s)
+          </Button>
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{store.name}</h1>
             <p className="text-sm text-muted-foreground font-mono">/loja/{store.slug}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => setQuickStartOpen(true)}
+            >
+              <Zap className="size-3.5 text-amber-500" /> + Miniatura Rápida
+            </Button>
             {isAdmin && (
               <Button
                 variant={activeTab === "admin_moderation" ? "default" : "outline"}
-                className="gap-2 border-amber-500/30 text-amber-600 hover:text-amber-500"
+                className="gap-2 border-amber-500/30 text-amber-600 hover:text-amber-500 text-xs"
                 onClick={() => setActiveTab("admin_moderation")}
               >
                 <ShieldCheck className="size-4" /> Moderação ({activeTab === "admin_moderation" ? "Aberta" : "Admin"})
@@ -368,6 +313,8 @@ function SellerDashboard() {
 
             <Button
               variant="secondary"
+              size="sm"
+              className="text-xs"
               onClick={() => {
                 navigator.clipboard.writeText(
                   `${window.location.origin}/auth?loja=${store.id}&next=/loja/${store.slug}`,
@@ -375,10 +322,17 @@ function SellerDashboard() {
                 toast.success("Link de convite da loja copiado!");
               }}
             >
-              <Copy className="size-4" /> Link de convite
+              <Copy className="size-3.5 mr-1" /> Link de convite
             </Button>
           </div>
         </div>
+
+        <QuickStartModal
+          open={quickStartOpen}
+          onOpenChange={setQuickStartOpen}
+          store={store}
+          onSuccess={() => queryClient.invalidateQueries()}
+        />
 
         <SmartNotifications products={products ?? []} orders={orders ?? []} />
 
@@ -390,6 +344,11 @@ function SellerDashboard() {
             <TabsTrigger value="loja" className="gap-1.5 text-xs sm:text-sm">
               <Palette className="size-3.5" /> Personalização
             </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="admin_moderation" className="gap-1.5 text-xs sm:text-sm text-amber-600">
+                <ShieldCheck className="size-3.5" /> Moderação
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="produtos" className="mt-5">
@@ -420,7 +379,7 @@ function SellerDashboard() {
   );
 }
 
-function CreateStore({ userId, onCreated, isAdmin }: { userId: string; onCreated: () => void; isAdmin?: boolean }) {
+function CreateStore({ userId, onCreated }: { userId: string; onCreated: () => void; isAdmin?: boolean }) {
   const [name, setName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [description, setDescription] = useState("");
@@ -434,7 +393,6 @@ function CreateStore({ userId, onCreated, isAdmin }: { userId: string; onCreated
 
     setSaving(true);
 
-    // Verificar se já existe uma loja cadastrada com o mesmo slug
     const { data: existing } = await supabase
       .from("stores")
       .select("id")
@@ -446,7 +404,7 @@ function CreateStore({ userId, onCreated, isAdmin }: { userId: string; onCreated
       return toast.error("Já existe uma loja cadastrada com este nome. Por favor, escolha outro nome para sua loja.");
     }
 
-    const initialStatus = isAdmin ? "active" : "pending";
+    const initialStatus = "active";
 
     const insertPayload: any = {
       owner_id: userId,
@@ -459,7 +417,6 @@ function CreateStore({ userId, onCreated, isAdmin }: { userId: string; onCreated
 
     let { error } = await supabase.from("stores").insert(insertPayload);
 
-    // Fallback caso a coluna status ainda não tenha sido criada no banco Supabase
     if (error && (error.code === "PGRST204" || error.message?.includes("status"))) {
       delete insertPayload.status;
       const retry = await supabase.from("stores").insert(insertPayload);
@@ -469,11 +426,7 @@ function CreateStore({ userId, onCreated, isAdmin }: { userId: string; onCreated
     setSaving(false);
     if (error) return toast.error("Não foi possível criar a loja.");
     
-    if (initialStatus === "pending") {
-      toast.success("Solicitação enviada! Sua loja está aguardando aprovação do administrador.");
-    } else {
-      toast.success("Loja criada e ativada!");
-    }
+    toast.success("🎉 Loja criada com sucesso! Período de teste liberado.");
     onCreated();
   }
 
@@ -538,13 +491,11 @@ function AdminModerationPanel() {
         .order("created_at", { ascending: false });
       if (error) throw error;
 
-      // Buscar dados de perfil dos donos das lojas
       const ownerIds = [...new Set((data ?? []).map((s) => s.owner_id))];
       const { data: profiles } = ownerIds.length
         ? await supabase.from("profiles").select("id, name, email, phone").in("id", ownerIds)
         : { data: [] };
         
-      // Buscar pedidos para calcular vendas
       const storeIds = (data ?? []).map(s => s.id);
       const { data: orders } = storeIds.length
         ? await supabase.from("orders").select("store_id, total_price, payment_status, products(*)").in("store_id", storeIds)
@@ -589,7 +540,6 @@ function AdminModerationPanel() {
       .eq("id", storeId)
       .select();
 
-    // Se falhar porque a coluna rejection_reason não existe na tabela stores remota:
     if (error && (error.code === "PGRST204" || error.message?.includes("rejection_reason"))) {
       delete updatePayload.rejection_reason;
       const retry = await supabase
@@ -864,4 +814,3 @@ function AdminModerationPanel() {
     </div>
   );
 }
-
