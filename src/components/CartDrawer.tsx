@@ -49,7 +49,10 @@ export function CartDrawer() {
           if (item.unitPriceForChosenOption && item.unitPriceForChosenOption > 0) {
             updatePayload.total_price = item.unitPriceForChosenOption;
           }
-          if (item.hasNoSignal) {
+          if (item.isProntaEntrega) {
+            updatePayload.payment_status = "pronta_entrega";
+            updatePayload.reservation_expires_at = null;
+          } else if (item.hasNoSignal) {
             updatePayload.payment_status = "sem_sinal";
             updatePayload.reservation_expires_at = null;
           }

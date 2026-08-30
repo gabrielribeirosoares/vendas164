@@ -1,7 +1,7 @@
+import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Clock, Copy, Loader2, Palette, ShieldAlert, ShieldCheck, XCircle, Zap, Sparkles } from "lucide-react";
+import { CheckCircle2, Clock, Copy, Loader2, Package, Palette, ShieldAlert, ShieldCheck, XCircle, Zap, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { PhoneInput } from "@/components/PhoneInput";
@@ -42,10 +42,10 @@ export const Route = createFileRoute("/_authenticated/vendedor")({
       {
         name: "description",
         content:
-          "Gerencie pré-vendas, unidades, sinais recebidos, saldo a receber e a identidade da sua loja.",
+          "Gerencie pré-vendas, pronta entrega, unidades, sinais recebidos, saldo a receber e a identidade da sua loja.",
       },
       { property: "og:title", content: "Painel do lojista" },
-      { property: "og:description", content: "Gestão completa de pré-vendas de miniaturas." },
+      { property: "og:description", content: "Gestão completa de pré-vendas e pronta entrega de miniaturas." },
     ],
   }),
   component: SellerDashboard,
@@ -74,6 +74,22 @@ function SellerDashboard() {
     },
   });
 
+  useEffect(() => {
+    if (store?.name) {
+      if (activeTab === "reservas") {
+        document.title = `${store.name} — Reservas`;
+      } else if (activeTab === "loja") {
+        document.title = `${store.name} — Personalização`;
+      } else if (activeTab === "pronta_entrega") {
+        document.title = `${store.name} — Pronta Entrega`;
+      } else if (activeTab === "clientes") {
+        document.title = `${store.name} — Clientes`;
+      } else {
+        document.title = `${store.name} — Pré-vendas`;
+      }
+    }
+  }, [store?.name, activeTab]);
+
   const { data: profile } = useQuery({
     queryKey: ["my-profile-admin", user?.id],
     enabled: !!user,
@@ -83,7 +99,7 @@ function SellerDashboard() {
     },
   });
 
-  // Verificar se o usuário atual é SuperAdmin
+  // Verificar se o usuário atual é SuperAdmin (gabrielribeirosoares@hotmail.com)
   const isAdmin =
     (profile as any)?.is_admin === true ||
     user?.id === "5fb17599-28a0-4c1c-92cf-38176f7d57a2" ||
@@ -172,18 +188,6 @@ function SellerDashboard() {
   }, [orders]);
 
   useEffect(() => {
-    if (store?.name) {
-      if (activeTab === "reservas") {
-        document.title = `${store.name} — Reservas`;
-      } else if (activeTab === "loja") {
-        document.title = `${store.name} — Personalização`;
-      } else {
-        document.title = `${store.name} — Estoque e pré-vendas`;
-      }
-    }
-  }, [store?.name, activeTab]);
-
-  useEffect(() => {
     if (products && products.length === 0 && store?.id) {
       const key = `qs_auto_opened_${store.id}`;
       if (!sessionStorage.getItem(key)) {
@@ -217,7 +221,7 @@ function SellerDashboard() {
     return (
       <div className="min-h-screen">
         <AppHeader />
-        <CreateStore onCreated={() => queryClient.invalidateQueries()} userId={user.id} isAdmin={isAdmin} />
+        <CreateStore onCreated={() => queryClient.invalidateQueries()} userId={user.id} />
       </div>
     );
   }
@@ -274,7 +278,7 @@ function SellerDashboard() {
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Cadastre seus lançamentos, compartilhe o link com colecionadores e receba sinais via PIX sem taxas.
+                Cadastre seus lançamentos e pronta entrega, compartilhe o link com colecionadores e receba pagamentos via PIX sem taxas.
               </p>
             </div>
           </div>
@@ -338,7 +342,12 @@ function SellerDashboard() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-10">
           <TabsList className="hidden md:flex w-full overflow-x-auto justify-start sm:justify-center whitespace-nowrap p-1 max-w-full bg-muted/30">
-            <TabsTrigger value="produtos" className="text-xs sm:text-sm">Estoque e pré-vendas</TabsTrigger>
+            <TabsTrigger value="produtos" className="gap-1.5 text-xs sm:text-sm">
+              <Package className="size-3.5" /> Pré-vendas
+            </TabsTrigger>
+            <TabsTrigger value="pronta_entrega" className="gap-1.5 text-xs sm:text-sm text-emerald-600 dark:text-emerald-400 font-semibold">
+              <Zap className="size-3.5 fill-emerald-500 text-emerald-500" /> Pronta Entrega
+            </TabsTrigger>
             <TabsTrigger value="reservas" className="text-xs sm:text-sm">Reservas</TabsTrigger>
             <TabsTrigger value="clientes" className="text-xs sm:text-sm">Clientes</TabsTrigger>
             <TabsTrigger value="loja" className="gap-1.5 text-xs sm:text-sm">
@@ -352,7 +361,11 @@ function SellerDashboard() {
           </TabsList>
 
           <TabsContent value="produtos" className="mt-5">
-            <ProductsTab store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} />
+            <ProductsTab mode="pre_venda" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} />
+          </TabsContent>
+
+          <TabsContent value="pronta_entrega" className="mt-5">
+            <ProductsTab mode="pronta_entrega" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} />
           </TabsContent>
 
           <TabsContent value="reservas" className="mt-5 space-y-6">

@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, getProductSignalAmount, whatsappLink } from "@/lib/format";
+import { brl, getProductSignalAmount, isProntaEntrega, whatsappLink } from "@/lib/format";
 import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 
@@ -402,6 +402,7 @@ function CustomerDashboardContent() {
                     {(() => {
                       const signalInfo = getProductSignalAmount(o.products, qty);
                       const expectedSignal = signalInfo.amount;
+                      const isPronta = o.payment_status === "pronta_entrega" || isProntaEntrega(o.products);
                       const isAguardando = o.payment_status === "aguardando_sinal";
                       const isSinalPago = o.payment_status === "sinal_pago";
                       const isQuitado = o.payment_status === "quitado";
@@ -432,6 +433,15 @@ function CustomerDashboardContent() {
                             <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
                               Totalmente Quitado
                             </p>
+                          ) : o.payment_status === "pronta_entrega" || isPronta ? (
+                            <>
+                              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                                Pronta Entrega
+                              </p>
+                              <p className="text-sm font-bold text-foreground">
+                                Total a pagar: {brl(Number(o.total_price) * qty)}
+                              </p>
+                            </>
                           ) : isSemSinal ? (
                             <>
                               <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
@@ -452,11 +462,14 @@ function CustomerDashboardContent() {
                       const isAguardando = o.payment_status === "aguardando_sinal";
                       const signalInfo = getProductSignalAmount(o.products, qty);
                       const expectedSignal = signalInfo.amount;
-                      const msg = o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada"
-                        ? `Olá, gostaria de acompanhar minha reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`
-                        : isAguardando
-                          ? `Olá, segue o comprovante do sinal de ${brl(expectedSignal)} da reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`
-                          : `Olá, segue o comprovante da reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`;
+                      const isPronta = o.payment_status === "pronta_entrega" || isProntaEntrega(o.products);
+                      const msg = o.payment_status === "pronta_entrega" || isPronta
+                        ? `Olá, gostaria de combinar o pagamento/envio da minha compra a pronta entrega de ${qty}x ${o.products?.brand} ${o.products?.model}.`
+                        : o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada"
+                          ? `Olá, gostaria de acompanhar minha reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`
+                          : isAguardando
+                            ? `Olá, segue o comprovante do sinal de ${brl(expectedSignal)} da reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`
+                            : `Olá, segue o comprovante da reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`;
 
                       return (
                         <Button asChild variant="secondary" size="sm" className="w-full lg:w-auto">
@@ -466,7 +479,7 @@ function CustomerDashboardContent() {
                             rel="noreferrer"
                           >
                             <MessageCircle className="size-4" />
-                            {o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada" ? "Falar com a loja" : "Comprovante"}
+                            {o.payment_status === "pronta_entrega" || isPronta ? "Falar com a loja" : o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada" ? "Falar com a loja" : "Comprovante"}
                           </a>
                         </Button>
                       );

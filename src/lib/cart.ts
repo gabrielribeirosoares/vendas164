@@ -16,6 +16,7 @@ export interface CartItem {
   downPaymentToPay: number;
   remainingBalance: number;
   hasNoSignal: boolean;
+  isProntaEntrega?: boolean;
   productSnapshot: {
     model: string;
     brand: string;

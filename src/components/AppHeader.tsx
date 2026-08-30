@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Car, ChevronDown, LogOut, Menu, Palette, Store as StoreIcon, User } from "lucide-react";
+import { Car, ChevronDown, LogOut, Menu, Package, Palette, Store as StoreIcon, User, Zap } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -197,7 +197,12 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                                 <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 px-2">Minha Loja</h4>
                                 <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
                                   <Link to="/vendedor" search={{ tab: 'produtos' }}>
-                                    <StoreIcon className="size-4 text-emerald-500" /> Estoque e Pré-vendas
+                                    <Package className="size-4 text-amber-500" /> Pré-vendas
+                                  </Link>
+                                </Button>
+                                <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
+                                  <Link to="/vendedor" search={{ tab: 'pronta_entrega' }}>
+                                    <Zap className="size-4 text-emerald-500 fill-emerald-500" /> Pronta Entrega
                                   </Link>
                                 </Button>
                                 <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
