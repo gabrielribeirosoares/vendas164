@@ -59,6 +59,7 @@ function SellerDashboard() {
   const activeTab = search.tab || "produtos";
   const setActiveTab = (tab: string) => navigate({ search: { tab }, replace: true });
   const [quickStartOpen, setQuickStartOpen] = useState(false);
+  const [trialDismissed, setTrialDismissed] = useState(false);
 
   const { data: store, isLoading } = useQuery({
     queryKey: ["my-store", user?.id],
@@ -73,6 +74,27 @@ function SellerDashboard() {
       return data;
     },
   });
+
+  const { isTrialActive, daysRemaining } = useMemo(() => {
+    if (!store?.created_at) return { isTrialActive: false, daysRemaining: 0 };
+    const createdTime = new Date(store.created_at).getTime();
+    const now = Date.now();
+    const diffDays = (now - createdTime) / (1000 * 60 * 60 * 24);
+    const remaining = Math.max(0, Math.ceil(14 - diffDays));
+    return {
+      isTrialActive: diffDays <= 14,
+      daysRemaining: remaining,
+    };
+  }, [store?.created_at]);
+
+  const showTrialBanner = isTrialActive && !trialDismissed && !localStorage.getItem(`dismiss_trial_${store?.id}`);
+
+  const handleDismissTrial = () => {
+    if (store?.id) {
+      localStorage.setItem(`dismiss_trial_${store.id}`, "true");
+    }
+    setTrialDismissed(true);
+  };
 
   useEffect(() => {
     if (store?.name) {
@@ -259,29 +281,6 @@ function SellerDashboard() {
       </div>
     );
   }
-
-  const [trialDismissed, setTrialDismissed] = useState(false);
-
-  const { isTrialActive, daysRemaining } = useMemo(() => {
-    if (!store?.created_at) return { isTrialActive: false, daysRemaining: 0 };
-    const createdTime = new Date(store.created_at).getTime();
-    const now = Date.now();
-    const diffDays = (now - createdTime) / (1000 * 60 * 60 * 24);
-    const remaining = Math.max(0, Math.ceil(14 - diffDays));
-    return {
-      isTrialActive: diffDays <= 14,
-      daysRemaining: remaining,
-    };
-  }, [store?.created_at]);
-
-  const showTrialBanner = isTrialActive && !trialDismissed && !localStorage.getItem(`dismiss_trial_${store?.id}`);
-
-  const handleDismissTrial = () => {
-    if (store?.id) {
-      localStorage.setItem(`dismiss_trial_${store.id}`, "true");
-    }
-    setTrialDismissed(true);
-  };
 
   return (
     <div className="min-h-screen">
