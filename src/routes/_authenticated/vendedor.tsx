@@ -326,7 +326,7 @@ function SellerDashboard() {
     return (
       <div className="min-h-screen">
         <AppHeader />
-        <CreateStore onCreated={() => queryClient.invalidateQueries()} userId={user.id} />
+        <CreateStore onCreated={() => queryClient.invalidateQueries()} userId={user.id} userEmail={user.email} />
       </div>
     );
   }
@@ -490,9 +490,11 @@ function SellerDashboard() {
   );
 }
 
-function CreateStore({ userId, onCreated }: { userId: string; onCreated: () => void; isAdmin?: boolean }) {
+function CreateStore({ userId, userEmail, onCreated }: { userId: string; userEmail?: string; onCreated: () => void; isAdmin?: boolean }) {
   const [name, setName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
+  const [contactEmail, setContactEmail] = useState(userEmail || "");
+  const [contactInstagram, setContactInstagram] = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -519,11 +521,17 @@ function CreateStore({ userId, onCreated }: { userId: string; onCreated: () => v
     const targetDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
     const initialStatus = `trial:${targetDate}`;
 
+    const formattedInstagram = contactInstagram.trim()
+      ? (contactInstagram.trim().startsWith("@") ? contactInstagram.trim() : `@${contactInstagram.trim()}`)
+      : null;
+
     const insertPayload: any = {
       owner_id: userId,
       name: cleanName,
       slug: cleanSlug,
-      whatsapp_number: whatsapp.trim(),
+      whatsapp_number: whatsapp.trim() || null,
+      contact_email: contactEmail.trim() || null,
+      contact_instagram: formattedInstagram,
       description: description.trim() || null,
       status: initialStatus,
     };
@@ -557,12 +565,14 @@ function CreateStore({ userId, onCreated }: { userId: string; onCreated: () => v
                 id="store-name"
                 required
                 maxLength={60}
+                placeholder="Ex: Garagem Diecast 1:64"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="store-whats">WhatsApp da loja</Label>
+              <Label htmlFor="store-whats">WhatsApp de Atendimento</Label>
               <PhoneInput
                 id="store-whats"
                 required
@@ -570,16 +580,41 @@ function CreateStore({ userId, onCreated }: { userId: string; onCreated: () => v
                 onChange={setWhatsapp}
               />
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="store-email">E-mail de Contato</Label>
+                <Input
+                  id="store-email"
+                  type="email"
+                  placeholder="contato@sualoja.com"
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="store-insta">Perfil do Instagram</Label>
+                <Input
+                  id="store-insta"
+                  placeholder="@sualoja"
+                  value={contactInstagram}
+                  onChange={(e) => setContactInstagram(e.target.value)}
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="store-desc">Descrição</Label>
               <Textarea
                 id="store-desc"
                 maxLength={280}
+                placeholder="Conte um pouco sobre sua loja e quais marcas você comercializa..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
             </div>
-            <Button type="submit" className="w-full" disabled={saving}>
+
+            <Button type="submit" className="w-full font-bold" disabled={saving}>
               {saving && <Loader2 className="size-4 animate-spin" />} Criar loja
             </Button>
           </form>
