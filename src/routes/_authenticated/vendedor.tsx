@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { PhoneInput } from "@/components/PhoneInput";
 import { getCustomerFromCache } from "@/lib/customerCache";
-import { QuickStartModal } from "@/components/vendedor/QuickStartModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -58,7 +57,6 @@ function SellerDashboard() {
   const search = Route.useSearch() as { tab?: string };
   const activeTab = search.tab || "produtos";
   const setActiveTab = (tab: string) => navigate({ search: { tab }, replace: true });
-  const [quickStartOpen, setQuickStartOpen] = useState(false);
   const [trialDismissed, setTrialDismissed] = useState(false);
 
   const { data: store, isLoading } = useQuery({
@@ -209,16 +207,6 @@ function SellerDashboard() {
       .slice(0, 5);
   }, [orders]);
 
-  useEffect(() => {
-    if (products && products.length === 0 && store?.id) {
-      const key = `qs_auto_opened_${store.id}`;
-      if (!sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, "true");
-        setQuickStartOpen(true);
-      }
-    }
-  }, [products, store?.id]);
-
   if (sessionLoading || isLoading) {
     return (
       <div className="min-h-screen">
@@ -305,23 +293,14 @@ function SellerDashboard() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                className="glow font-semibold gap-1.5 shrink-0 bg-primary text-primary-foreground text-xs"
-                onClick={() => setQuickStartOpen(true)}
-              >
-                <Zap className="size-3.5" /> Cadastro Rápido (60s)
-              </Button>
-              <button
-                type="button"
-                onClick={handleDismissTrial}
-                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted/40 transition-colors"
-                title="Fechar aviso"
-              >
-                <XCircle className="size-4" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleDismissTrial}
+              className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted/40 transition-colors"
+              title="Fechar aviso"
+            >
+              <XCircle className="size-4" />
+            </button>
           </div>
         )}
 
@@ -331,14 +310,6 @@ function SellerDashboard() {
             <p className="text-sm text-muted-foreground font-mono">/loja/{store.slug}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs"
-              onClick={() => setQuickStartOpen(true)}
-            >
-              <Zap className="size-3.5 text-amber-500" /> + Miniatura Rápida
-            </Button>
             {isAdmin && (
               <Button
                 variant={activeTab === "admin_moderation" ? "default" : "outline"}
@@ -364,13 +335,6 @@ function SellerDashboard() {
             </Button>
           </div>
         </div>
-
-        <QuickStartModal
-          open={quickStartOpen}
-          onOpenChange={setQuickStartOpen}
-          store={store}
-          onSuccess={() => queryClient.invalidateQueries()}
-        />
 
         <SmartNotifications products={products ?? []} orders={orders ?? []} />
 
