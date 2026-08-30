@@ -382,7 +382,9 @@ function StorePageContent() {
     );
   }
 
-  if (storeStatus !== "active" && !isOwner) {
+  const isPubliclyAvailable = storeStatus === "active" || storeStatus === "subscriber" || storeStatus === "trial" || storeStatus.startsWith("trial:");
+
+  if (!isPubliclyAvailable && !isOwner) {
     return (
       <div className="min-h-screen">
         <AppHeader />

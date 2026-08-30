@@ -1,7 +1,21 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Clock, Copy, Loader2, Package, Palette, ShieldAlert, ShieldCheck, XCircle, Zap, Sparkles } from "lucide-react";
+import {
+  Copy,
+  Loader2,
+  Package,
+  Palette,
+  ShieldAlert,
+  ShieldCheck,
+  XCircle,
+  Zap,
+  Sparkles,
+  Settings,
+  Crown,
+  Calendar,
+  Plus,
+} from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { PhoneInput } from "@/components/PhoneInput";
@@ -28,6 +42,95 @@ import { ClientsTab } from "@/components/vendedor/ClientsManager";
 import { SmartNotifications } from "@/components/vendedor/SmartNotifications";
 import { ProductsTab } from "@/components/vendedor/ProductManager";
 import { SellerOverview } from "@/components/vendedor/SellerOverview";
+
+export function parseStoreSubscription(store: any) {
+  const status = store?.status;
+
+  // Assinante ativo permanente (definido pelo admin ou status 'active')
+  if (status === "subscriber" || status === "active" || status === "active_subscriber") {
+    return {
+      type: "subscriber" as const,
+      isSubscriber: true,
+      isTrial: false,
+      isRejected: false,
+      isPending: false,
+      daysRemaining: 0,
+      expiredDays: 0,
+      label: "Assinante Ativo",
+      badgeColor: "emerald",
+    };
+  }
+
+  if (status === "rejected" || status === "suspended") {
+    return {
+      type: "rejected" as const,
+      isSubscriber: false,
+      isTrial: false,
+      isRejected: true,
+      isPending: false,
+      daysRemaining: 0,
+      expiredDays: 0,
+      label: "Suspenso / Bloqueado",
+      badgeColor: "destructive",
+    };
+  }
+
+  if (status === "pending") {
+    return {
+      type: "pending" as const,
+      isSubscriber: false,
+      isTrial: false,
+      isRejected: false,
+      isPending: true,
+      daysRemaining: 0,
+      expiredDays: 0,
+      label: "Aguardando Aprovação",
+      badgeColor: "amber",
+    };
+  }
+
+  // Se for trial com data personalizada (ex: "trial:2026-09-30") ou "trial"
+  let expiryTime: number;
+  if (typeof status === "string" && status.startsWith("trial:")) {
+    const dateStr = status.replace("trial:", "");
+    expiryTime = new Date(`${dateStr}T23:59:59`).getTime();
+  } else {
+    // Trial padrão de 14 dias a partir de created_at
+    const createdTime = store?.created_at ? new Date(store.created_at).getTime() : Date.now();
+    expiryTime = createdTime + 14 * 24 * 60 * 60 * 1000;
+  }
+
+  const now = Date.now();
+  const diffDays = (expiryTime - now) / (1000 * 60 * 60 * 24);
+  const remaining = Math.max(0, Math.ceil(diffDays));
+
+  if (remaining > 0) {
+    return {
+      type: "trial" as const,
+      isSubscriber: false,
+      isTrial: true,
+      isRejected: false,
+      isPending: false,
+      daysRemaining: remaining,
+      expiredDays: 0,
+      label: `Trial: ${remaining}d restantes`,
+      badgeColor: "emerald",
+    };
+  }
+
+  const expiredAgo = Math.max(1, Math.ceil(-diffDays));
+  return {
+    type: "expired" as const,
+    isSubscriber: false,
+    isTrial: false,
+    isRejected: false,
+    isPending: false,
+    daysRemaining: 0,
+    expiredDays: expiredAgo,
+    label: `Trial Expirado (+${expiredAgo}d)`,
+    badgeColor: "amber",
+  };
+}
 
 export const Route = createFileRoute("/_authenticated/vendedor")({
   validateSearch: (search) => {
@@ -73,19 +176,11 @@ function SellerDashboard() {
     },
   });
 
-  const { isTrialActive, daysRemaining } = useMemo(() => {
-    if (!store?.created_at) return { isTrialActive: false, daysRemaining: 0 };
-    const createdTime = new Date(store.created_at).getTime();
-    const now = Date.now();
-    const diffDays = (now - createdTime) / (1000 * 60 * 60 * 24);
-    const remaining = Math.max(0, Math.ceil(14 - diffDays));
-    return {
-      isTrialActive: diffDays <= 14,
-      daysRemaining: remaining,
-    };
-  }, [store?.created_at]);
+  const subInfo = useMemo(() => {
+    return parseStoreSubscription(store);
+  }, [store]);
 
-  const showTrialBanner = isTrialActive && !trialDismissed && !localStorage.getItem(`dismiss_trial_${store?.id}`);
+  const showTrialBanner = subInfo.isTrial && !trialDismissed && !localStorage.getItem(`dismiss_trial_${store?.id}`);
 
   const handleDismissTrial = () => {
     if (store?.id) {
@@ -236,9 +331,7 @@ function SellerDashboard() {
     );
   }
 
-  const storeStatus = (store as any).status ?? "active";
-
-  if (storeStatus === "rejected") {
+  if (subInfo.isRejected) {
     return (
       <div className="min-h-screen">
         <AppHeader store={store} />
@@ -248,20 +341,20 @@ function SellerDashboard() {
               <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-destructive/10 text-destructive mb-2">
                 <ShieldAlert className="size-8" />
               </div>
-              <CardTitle className="text-2xl font-bold text-destructive">Solicitação Não Aprovada</CardTitle>
+              <CardTitle className="text-2xl font-bold text-destructive">Loja Suspensa / Não Aprovada</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-center">
               <p className="text-muted-foreground text-sm">
-                Infelizmente a solicitação de abertura da loja <strong>{store.name}</strong> não foi aprovada pelo administrador.
+                A loja <strong>{store.name}</strong> está suspensa ou desativada pelo administrador.
               </p>
               {(store as any).rejection_reason && (
                 <div className="rounded-xl border border-destructive/20 bg-background/60 p-4 text-left">
-                  <p className="text-xs font-semibold text-destructive uppercase tracking-wider mb-1">Motivo da recusa:</p>
+                  <p className="text-xs font-semibold text-destructive uppercase tracking-wider mb-1">Observação do Administrador:</p>
                   <p className="text-sm text-foreground">{(store as any).rejection_reason}</p>
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                Entre em contato com o suporte do site se precisar de mais detalhes ou para solicitar um novo envio.
+                Entre em contato com o suporte do site se precisar de mais detalhes ou para regularizar sua conta.
               </p>
             </CardContent>
           </Card>
@@ -274,7 +367,7 @@ function SellerDashboard() {
     <div className="min-h-screen">
       <AppHeader store={store} />
       <main className="mx-auto max-w-6xl px-4 py-10">
-        {/* Banner de Boas-Vindas / Trial Liberado (Apenas nos primeiros 14 dias para novas lojas) */}
+        {/* Banner de Boas-Vindas / Trial Liberado (Apenas se estiver em Trial) */}
         {showTrialBanner && (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-background to-primary/10 p-4 shadow-sm relative">
             <div className="flex items-center gap-3 pr-6 sm:pr-0">
@@ -283,7 +376,7 @@ function SellerDashboard() {
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-sm text-foreground">Período de Teste Gratuito ({daysRemaining} {daysRemaining === 1 ? "dia restante" : "dias restantes"})</span>
+                  <span className="font-bold text-sm text-foreground">Período de Teste Gratuito ({subInfo.daysRemaining} {subInfo.daysRemaining === 1 ? "dia restante" : "dias restantes"})</span>
                   <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 bg-emerald-500/10 text-[10px]">
                     Acesso Total Liberado
                   </Badge>
@@ -306,7 +399,14 @@ function SellerDashboard() {
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">{store.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight">{store.name}</h1>
+              {subInfo.isSubscriber && (
+                <Badge className="bg-emerald-600 text-white gap-1 text-[11px] font-semibold">
+                  <Crown className="size-3" /> Assinante Pro
+                </Badge>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground font-mono">/loja/{store.slug}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
@@ -415,7 +515,9 @@ function CreateStore({ userId, onCreated }: { userId: string; onCreated: () => v
       return toast.error("Já existe uma loja cadastrada com este nome. Por favor, escolha outro nome para sua loja.");
     }
 
-    const initialStatus = "active";
+    // Calcula 14 dias a partir de hoje para o trial
+    const targetDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const initialStatus = `trial:${targetDate}`;
 
     const insertPayload: any = {
       owner_id: userId,
@@ -437,7 +539,7 @@ function CreateStore({ userId, onCreated }: { userId: string; onCreated: () => v
     setSaving(false);
     if (error) return toast.error("Não foi possível criar a loja.");
     
-    toast.success("🎉 Loja criada com sucesso! Período de teste liberado.");
+    toast.success("🎉 Loja criada com sucesso! Período de teste de 14 dias liberado.");
     onCreated();
   }
 
@@ -489,9 +591,14 @@ function CreateStore({ userId, onCreated }: { userId: string; onCreated: () => v
 
 function AdminModerationPanel() {
   const queryClient = useQueryClient();
-  const [rejectingStore, setRejectingStore] = useState<any>(null);
-  const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Estado do Modal de Gerenciamento de Assinatura e Dias de Teste
+  const [managingStore, setManagingStore] = useState<any>(null);
+  const [selectedPlanType, setSelectedPlanType] = useState<"subscriber" | "trial" | "rejected">("subscriber");
+  const [customDays, setCustomDays] = useState<number>(14);
+  const [customExpiryDate, setCustomExpiryDate] = useState<string>("");
+  const [adminNote, setAdminNote] = useState<string>("");
 
   const { data: allStores, isLoading } = useQuery({
     queryKey: ["admin-all-stores"],
@@ -537,27 +644,56 @@ function AdminModerationPanel() {
     },
   });
 
-  async function updateStoreStatus(storeId: string, status: "active" | "rejected", rejectionReason?: string) {
+  const openManageModal = (st: any) => {
+    setManagingStore(st);
+    const sub = parseStoreSubscription(st);
+    if (sub.isSubscriber) {
+      setSelectedPlanType("subscriber");
+    } else if (sub.isRejected) {
+      setSelectedPlanType("rejected");
+    } else {
+      setSelectedPlanType("trial");
+    }
+    setCustomDays(14);
+    const targetDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    setCustomExpiryDate(targetDate);
+    setAdminNote(st.rejection_reason || "");
+  };
+
+  const handleAddDays = (days: number) => {
+    setCustomDays(days);
+    const targetDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    setCustomExpiryDate(targetDate);
+  };
+
+  async function saveStoreSubscription() {
+    if (!managingStore) return;
     setSubmitting(true);
 
-    const updatePayload: any = { status };
-    if (rejectionReason) {
-      updatePayload.rejection_reason = rejectionReason;
+    let newStatus = "active";
+    if (selectedPlanType === "subscriber") {
+      newStatus = "active"; // Assinante Ativo permanente
+    } else if (selectedPlanType === "rejected") {
+      newStatus = "rejected";
+    } else if (selectedPlanType === "trial") {
+      const dateToSave = customExpiryDate || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      newStatus = `trial:${dateToSave}`;
+    }
+
+    const updatePayload: any = { status: newStatus };
+    if (adminNote.trim()) {
+      updatePayload.rejection_reason = adminNote.trim();
     }
 
     let { error, data } = await supabase
       .from("stores")
       .update(updatePayload)
-      .eq("id", storeId)
+      .eq("id", managingStore.id)
       .select();
 
     if (error && (error.code === "PGRST204" || error.message?.includes("rejection_reason"))) {
       delete updatePayload.rejection_reason;
-      const retry = await supabase
-        .from("stores")
-        .update(updatePayload)
-        .eq("id", storeId)
-        .select();
+      const retry = await supabase.from("stores").update(updatePayload).eq("id", managingStore.id).select();
       error = retry.error;
       data = retry.data;
     }
@@ -565,40 +701,27 @@ function AdminModerationPanel() {
     setSubmitting(false);
 
     if (error) {
-      console.error("Erro detalhado do Supabase:", error);
-      toast.error(`Não foi possível atualizar a loja: ${error.message || "Erro de permissão no Supabase"}`);
+      toast.error(`Erro ao atualizar assinatura: ${error.message}`);
       return;
     }
 
     if (!data || data.length === 0) {
-      toast.error("A alteração foi bloqueada pelas políticas de segurança (RLS) do Supabase.");
+      toast.error("Alteração bloqueada pelo Supabase.");
       return;
     }
 
-    toast.success(status === "active" ? "Loja APROVADA com sucesso!" : "Solicitação RECUSADA.");
-    setRejectingStore(null);
-    setReason("");
+    toast.success(`Loja "${managingStore.name}" atualizada com sucesso!`);
+    setManagingStore(null);
     queryClient.invalidateQueries();
   }
 
-  function getStoreTrialInfo(createdAt: string) {
-    if (!createdAt) return { isTrial: false, remaining: 0, expiredDays: 0, label: "N/A" };
-    const createdTime = new Date(createdAt).getTime();
-    const diffDays = (Date.now() - createdTime) / (1000 * 60 * 60 * 24);
-    const remaining = Math.max(0, Math.ceil(14 - diffDays));
-    if (remaining > 0) {
-      return { isTrial: true, remaining, expiredDays: 0, label: `${remaining}d restantes` };
-    }
-    const expiredDays = Math.max(1, Math.floor(diffDays - 14));
-    return { isTrial: false, remaining: 0, expiredDays, label: `Expirado (+${expiredDays}d)` };
-  }
+  const allStoresList = allStores ?? [];
+  const rejectedStores = allStoresList.filter((s: any) => parseStoreSubscription(s).isRejected);
+  const activeAndTrialStores = allStoresList.filter((s: any) => !parseStoreSubscription(s).isRejected);
 
-  const pendingStores = (allStores ?? []).filter((s: any) => s.status === "pending" || !s.status);
-  const activeStores = (allStores ?? []).filter((s: any) => s.status === "active");
-  const rejectedStores = (allStores ?? []).filter((s: any) => s.status === "rejected");
-
-  const trialActiveStores = activeStores.filter((s: any) => getStoreTrialInfo(s.created_at).isTrial);
-  const trialExpiredStores = activeStores.filter((s: any) => !getStoreTrialInfo(s.created_at).isTrial);
+  const subscribersCount = allStoresList.filter((s: any) => parseStoreSubscription(s).isSubscriber).length;
+  const trialActiveCount = allStoresList.filter((s: any) => parseStoreSubscription(s).isTrial).length;
+  const trialExpiredCount = allStoresList.filter((s: any) => parseStoreSubscription(s).type === "expired").length;
 
   if (isLoading) {
     return (
@@ -616,154 +739,102 @@ function AdminModerationPanel() {
       <div className="grid gap-3 sm:grid-cols-4">
         <Card className="panel border-primary/30 bg-primary/5 p-4">
           <p className="text-xs font-semibold text-muted-foreground uppercase">Total de Lojas</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{(allStores ?? []).length}</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{allStoresList.length}</p>
           <p className="text-[11px] text-muted-foreground mt-1">
-            {activeStores.length} ativas · {pendingStores.length} pendentes
+            {subscribersCount} assinantes · {trialActiveCount} em teste
           </p>
         </Card>
-        <Card className="panel border-emerald-500/30 bg-emerald-500/5 p-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase">Em Teste (Trial Ativo)</p>
-          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{trialActiveStores.length}</p>
-          <p className="text-[11px] text-muted-foreground mt-1">Primeiros 14 dias liberados</p>
+        <Card className="panel border-emerald-500/40 bg-emerald-500/10 p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase">Assinantes Pagantes</p>
+            <Crown className="size-4 text-emerald-600" />
+          </div>
+          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{subscribersCount}</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Mensalidade ativa</p>
+        </Card>
+        <Card className="panel border-cyan-500/30 bg-cyan-500/5 p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase">Em Período de Teste</p>
+          <p className="text-2xl font-bold text-cyan-600 dark:text-cyan-400 mt-1">{trialActiveCount}</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Dias de teste liberados</p>
         </Card>
         <Card className="panel border-amber-500/30 bg-amber-500/5 p-4">
           <p className="text-xs font-semibold text-muted-foreground uppercase">Trial Expirado (+14d)</p>
-          <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{trialExpiredStores.length}</p>
-          <p className="text-[11px] text-muted-foreground mt-1">Prontas para fechar assinatura</p>
-        </Card>
-        <Card className="panel border-border/60 bg-card p-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase">Pendentes / Bloqueadas</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{pendingStores.length + rejectedStores.length}</p>
-          <p className="text-[11px] text-muted-foreground mt-1">{pendingStores.length} em análise · {rejectedStores.length} suspensas</p>
+          <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{trialExpiredCount}</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Prontas para fechar plano</p>
         </Card>
       </div>
 
-      <Card className="panel border-amber-500/40 bg-amber-500/5">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-xl font-bold flex items-center gap-2">
-              <ShieldCheck className="size-5 text-amber-500" /> Painel de Moderação SuperAdmin
-            </CardTitle>
-            <Badge variant="outline" className="border-amber-500/40 text-amber-600 bg-amber-500/10">
-              {pendingStores.length} {pendingStores.length === 1 ? "pendente" : "pendentes"}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-xs text-muted-foreground mb-4">
-            Aqui você controla os pedidos de autorização e acompanha o tempo de teste gratuito de cada lojista.
-          </p>
-
-          {/* LOJAS PENDENTES */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Clock className="size-4 text-amber-500" /> Solicitações Pendentes ({pendingStores.length})
-            </h3>
-
-            {pendingStores.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-4 text-center border border-dashed rounded-xl">
-                Nenhuma solicitação de nova loja pendente no momento.
-              </p>
-            ) : (
-              <div className="grid gap-3">
-                {pendingStores.map((st: any) => {
-                  const trialInfo = getStoreTrialInfo(st.created_at);
-                  return (
-                    <div
-                      key={st.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-amber-500/30 bg-background p-4 shadow-sm"
-                    >
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-base text-foreground">{st.name}</h4>
-                          <span className="font-mono text-xs text-muted-foreground">/loja/{st.slug}</span>
-                          <Badge variant="outline" className="text-[10px] py-0 border-amber-500/40 text-amber-600 bg-amber-500/10">
-                            {trialInfo.label}
-                          </Badge>
-                        </div>
-                        {st.description && <p className="text-xs text-muted-foreground line-clamp-1">{st.description}</p>}
-                        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground pt-1">
-                          <span>👤 Dono: <strong>{st.owner?.name || "Não informado"}</strong></span>
-                          <span>📧 {st.owner?.email || "Sem e-mail"}</span>
-                          {st.whatsapp_number && <span>📱 Whats: {st.whatsapp_number}</span>}
-                          <span>📅 {new Date(st.created_at).toLocaleDateString("pt-BR")}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Button
-                          size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
-                          disabled={submitting}
-                          onClick={() => updateStoreStatus(st.id, "active")}
-                        >
-                          <CheckCircle2 className="size-4" /> Aprovar Loja
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={submitting}
-                          onClick={() => setRejectingStore(st)}
-                          className="gap-1.5"
-                        >
-                          <XCircle className="size-4" /> Recusar
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* LOJAS ATIVAS */}
+      {/* PAINEL PRINCIPAL DE LOJAS */}
       <Card className="panel border-border/60">
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg font-bold">Lojas Ativas ({activeStores.length})</CardTitle>
-            <div className="flex gap-2">
-              <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 bg-emerald-500/10 text-xs">
-                {trialActiveStores.length} em teste
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-lg font-bold flex items-center gap-2">
+                <ShieldCheck className="size-5 text-primary" /> Gerenciamento de Lojas & Assinaturas ({activeAndTrialStores.length})
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Defina lojas como <strong>Assinantes Ativos</strong>, adicione mais <strong>dias de teste</strong> ou suspenda contas.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge className="bg-emerald-600 text-white text-xs gap-1">
+                <Crown className="size-3" /> {subscribersCount} Assinantes
               </Badge>
-              <Badge variant="outline" className="border-amber-500/40 text-amber-600 bg-amber-500/10 text-xs">
-                {trialExpiredStores.length} expirados
+              <Badge variant="outline" className="border-cyan-500/40 text-cyan-600 bg-cyan-500/10 text-xs">
+                {trialActiveCount} em Teste
               </Badge>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {activeStores.length === 0 ? (
+          {activeAndTrialStores.length === 0 ? (
             <p className="text-xs text-muted-foreground py-4 text-center border border-dashed rounded-xl">
-              Nenhuma loja ativa no momento.
+              Nenhuma loja cadastrada no momento.
             </p>
           ) : (
             <div className="space-y-3">
-              {activeStores.map((st: any) => {
-                const trialInfo = getStoreTrialInfo(st.created_at);
+              {activeAndTrialStores.map((st: any) => {
+                const sub = parseStoreSubscription(st);
                 const cleanPhone = (st.whatsapp_number || st.owner?.phone || "").replace(/\D/g, "");
                 const waMessage = encodeURIComponent(
-                  `Olá ${st.owner?.name || "Lojista"}! Sou o administrador do Vendas 164. Vi que sua loja (${st.name}) está cadastrada na plataforma. Como estão suas pré-vendas?`
+                  sub.isSubscriber
+                    ? `Olá ${st.owner?.name || "Lojista"}! Sou do Vendas 164. Passando para conferir como estão suas vendas da loja ${st.name}.`
+                    : `Olá ${st.owner?.name || "Lojista"}! Vi que sua loja ${st.name} está no período de teste do Vendas 164 (${sub.label}). Gostaria de tirar alguma dúvida ou fechar a assinatura mensal?`
                 );
 
                 return (
-                  <div key={st.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/40 pb-3 pt-1 text-xs">
+                  <div
+                    key={st.id}
+                    className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border p-3.5 transition-colors ${
+                      sub.isSubscriber
+                        ? "border-emerald-500/30 bg-emerald-500/5"
+                        : sub.isTrial
+                        ? "border-cyan-500/30 bg-cyan-500/5"
+                        : "border-amber-500/30 bg-amber-500/5"
+                    }`}
+                  >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-sm text-foreground">{st.name}</span>
                         <span className="text-muted-foreground font-mono text-[11px]">(/loja/{st.slug})</span>
-                        {trialInfo.isTrial ? (
-                          <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 bg-emerald-500/10 text-[10px] py-0 font-medium">
-                            🟢 Trial: {trialInfo.label}
+                        
+                        {sub.isSubscriber && (
+                          <Badge className="bg-emerald-600 text-white gap-1 text-[10px] py-0 font-bold">
+                            <Crown className="size-3" /> Assinante Ativo
                           </Badge>
-                        ) : (
+                        )}
+                        {sub.isTrial && (
+                          <Badge variant="outline" className="border-cyan-500/40 text-cyan-600 bg-cyan-500/10 text-[10px] py-0 font-medium">
+                            🟢 {sub.label}
+                          </Badge>
+                        )}
+                        {sub.type === "expired" && (
                           <Badge variant="outline" className="border-amber-500/40 text-amber-600 bg-amber-500/10 text-[10px] py-0 font-medium">
-                            🟡 Trial Expirado (+{trialInfo.expiredDays}d)
+                            🟡 {sub.label}
                           </Badge>
                         )}
                       </div>
-                      <div className="text-muted-foreground">
+                      <div className="text-muted-foreground text-xs">
                         Dono: <strong>{st.owner?.name || "N/A"}</strong> ({st.owner?.email || "Sem e-mail"})
                         {(st.whatsapp_number || st.owner?.phone) && (
                           <span className="ml-2 text-emerald-600 font-medium">
@@ -771,12 +842,12 @@ function AdminModerationPanel() {
                           </span>
                         )}
                         <span className="ml-2 text-muted-foreground/80">
-                          · Criada em: {new Date(st.created_at).toLocaleDateString("pt-BR")}
+                          · Cadastro: {new Date(st.created_at).toLocaleDateString("pt-BR")}
                         </span>
                       </div>
-                      <div className="mt-1 flex items-center gap-2">
+                      <div className="mt-1 flex items-center gap-2 text-xs">
                         <Badge variant="secondary" className="text-[10px] py-0">
-                          {st.sales?.total_orders || 0} reservas
+                          {st.sales?.total_orders || 0} pedidos
                         </Badge>
                         <Badge variant="secondary" className="text-[10px] py-0 text-emerald-600">
                           {st.sales?.has_cost ? `Lucro: ${brl(st.sales.total_profit)}` : `Vendas: ${brl(st.sales?.total_amount || 0)}`}
@@ -785,6 +856,15 @@ function AdminModerationPanel() {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="text-xs gap-1.5 bg-primary text-primary-foreground font-semibold"
+                        onClick={() => openManageModal(st)}
+                      >
+                        <Settings className="size-3.5" /> Gerenciar Assinatura / Dias
+                      </Button>
+
                       {cleanPhone && (
                         <Button
                           asChild
@@ -801,14 +881,6 @@ function AdminModerationPanel() {
                           </a>
                         </Button>
                       )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-xs text-destructive hover:bg-destructive/10"
-                        onClick={() => updateStoreStatus(st.id, "rejected", "Loja suspensa pelo administrador.")}
-                      >
-                        Suspender
-                      </Button>
                     </div>
                   </div>
                 );
@@ -819,18 +891,14 @@ function AdminModerationPanel() {
       </Card>
 
       {/* LOJAS SUSPENSAS OU RECUSADAS */}
-      <Card className="panel border-destructive/40 bg-destructive/5">
-        <CardHeader>
-          <CardTitle className="text-lg font-bold flex items-center gap-2 text-destructive">
-            <XCircle className="size-5" /> Lojas Suspensas / Recusadas ({rejectedStores.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {rejectedStores.length === 0 ? (
-            <p className="text-xs text-muted-foreground py-4 text-center border border-dashed rounded-xl">
-              Nenhuma loja suspensa ou recusada.
-            </p>
-          ) : (
+      {rejectedStores.length > 0 && (
+        <Card className="panel border-destructive/40 bg-destructive/5">
+          <CardHeader>
+            <CardTitle className="text-lg font-bold flex items-center gap-2 text-destructive">
+              <XCircle className="size-5" /> Lojas Suspensas / Bloqueadas ({rejectedStores.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             <div className="space-y-3">
               {rejectedStores.map((st: any) => (
                 <div key={st.id} className="flex items-center justify-between border-b border-border/40 pb-2 pt-1 text-xs">
@@ -843,56 +911,186 @@ function AdminModerationPanel() {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="border-destructive/40 text-destructive bg-destructive/10">
-                      Suspensa
-                    </Badge>
                     <Button
                       size="sm"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1"
-                      disabled={submitting}
-                      onClick={() => updateStoreStatus(st.id, "active")}
+                      className="text-xs gap-1.5"
+                      variant="outline"
+                      onClick={() => openManageModal(st)}
                     >
-                      <CheckCircle2 className="size-3.5" /> Reativar Loja
+                      <Settings className="size-3.5" /> Reativar / Alterar
                     </Button>
                   </div>
                 </div>
               ))}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* DIÁLOGO DE RECUSA COM MOTIVO */}
-      <Dialog open={!!rejectingStore} onOpenChange={(open) => !open && setRejectingStore(null)}>
-        <DialogContent className="max-w-md">
+      {/* MODAL DE GERENCIAMENTO DE ASSINATURA E DIAS DE TESTE */}
+      <Dialog open={!!managingStore} onOpenChange={(open) => !open && setManagingStore(null)}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Recusar Solicitação de Loja</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <Crown className="size-5 text-primary" /> Gerenciar Assinatura & Período de Teste
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">
-              Você está recusando a solicitação da loja <strong>{rejectingStore?.name}</strong>.
-            </p>
-            <div className="space-y-1.5">
-              <Label htmlFor="rej-reason">Motivo da recusa (opcional)</Label>
-              <Textarea
-                id="rej-reason"
-                placeholder="Ex: Dados cadastrais incompletos ou nome indisponível..."
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                maxLength={200}
-              />
+
+          {managingStore && (
+            <div className="space-y-5 py-2">
+              <div className="rounded-xl border border-border/60 bg-muted/40 p-3.5 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-sm text-foreground">{managingStore.name}</span>
+                  <span className="font-mono text-xs text-muted-foreground">/loja/{managingStore.slug}</span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Dono: <strong>{managingStore.owner?.name || "Não informado"}</strong> ({managingStore.owner?.email})
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Status Atual: <strong className="text-foreground">{parseStoreSubscription(managingStore).label}</strong>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Escolha o Status da Conta
+                </Label>
+
+                <div className="grid gap-2.5">
+                  {/* Opção 1: Assinante Ativo */}
+                  <div
+                    onClick={() => setSelectedPlanType("subscriber")}
+                    className={`cursor-pointer rounded-xl border p-3 flex items-start gap-3 transition-all ${
+                      selectedPlanType === "subscriber"
+                        ? "border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500"
+                        : "border-border/60 hover:bg-muted/30"
+                    }`}
+                  >
+                    <div className="size-8 rounded-lg bg-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
+                      <Crown className="size-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <strong className="text-sm text-foreground">⭐ Cliente Assinante Ativo</strong>
+                        <Badge className="bg-emerald-600 text-white text-[10px] py-0">Ilimitado</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Mensalidade paga. Acesso total permanente liberado sem avisos ou bloqueios de trial.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Opção 2: Período de Teste (Adicionar Dias) */}
+                  <div
+                    onClick={() => setSelectedPlanType("trial")}
+                    className={`cursor-pointer rounded-xl border p-3 flex items-start gap-3 transition-all ${
+                      selectedPlanType === "trial"
+                        ? "border-cyan-500 bg-cyan-500/10 ring-1 ring-cyan-500"
+                        : "border-border/60 hover:bg-muted/30"
+                    }`}
+                  >
+                    <div className="size-8 rounded-lg bg-cyan-500/20 text-cyan-600 flex items-center justify-center shrink-0 mt-0.5">
+                      <Calendar className="size-4" />
+                    </div>
+                    <div className="space-y-2 flex-1">
+                      <div>
+                        <strong className="text-sm text-foreground">🟢 Em Período de Teste (Trial)</strong>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Adicione mais dias ou defina a data limite para o lojista testar o sistema.
+                        </p>
+                      </div>
+
+                      {selectedPlanType === "trial" && (
+                        <div className="pt-2 space-y-2.5 border-t border-border/40">
+                          <span className="text-xs font-semibold text-foreground block">Adicionar dias a partir de hoje:</span>
+                          <div className="flex flex-wrap gap-2">
+                            {[
+                              { label: "+7 Dias", days: 7 },
+                              { label: "+14 Dias", days: 14 },
+                              { label: "+30 Dias (1 Mês)", days: 30 },
+                              { label: "+60 Dias", days: 60 },
+                            ].map((btn) => (
+                              <Button
+                                key={btn.days}
+                                type="button"
+                                size="sm"
+                                variant={customDays === btn.days ? "default" : "outline"}
+                                className="text-xs gap-1"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAddDays(btn.days);
+                                }}
+                              >
+                                <Plus className="size-3" /> {btn.label}
+                              </Button>
+                            ))}
+                          </div>
+
+                          <div className="pt-1 space-y-1">
+                            <Label htmlFor="custom-date" className="text-xs text-muted-foreground">
+                              Data limite de expiração do teste:
+                            </Label>
+                            <Input
+                              id="custom-date"
+                              type="date"
+                              value={customExpiryDate}
+                              onChange={(e) => setCustomExpiryDate(e.target.value)}
+                              className="text-xs bg-background"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Opção 3: Suspender Loja */}
+                  <div
+                    onClick={() => setSelectedPlanType("rejected")}
+                    className={`cursor-pointer rounded-xl border p-3 flex items-start gap-3 transition-all ${
+                      selectedPlanType === "rejected"
+                        ? "border-destructive bg-destructive/10 ring-1 ring-destructive"
+                        : "border-border/60 hover:bg-muted/30"
+                    }`}
+                  >
+                    <div className="size-8 rounded-lg bg-destructive/20 text-destructive flex items-center justify-center shrink-0 mt-0.5">
+                      <XCircle className="size-4" />
+                    </div>
+                    <div>
+                      <strong className="text-sm text-foreground">🔴 Suspender / Desativar Loja</strong>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Bloqueia o acesso da loja temporariamente por falta de pagamento ou moderação.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="admin-note" className="text-xs">Observação / Anotação Interna (opcional):</Label>
+                <Input
+                  id="admin-note"
+                  placeholder="Ex: Mensalidade paga no PIX em 30/08, plano até 100 clientes..."
+                  value={adminNote}
+                  onChange={(e) => setAdminNote(e.target.value)}
+                  className="text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
+                <Button variant="outline" onClick={() => setManagingStore(null)} disabled={submitting}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={saveStoreSubscription}
+                  disabled={submitting}
+                  className="gap-1.5 bg-primary text-primary-foreground font-bold"
+                >
+                  {submitting && <Loader2 className="size-4 animate-spin" />}
+                  Salvar Alterações
+                </Button>
+              </div>
             </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setRejectingStore(null)}>Cancelar</Button>
-              <Button
-                variant="destructive"
-                disabled={submitting}
-                onClick={() => updateStoreStatus(rejectingStore.id, "rejected", reason)}
-              >
-                {submitting && <Loader2 className="size-4 animate-spin mr-1" />} Confirmar Recusa
-              </Button>
-            </div>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
