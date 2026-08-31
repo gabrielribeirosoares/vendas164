@@ -2,9 +2,10 @@ import React, { useState, useRef, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { brl, isProntaEntrega, whatsappLink } from '@/lib/format';
+import { trackOrder, getTrackingStatusLabel, shouldUpdateDeliveryStatus } from '@/lib/trackingService';
 import { toast } from 'sonner';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap } from 'lucide-react';
+import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -228,7 +229,43 @@ export function OrdersTab({
 
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [trackingDrafts, setTrackingDrafts] = useState<Record<string, string>>({});
+  const [trackingUpdating, setTrackingUpdating] = useState<Set<string>>(new Set());
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
+
+  async function handleTrackingUpdate(orderId: string, code: string) {
+    if (!code?.trim()) return;
+    const normalizedCode = code.toUpperCase().trim();
+    setTrackingUpdating((prev) => new Set([...prev, orderId]));
+    try {
+      const result = await trackOrder(normalizedCode);
+      if (result) {
+        if (shouldUpdateDeliveryStatus(result)) {
+          const newStatus = result.status === "delivered" ? "entregue" : "em_transito";
+          const { error } = await supabase
+            .from("orders")
+            .update({ delivery_status: newStatus })
+            .eq("id", orderId);
+          if (error) {
+            toast.error("Erro ao atualizar status de envio.");
+          } else {
+            toast.success(`Status atualizado: ${getTrackingStatusLabel(result.status)}`);
+          }
+        } else {
+          toast.success(`Rastreio consultado: ${getTrackingStatusLabel(result.status)}`);
+        }
+        await queryClient.invalidateQueries();
+      } else {
+        toast.error("Não foi possível consultar o rastreio. Verifique o código.");
+      }
+    } finally {
+      setTrackingUpdating((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
+    }
+  }
+
   const activeOrders = useMemo(
     () => orders.filter((o) => o.payment_status !== "cancelado" && o.delivery_status !== "cancelado"),
     [orders]
@@ -1077,6 +1114,22 @@ export function OrdersTab({
                   >
                     Salvar
                   </Button>
+                  {o.tracking_code && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0 text-primary hover:bg-primary/10"
+                      title="Atualizar rastreio automaticamente"
+                      onClick={() => handleTrackingUpdate(o.id, o.tracking_code!)}
+                      disabled={trackingUpdating.has(o.id)}
+                    >
+                      {trackingUpdating.has(o.id) ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="size-3.5" />
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
               </div>
@@ -1293,6 +1346,22 @@ export function OrdersTab({
                         >
                           OK
                         </Button>
+                        {o.tracking_code && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0 text-primary hover:bg-primary/10"
+                            title="Atualizar rastreio automaticamente"
+                            onClick={() => handleTrackingUpdate(o.id, o.tracking_code!)}
+                            disabled={trackingUpdating.has(o.id)}
+                          >
+                            {trackingUpdating.has(o.id) ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="size-3.5" />
+                            )}
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="ghost"

@@ -30,7 +30,7 @@ export function SellerOverview({ totals, brandData }: SellerOverviewProps) {
         />
         <StatCard
           icon={<Wallet className="size-4 text-emerald-500" />}
-          label="Sinais Recebidos"
+          label="Valores Recebidos"
           value={brl(totals.received)}
           accent="text-emerald-500"
           subtext={`${totals.paidInFull} pedidos quitados`}
@@ -40,7 +40,7 @@ export function SellerOverview({ totals, brandData }: SellerOverviewProps) {
           label="Saldo a Receber"
           value={brl(totals.pending)}
           accent="text-amber-500"
-          subtext="A receber na chegada"
+          subtext="Restante a pagar"
         />
         <StatCard
           icon={<DollarSign className="size-4 text-blue-500" />}

@@ -3,13 +3,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { slugify } from '@/lib/format';
 import { toast } from 'sonner';
-import { Loader2, Plus } from 'lucide-react';
+import { Loader2, Plus, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { PhoneInput } from '@/components/PhoneInput';
+import { Badge } from '@/components/ui/badge';
 import { DEFAULT_PRESET_BRANDS, getStoreBrands, saveStoreBrands } from '@/lib/brands';
 import { getStoreBanner, saveStoreBanner } from '@/lib/storeCustomizations';
 import { uploadImage } from '@/lib/upload';
@@ -329,6 +330,67 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
                 terão o vencimento fixado para o mês seguinte neste dia escolhido. 
                 Se deixar em branco, o sistema usa 1 mês inteiro a partir da data do pedido.
               </p>
+            </div>
+
+            {/* SEÇÃO DE CONFIGURAÇÃO DE RASTREAMENTO AUTOMÁTICO */}
+            <div className="space-y-3 rounded-xl border border-border/50 bg-muted/30 p-4">
+              <div>
+                <Label className="text-base font-semibold flex items-center gap-2">
+                  <Package className="size-4 text-primary" />
+                  Integração de Rastreamento Automático
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Configure como a loja rastreia encomendas. O sistema atualiza automaticamente o status de envio ao detectar entregas.
+                </p>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between p-3 rounded-lg border border-border/40 bg-background/50">
+                  <div className="flex items-center gap-3">
+                    <div className="size-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                      <Package className="size-4 text-blue-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Correios API (SRO)</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Consulta automática de rastreamento nos Correios
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px]">
+                    Ativo
+                  </Badge>
+                </div>
+
+                <div className="text-xs text-muted-foreground">
+                  <p>Funcionalidades:</p>
+                  <ul className="list-disc list-inside ml-2 mt-1 space-y-0.5">
+                    <li>Atualização automática do status de entrega (pendente → em trânsito → entregue)</li>
+                    <li>Notificações de encomendas extraviadas ou com problemas</li>
+                    <li>Consulta em massa de todos os rastreios da loja</li>
+                    <li>Histórico completo de eventos de rastreamento</li>
+                  </ul>
+                </div>
+
+                <div className="pt-2">
+                  <p className="text-xs font-medium mb-1.5">
+                    A integração usará serviços públicos de rastreamento (sem autenticação).
+                    Para mais precisão, configure suas credenciais nos Correios Empresas.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="text"
+                      placeholder="Usuário Correios (opcional)"
+                      className="h-8 text-xs bg-muted/20 border-border/30"
+                    />
+                    <Input
+                      type="password"
+                      placeholder="Senha Correios (opcional)"
+                      className="h-8 text-xs bg-muted/20 border-border/30"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* SEÇÃO DE CORES DA LOJA */}

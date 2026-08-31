@@ -43,6 +43,8 @@ import { SmartNotifications } from "@/components/vendedor/SmartNotifications";
 import { ProductsTab } from "@/components/vendedor/ProductManager";
 import { SellerOverview } from "@/components/vendedor/SellerOverview";
 import { InstallmentsManager } from "@/components/vendedor/InstallmentsManager";
+import { TrackingIntegration } from "@/components/vendedor/TrackingIntegration";
+import { RefreshCw } from "lucide-react";
 
 export function parseStoreSubscription(store: any) {
   const status = store?.status;
@@ -198,8 +200,10 @@ function SellerDashboard() {
         document.title = `${store.name} — Personalização`;
       } else if (activeTab === "pronta_entrega") {
         document.title = `${store.name} — Pronta Entrega`;
-      } else if (activeTab === "clientes") {
+       } else if (activeTab === "clientes") {
         document.title = `${store.name} — Clientes`;
+      } else if (activeTab === "rastreamento") {
+        document.title = `${store.name} — Rastreamento`;
       } else {
         document.title = `${store.name} — Pré-vendas`;
       }
@@ -277,8 +281,12 @@ function SellerDashboard() {
   const totals = useMemo(() => {
     const active = (orders ?? []).filter((o) => o.payment_status !== "cancelado");
     const projected = active.reduce((s, o) => s + Number(o.total_price), 0);
-    const received = active.reduce((s, o) => s + Number(o.down_payment), 0);
-    const pending = projected - received;
+    const received = active.reduce((s, o) => {
+      const signalPaid = (o.payment_status === "sinal_pago" || o.payment_status === "quitado") ? Number(o.down_payment || 0) : 0;
+      const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid").reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
+      return s + signalPaid + paidInsts;
+    }, 0);
+    const pending = Math.max(0, projected - received);
     const avgTicket = active.length > 0 ? projected / active.length : 0;
     const paidInFull = active.filter(o => o.payment_status === "quitado").length;
     return {
@@ -453,6 +461,9 @@ function SellerDashboard() {
               <Calendar className="size-3.5" /> Cobranças
             </TabsTrigger>
             <TabsTrigger value="clientes" className="text-xs sm:text-sm">Clientes</TabsTrigger>
+            <TabsTrigger value="rastreamento" className="text-xs sm:text-sm text-blue-600 dark:text-blue-400">
+              <RefreshCw className="size-3.5" /> Rastreamento
+            </TabsTrigger>
             <TabsTrigger value="loja" className="gap-1.5 text-xs sm:text-sm">
               <Palette className="size-3.5" /> Personalização
             </TabsTrigger>
@@ -480,8 +491,12 @@ function SellerDashboard() {
             <InstallmentsManager storeId={store.id} />
           </TabsContent>
 
-          <TabsContent value="clientes" className="mt-5">
+           <TabsContent value="clientes" className="mt-5">
             <ClientsTab orders={orders ?? []} />
+          </TabsContent>
+
+          <TabsContent value="rastreamento" className="mt-5 space-y-6">
+            <TrackingIntegration storeId={store.id} />
           </TabsContent>
 
           <TabsContent value="loja" className="mt-5">

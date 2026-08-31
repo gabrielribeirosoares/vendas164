@@ -18,6 +18,7 @@ import { Route as TermosRouteImport } from './routes/termos'
 import { Route as UpdatePasswordRouteImport } from './routes/update-password'
 import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated/painel'
 import { Route as AuthenticatedVendedorRouteImport } from './routes/_authenticated/vendedor'
+import { Route as ApiTrackingRouteImport } from './routes/api/tracking'
 import { Route as LojaSlugRouteImport } from './routes/loja.$slug'
 import { Route as ProdutoIdRouteImport } from './routes/produto.$id'
 import { Route as LojaSlugItemSlugRouteImport } from './routes/loja.$slug.$itemSlug'
@@ -66,6 +67,11 @@ const AuthenticatedVendedorRoute = AuthenticatedVendedorRouteImport.update({
   path: '/vendedor',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiTrackingRoute = ApiTrackingRouteImport.update({
+  id: '/api/tracking',
+  path: '/api/tracking',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LojaSlugRoute = LojaSlugRouteImport.update({
   id: '/loja/$slug',
   path: '/loja/$slug',
@@ -91,6 +97,7 @@ export interface FileRoutesByFullPath {
   '/update-password': typeof UpdatePasswordRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/vendedor': typeof AuthenticatedVendedorRoute
+  '/api/tracking': typeof ApiTrackingRoute
   '/loja/$slug': typeof LojaSlugRouteWithChildren
   '/produto/$id': typeof ProdutoIdRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
@@ -104,6 +111,7 @@ export interface FileRoutesByTo {
   '/update-password': typeof UpdatePasswordRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/vendedor': typeof AuthenticatedVendedorRoute
+  '/api/tracking': typeof ApiTrackingRoute
   '/loja/$slug': typeof LojaSlugRouteWithChildren
   '/produto/$id': typeof ProdutoIdRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
@@ -119,6 +127,7 @@ export interface FileRoutesById {
   '/update-password': typeof UpdatePasswordRoute
   '/_authenticated/painel': typeof AuthenticatedPainelRoute
   '/_authenticated/vendedor': typeof AuthenticatedVendedorRoute
+  '/api/tracking': typeof ApiTrackingRoute
   '/loja/$slug': typeof LojaSlugRouteWithChildren
   '/produto/$id': typeof ProdutoIdRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
@@ -134,6 +143,7 @@ export interface FileRouteTypes {
     | '/update-password'
     | '/painel'
     | '/vendedor'
+    | '/api/tracking'
     | '/loja/$slug'
     | '/produto/$id'
     | '/loja/$slug/$itemSlug'
@@ -147,6 +157,7 @@ export interface FileRouteTypes {
     | '/update-password'
     | '/painel'
     | '/vendedor'
+    | '/api/tracking'
     | '/loja/$slug'
     | '/produto/$id'
     | '/loja/$slug/$itemSlug'
@@ -161,6 +172,7 @@ export interface FileRouteTypes {
     | '/update-password'
     | '/_authenticated/painel'
     | '/_authenticated/vendedor'
+    | '/api/tracking'
     | '/loja/$slug'
     | '/produto/$id'
     | '/loja/$slug/$itemSlug'
@@ -174,6 +186,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermosRoute: typeof TermosRoute
   UpdatePasswordRoute: typeof UpdatePasswordRoute
+  ApiTrackingRoute: typeof ApiTrackingRoute
   LojaSlugRoute: typeof LojaSlugRouteWithChildren
   ProdutoIdRoute: typeof ProdutoIdRoute
 }
@@ -243,6 +256,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedVendedorRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/tracking': {
+      id: '/api/tracking'
+      path: '/api/tracking'
+      fullPath: '/api/tracking'
+      preLoaderRoute: typeof ApiTrackingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/loja/$slug': {
       id: '/loja/$slug'
       path: '/loja/$slug'
@@ -300,6 +320,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermosRoute: TermosRoute,
   UpdatePasswordRoute: UpdatePasswordRoute,
+  ApiTrackingRoute: ApiTrackingRoute,
   LojaSlugRoute: LojaSlugRouteWithChildren,
   ProdutoIdRoute: ProdutoIdRoute,
 }
