@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Car, ChevronDown, LogOut, Menu, Package, Palette, Store as StoreIcon, User, Zap, CreditCard } from "lucide-react";
+import { Car, ChevronDown, LogOut, Menu, Package, Palette, Store as StoreIcon, User, Zap, CreditCard, Truck, RefreshCw } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -220,6 +220,11 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                                 <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
                                   <Link to="/vendedor" search={{ tab: 'clientes' }}>
                                     <User className="size-4 text-emerald-500" /> Clientes
+                                  </Link>
+                                </Button>
+                                <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1 text-blue-600 dark:text-blue-400" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
+                                  <Link to="/vendedor" search={{ tab: 'rastreamento' }}>
+                                    <RefreshCw className="size-4" /> Rastreamento
                                   </Link>
                                 </Button>
                                 <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
