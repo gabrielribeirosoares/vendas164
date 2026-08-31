@@ -42,6 +42,7 @@ import { ClientsTab } from "@/components/vendedor/ClientsManager";
 import { SmartNotifications } from "@/components/vendedor/SmartNotifications";
 import { ProductsTab } from "@/components/vendedor/ProductManager";
 import { SellerOverview } from "@/components/vendedor/SellerOverview";
+import { InstallmentsManager } from "@/components/vendedor/InstallmentsManager";
 
 export function parseStoreSubscription(store: any) {
   const status = store?.status;
@@ -205,6 +206,7 @@ function SellerDashboard() {
     }
   }, [store?.name, activeTab]);
 
+
   const { data: profile } = useQuery({
     queryKey: ["my-profile-admin", user?.id],
     enabled: !!user,
@@ -241,7 +243,7 @@ function SellerDashboard() {
     queryFn: async (): Promise<OrderRow[]> => {
       const { data, error } = await supabase
         .from("orders")
-        .select("*, products(*)")
+        .select("*, products(*), order_installments(*)")
         .eq("store_id", store!.id)
         .order("created_at", { ascending: false });
 
@@ -447,6 +449,9 @@ function SellerDashboard() {
               <Zap className="size-3.5 fill-emerald-500 text-emerald-500" /> Pronta Entrega
             </TabsTrigger>
             <TabsTrigger value="reservas" className="text-xs sm:text-sm">Reservas</TabsTrigger>
+            <TabsTrigger value="cobrancas" className="gap-1.5 text-xs sm:text-sm">
+              <Calendar className="size-3.5" /> Cobranças
+            </TabsTrigger>
             <TabsTrigger value="clientes" className="text-xs sm:text-sm">Clientes</TabsTrigger>
             <TabsTrigger value="loja" className="gap-1.5 text-xs sm:text-sm">
               <Palette className="size-3.5" /> Personalização
@@ -469,6 +474,10 @@ function SellerDashboard() {
           <TabsContent value="reservas" className="mt-5 space-y-6">
             <SellerOverview totals={totals} brandData={brandData} />
             <OrdersTab storeId={store.id} storeColor={store.primary_color} products={products ?? []} orders={orders ?? []} />
+          </TabsContent>
+
+          <TabsContent value="cobrancas" className="mt-5">
+            <InstallmentsManager storeId={store.id} />
           </TabsContent>
 
           <TabsContent value="clientes" className="mt-5">
@@ -964,7 +973,7 @@ function AdminModerationPanel() {
 
       {/* MODAL DE GERENCIAMENTO DE ASSINATURA E DIAS DE TESTE */}
       <Dialog open={!!managingStore} onOpenChange={(open) => !open && setManagingStore(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-bold">
               <Crown className="size-5 text-primary" /> Gerenciar Assinatura & Período de Teste
@@ -972,7 +981,7 @@ function AdminModerationPanel() {
           </DialogHeader>
 
           {managingStore && (
-            <div className="space-y-5 py-2">
+            <div className="space-y-5 py-2 overflow-y-auto pr-1">
               <div className="rounded-xl border border-border/60 bg-muted/40 p-3.5 space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-sm text-foreground">{managingStore.name}</span>

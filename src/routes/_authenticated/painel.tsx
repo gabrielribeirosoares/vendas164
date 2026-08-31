@@ -11,6 +11,7 @@ import { Countdown } from "@/components/Countdown";
 import { DeliveryBadge, PaymentBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { OrderInstallmentsDialog } from "@/components/vendedor/OrderInstallmentsDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -85,11 +86,8 @@ function CustomerDashboardContent() {
       // Buscar ordens atualizadas do usuário (excluindo canceladas)
       const { data, error } = await supabase
         .from("orders")
-        .select("*, products(*), stores(name, slug, whatsapp_number, pix_key, owner_id)")
+        .select("*, products(*), stores(name, slug, whatsapp_number, pix_key, owner_id), order_installments(*)")
         .eq("user_id", user!.id)
-        .neq("payment_status", "cancelado")
-        .neq("delivery_status", "cancelado")
-        .neq("delivery_status", "entregue")
         .order("created_at", { ascending: false })
         .limit(PAGE_SIZE)
         .range(ordersPage * PAGE_SIZE, (ordersPage + 1) * PAGE_SIZE - 1);
@@ -105,7 +103,7 @@ function CustomerDashboardContent() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("*, products(*), stores(name, slug, whatsapp_number, pix_key, owner_id)")
+        .select("*, products(*), stores(name, slug, whatsapp_number, pix_key, owner_id), order_installments(*)")
         .eq("user_id", user!.id)
         .eq("delivery_status", "entregue")
         .order("created_at", { ascending: false });
@@ -164,39 +162,20 @@ function CustomerDashboardContent() {
   // Separar pedidos em andamento vs entregues/na garagem
   const active = useMemo(() => (orders ?? []).filter((o: any) => {
     if (o.payment_status === "cancelado" || o.delivery_status === "cancelado") return false;
-    if (o.pix_key && typeof o.pix_key === "string" && (o.pix_key.startsWith("GUEST:") || o.pix_key.startsWith('{"manual_guest":true'))) {
-      return false;
-    }
-    const cachedGuest = getCustomerFromCache(o.id);
-    if (cachedGuest && cachedGuest.phone) return false;
+    if (o.delivery_status === "entregue") return false;
     return true;
   }), [orders]);
   
   const activeGarage = useMemo(() => (garageOrders ?? []).filter((o: any) => {
     if (o.payment_status === "cancelado" || o.delivery_status === "cancelado") return false;
-    if (o.pix_key && typeof o.pix_key === "string" && (o.pix_key.startsWith("GUEST:") || o.pix_key.startsWith('{"manual_guest":true'))) {
-      return false;
-    }
-    const cachedGuest = getCustomerFromCache(o.id);
-    if (cachedGuest && cachedGuest.phone) return false;
     return true;
   }), [garageOrders]);
 
   const pendingOrders = active;
 
-  // Agrupamento de pedidos por produto e status para exibição consolidada
+  // Cada pedido é exibido individualmente pois cada um tem suas próprias parcelas
   const groupedPendingOrders = useMemo(() => {
-    const map = new Map<string, { order: (typeof pendingOrders)[0]; quantity: number }>();
-    for (const o of pendingOrders) {
-      const key = `${o.product_id}_${o.payment_status}_${o.delivery_status}`;
-      if (map.has(key)) {
-        const item = map.get(key)!;
-        item.quantity += 1;
-      } else {
-        map.set(key, { order: o, quantity: 1 });
-      }
-    }
-    return Array.from(map.values());
+    return pendingOrders.map(o => ({ order: o, quantity: 1 }));
   }, [pendingOrders]);
   const deliveredOrders = activeGarage;
 
@@ -236,7 +215,11 @@ function CustomerDashboardContent() {
   }, [filteredDeliveredOrders]);
 
   const total = useMemo(() => active.reduce((s, o) => s + Number(o.total_price), 0), [active]);
-  const paid = useMemo(() => active.reduce((s, o) => s + Number(o.down_payment), 0), [active]);
+  const paid = useMemo(() => active.reduce((s, o) => {
+    const signalPaid = (o.payment_status === "sinal_pago" || o.payment_status === "quitado") ? Number(o.down_payment || 0) : 0;
+    const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid").reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
+    return s + signalPaid + paidInsts;
+  }, 0), [active]);
 
   if (sessionLoading || ordersLoading) {
     return (
@@ -411,6 +394,43 @@ function CustomerDashboardContent() {
                       return (
                         <div className="text-sm lg:text-right space-y-0.5">
                           <p className="text-xs text-muted-foreground">Total: <span className="font-medium text-foreground">{brl(Number(o.total_price) * qty)} {o.installment_count && o.installment_count > 1 ? `(${o.installment_count}x)` : ""}</span></p>
+                          <div className="mt-1 mb-3 flex flex-col gap-3">
+                              {(() => {
+                                const installments = o.order_installments || [];
+                                const paidInsts = installments.filter((i: any) => i.status === "paid");
+                                const totalPaidInsts = paidInsts.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
+                                const signalPaid = (o.payment_status === "sinal_pago" || o.payment_status === "quitado") ? Number(o.down_payment || 0) : 0;
+                                const totalPaid = totalPaidInsts + signalPaid;
+                                const totalOrder = Number(o.total_price) * qty;
+                                const progress = totalOrder > 0 ? Math.min(100, Math.round((totalPaid / totalOrder) * 100)) : 0;
+                                
+                                return (
+                                  <div className="text-left space-y-1.5 p-3 bg-muted/40 rounded-xl border border-border/50">
+                                    <div className="flex justify-between text-xs mb-1">
+                                      <span className="font-semibold text-foreground/80">Progresso do Pagamento</span>
+                                      <span className="font-bold text-primary">{progress}%</span>
+                                    </div>
+                                    <div className="w-full bg-muted/80 rounded-full h-2 overflow-hidden border border-border/30">
+                                      <div className="bg-primary h-full rounded-full transition-all duration-700 ease-in-out" style={{ width: `${progress}%` }} />
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-2">
+                                      Você já pagou <strong className="text-foreground">{brl(totalPaid)}</strong> de {brl(totalOrder)}
+                                    </p>
+                                  </div>
+                                );
+                              })()}
+                              
+                              <div className="flex justify-start lg:justify-end">
+                                <OrderInstallmentsDialog
+                                  orderId={o.id}
+                                  totalPrice={o.total_price * qty}
+                                  installmentCount={o.installment_count}
+                                  customerName={profile?.name || "Você"}
+                                  productName={`${o.products?.brand || ''} ${o.products?.model || ''}`}
+                                  isCustomer={true}
+                                />
+                              </div>
+                            </div>
                           {isAguardando ? (
                             <>
                               <p className="text-sm font-bold text-primary">
@@ -558,7 +578,7 @@ function CustomerDashboardContent() {
                 </CardContent>
               </Card>
             ))}
-            {pendingOrders.length === 0 && (
+            {!ordersLoading && groupedPendingOrders.length === 0 && (
               <p className="text-sm text-muted-foreground py-8 text-center">Você não possui reservas em andamento no momento.</p>
             )}
             {(orders ?? []).length >= PAGE_SIZE && (

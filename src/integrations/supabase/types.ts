@@ -106,6 +106,47 @@ export type Database = {
           },
         ]
       }
+      order_installments: {
+        Row: {
+          id: string
+          order_id: string
+          installment_number: number
+          amount: number
+          due_date: string
+          status: string
+          paid_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          order_id: string
+          installment_number: number
+          amount: number
+          due_date: string
+          status?: string
+          paid_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          order_id?: string
+          installment_number?: number
+          amount?: number
+          due_date?: string
+          status?: string
+          paid_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_installments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       products: {
         Row: {
           brand: string
@@ -221,6 +262,7 @@ export type Database = {
           contact_email: string | null
           contact_instagram: string | null
           created_at: string
+          default_installment_due_day?: number | null
           description: string | null
           favicon_url: string | null
           id: string
@@ -238,6 +280,7 @@ export type Database = {
           contact_email?: string | null
           contact_instagram?: string | null
           created_at?: string
+          default_installment_due_day?: number | null
           description?: string | null
           favicon_url?: string | null
           id?: string
@@ -255,6 +298,7 @@ export type Database = {
           contact_email?: string | null
           contact_instagram?: string | null
           created_at?: string
+          default_installment_due_day?: number | null
           description?: string | null
           favicon_url?: string | null
           id?: string

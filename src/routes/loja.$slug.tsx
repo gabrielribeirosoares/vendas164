@@ -171,6 +171,7 @@ function StorePageContent() {
     }
   }, [data?.store]);
 
+
   async function toggleFollow() {
     if (!data?.store) return;
     if (!user) {

@@ -19,6 +19,7 @@ import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { prepararDadosExportacaoFinanceira } from '@/lib/exportFinanceiro';
 import { getCustomerFromCache } from '@/lib/customerCache';
 import { ManualReservationDialog } from '@/components/vendedor/ProductManager';
+import { OrderInstallmentsDialog } from '@/components/vendedor/OrderInstallmentsDialog';
 import type { Tables } from '@/integrations/supabase/types';
 
 export type Product = Tables<'products'>;
@@ -27,6 +28,7 @@ const PAGE_SIZE = 50;
 export type OrderRow = Tables<"orders"> & {
   products: Tables<"products"> | null;
   profiles: { name: string | null; email: string | null; phone: string | null } | null;
+  order_installments?: any[];
 };
 
 function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: string) {
@@ -44,7 +46,10 @@ function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: stri
   if (o.payment_status === "aguardando_sinal") {
     msg += `- Sinal a pagar: *${brl(expectedSignal)}*\n`;
   } else if (o.payment_status === "sinal_pago") {
-    msg += `- Sinal pago: *${brl(Number(o.down_payment) * quantity)}*\n- Saldo restante: *${brl(Number(o.remaining_balance) * quantity)}*\n`;
+    const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid");
+    const totalPaidInsts = paidInsts.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
+    const dynamicBalance = Math.max(0, total - (Number(o.down_payment) * quantity) - totalPaidInsts);
+    msg += `- Sinal pago: *${brl(Number(o.down_payment) * quantity)}*\n- Saldo restante: *${brl(dynamicBalance)}*\n`;
   } else if (o.payment_status === "quitado") {
     msg += `- Status: *Totalmente Quitado*\n`;
   } else if (o.payment_status === "pronta_entrega" || (isPronta && isSemSinal)) {
@@ -62,7 +67,9 @@ function getWhatsAppTemplates(o: OrderRow, quantity: number, displayName: string
   const customSignal = Number((o.products as any)?.down_payment_amount || 0);
   const expectedSignal = (customSignal > 0 ? customSignal : Math.round(Number(o.total_price) * 0.2 * 100) / 100) * quantity;
   const signal = Number(o.down_payment) > 0 ? Number(o.down_payment) * quantity : expectedSignal;
-  const remaining = Number(o.remaining_balance) * quantity;
+  const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid");
+  const totalPaidInsts = paidInsts.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
+  const remaining = Math.max(0, (Number(o.total_price) * quantity) - signal - totalPaidInsts);
   const tracking = o.tracking_code?.trim();
   const trackingLink = tracking ? `https://rastreamento.correios.com.br/app/index.php?codigo=${encodeURIComponent(tracking)}` : '';
   const pixInfo = storePixKey ? `\n\n🔑 *Chave PIX da loja:* ${storePixKey}` : '';
@@ -320,32 +327,7 @@ export function OrdersTab({
   type GroupedOrderRow = { order: OrderRow; quantity: number; ids: string[] };
 
   const groupedOrders = useMemo(() => {
-    const map = new Map<string, GroupedOrderRow>();
-    for (const o of filteredOrders) {
-      let guestMeta: any = null;
-      if (o.pix_key && typeof o.pix_key === "string") {
-        if (o.pix_key.startsWith("GUEST:")) {
-          try { guestMeta = JSON.parse(o.pix_key.replace(/^GUEST:/, "")); } catch {}
-        } else if (o.pix_key.startsWith('{"manual_guest":true')) {
-          try { guestMeta = JSON.parse(o.pix_key); } catch {}
-        }
-      }
-
-      const clientPhone = guestMeta?.phone || o.profiles?.phone || "";
-      const effectiveUserId = o.user_id + "_" + clientPhone;
-      const tracking = o.tracking_code || "";
-
-      const key = `${o.product_id}_${effectiveUserId}_${o.payment_status}_${o.delivery_status}_${tracking}`;
-
-      if (map.has(key)) {
-        const item = map.get(key)!;
-        item.quantity += 1;
-        item.ids.push(o.id);
-      } else {
-        map.set(key, { order: o, quantity: 1, ids: [o.id] });
-      }
-    }
-    return Array.from(map.values());
+    return filteredOrders.map(o => ({ order: o, quantity: 1, ids: [o.id] } as GroupedOrderRow));
   }, [filteredOrders]);
 
   const pages = Math.max(1, Math.ceil(groupedOrders.length / PAGE_SIZE));
@@ -396,6 +378,10 @@ export function OrdersTab({
       await adjustStockOnCancel(o.product_id, true, quantity);
     }
     const { error } = await supabase.from("orders").delete().in("id", ids);
+    if (!error) {
+      // Exclui parcelas explicitamente caso o banco não tenha cascade configurado
+      await supabase.from("order_installments").delete().in("order_id", ids);
+    }
     if (error) {
       return toast.error("Não foi possível excluir a reserva.");
     }
@@ -415,6 +401,8 @@ export function OrdersTab({
 
     if (!wasCancelled && isNowCancelled) {
       await adjustStockOnCancel(o.product_id, true, quantity);
+      // Apaga as parcelas pendentes caso a reserva seja cancelada
+      await supabase.from("order_installments").delete().in("order_id", ids);
     } else if (wasCancelled && !isNowCancelled) {
       await adjustStockOnCancel(o.product_id, false, quantity);
     }
@@ -430,9 +418,13 @@ export function OrdersTab({
       patch.down_payment = downPayment;
       patch.reservation_expires_at = null;
     } else if (newStatus === "quitado") {
-      downPayment = totalPrice;
+      // Manter o sinal original, não substituir pelo total
       patch.down_payment = downPayment;
       patch.reservation_expires_at = null;
+      // Marcar todas as parcelas pendentes como pagas automaticamente
+      for (const id of ids) {
+        await supabase.from("order_installments").update({ status: "paid" }).eq("order_id", id).eq("status", "pending");
+      }
     } else if (newStatus === "pronta_entrega" || newStatus === "sem_sinal") {
       downPayment = 0;
       patch.down_payment = 0;
@@ -471,6 +463,8 @@ export function OrdersTab({
 
     if (!wasCancelled && isNowCancelled) {
       await adjustStockOnCancel(o.product_id, true, quantity);
+      // Apaga as parcelas pendentes caso o envio/reserva seja cancelado
+      await supabase.from("order_installments").delete().in("order_id", ids);
     } else if (wasCancelled && !isNowCancelled) {
       await adjustStockOnCancel(o.product_id, false, quantity);
     }
@@ -570,9 +564,15 @@ export function OrdersTab({
 
     if (statusType === "payment") {
       await updateGroup(allIds, { payment_status: newStatus });
+      if (newStatus === "cancelado") {
+        await supabase.from("order_installments").delete().in("order_id", allIds);
+      }
       toast.success(`${selectedOrders.size} reserva(s) atualizada(s)!`);
     } else {
       await updateGroup(allIds, { delivery_status: newStatus });
+      if (newStatus === "cancelado") {
+        await supabase.from("order_installments").delete().in("order_id", allIds);
+      }
       toast.success(`${selectedOrders.size} reserva(s) atualizada(s)!`);
     }
     setSelectedOrders(new Set());
@@ -974,7 +974,16 @@ export function OrdersTab({
                           </div>
                           <div>
                             <p className="text-muted-foreground">Saldo</p>
-                            <p className="font-bold text-sm text-primary">{brl(Number(o.remaining_balance) * quantity)}</p>
+                            <p className="font-bold text-sm text-primary">
+                              {(() => {
+                                const total = Number(o.total_price) * quantity;
+                                const sinal = Number(o.down_payment) * quantity;
+                                const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid");
+                                const totalPaidInsts = paidInsts.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
+                                const saldo = Math.max(0, total - sinal - totalPaidInsts);
+                                return brl(saldo);
+                              })()}
+                            </p>
                           </div>
                         </div>
 
@@ -1015,16 +1024,25 @@ export function OrdersTab({
                                     <SelectItem value="cancelado">Cancelado</SelectItem>
                                   </SelectContent>
                                 </Select>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                  title="Excluir reserva permanentemente"
-                                  onClick={() => handleDeleteGroup(item)}
-                                >
-                                  <Trash2 className="size-4" />
-                                </Button>
-                              </div>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                    title="Excluir reserva permanentemente"
+                                    onClick={() => handleDeleteGroup(item)}
+                                  >
+                                    <Trash2 className="size-4" />
+                                  </Button>
+                                </div>
+                                <div className="mt-2 flex justify-end">
+                                  <OrderInstallmentsDialog
+                                      orderId={o.id}
+                                      totalPrice={o.total_price * quantity}
+                                      installmentCount={o.installment_count}
+                                      customerName={guestMeta?.name || o.profiles?.name || "Cliente"}
+                                      productName={`${o.products?.brand || ''} ${o.products?.model || ''}`}
+                                    />
+                                  </div>
 
                               {currentPaymentStatus === "aguardando_sinal" && o.reservation_expires_at ? (
                                 <div className="text-xs">
@@ -1204,8 +1222,26 @@ export function OrdersTab({
                       </Button>
                     </div>
                   </TableCell>
-                  <TableCell className="font-medium text-primary">
-                    {brl(Number(o.remaining_balance) * quantity)}
+                  <TableCell className="font-medium text-primary align-top pt-4">
+                    <div className="flex flex-col gap-2 items-start">
+                      <span>
+                        {(() => {
+                          const total = Number(o.total_price) * quantity;
+                          const sinal = Number(o.down_payment) * quantity;
+                          const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid");
+                          const totalPaidInsts = paidInsts.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
+                          const saldo = Math.max(0, total - sinal - totalPaidInsts);
+                          return brl(saldo);
+                        })()}
+                      </span>
+                      <OrderInstallmentsDialog
+                          orderId={o.id}
+                          totalPrice={o.total_price * quantity}
+                          installmentCount={o.installment_count}
+                          customerName={guestMeta?.name || o.profiles?.name || "Cliente"}
+                          productName={`${o.products?.brand || ''} ${o.products?.model || ''}`}
+                        />
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1.5 min-w-[155px]">

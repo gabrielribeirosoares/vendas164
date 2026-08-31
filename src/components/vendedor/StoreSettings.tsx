@@ -42,6 +42,7 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
     favicon_url: store.logo_url ?? store.favicon_url ?? "",
     contact_email: store.contact_email ?? "",
     contact_instagram: store.contact_instagram ?? "",
+    default_installment_due_day: store.default_installment_due_day?.toString() ?? "",
   });
   const [saving, setSaving] = useState(false);
   const [selectedBrands, setSelectedBrands] = useState<string[]>(() => getStoreBrands(store.id));
@@ -112,6 +113,17 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
     };
     if (form.pix_key.trim()) {
       updatePayload.pix_key = form.pix_key.trim();
+    }
+    
+    if (form.default_installment_due_day.trim()) {
+      const day = parseInt(form.default_installment_due_day.trim(), 10);
+      if (!isNaN(day) && day >= 1 && day <= 31) {
+        updatePayload.default_installment_due_day = day;
+      } else {
+        updatePayload.default_installment_due_day = null;
+      }
+    } else {
+      updatePayload.default_installment_due_day = null;
     }
 
     let { error } = await supabase
@@ -296,6 +308,27 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
                 onChange={(e) => setForm({ ...form, pix_key: e.target.value })}
                 className="font-mono text-xs sm:text-sm"
               />
+            </div>
+            
+            <div className="space-y-1.5">
+              <Label htmlFor="b-due-day" className="flex items-center gap-1.5 font-semibold text-foreground">
+                Dia de Vencimento Padrão das Parcelas (Opcional)
+              </Label>
+              <Input
+                id="b-due-day"
+                type="number"
+                min="1"
+                max="31"
+                placeholder="Ex: 10"
+                value={form.default_installment_due_day}
+                onChange={(e) => setForm({ ...form, default_installment_due_day: e.target.value })}
+                className="w-full sm:w-[150px]"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Se preenchido, todas as novas parcelas geradas pela loja (compras ou pré-vendas) 
+                terão o vencimento fixado para o mês seguinte neste dia escolhido. 
+                Se deixar em branco, o sistema usa 1 mês inteiro a partir da data do pedido.
+              </p>
             </div>
 
             {/* SEÇÃO DE CORES DA LOJA */}

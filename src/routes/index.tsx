@@ -156,7 +156,7 @@ function Home() {
                 </Badge>
                 
                 <h1 className="text-4xl font-extrabold leading-[1.1] md:text-5xl tracking-tight">
-                  Pré-vendas de miniaturas sem planilha e sem calotes.
+                  Pré-vendas de miniaturas sem planilha.
                 </h1>
                 
                 <p className="max-w-lg text-base md:text-lg text-muted-foreground leading-relaxed">
@@ -326,7 +326,7 @@ function Home() {
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="size-4 text-emerald-500 shrink-0 mt-0.5" />
-                      <span><strong>1 única desistência evitada já paga mais de 6 meses</strong> da assinatura da plataforma!</span>
+                      <span><strong>1 única desistência evitada já paga a mensalidade</strong> da plataforma!</span>
                     </li>
                   </ul>
                 </div>
@@ -476,62 +476,7 @@ function Home() {
             </div>
           </section>
 
-          {/* Prova Social / Depoimentos */}
-          <section className="border-t border-border/30 bg-muted/10 py-16">
-            <div className="mx-auto max-w-5xl px-4 space-y-10">
-              <div className="text-center max-w-2xl mx-auto space-y-2">
-                <Badge variant="outline" className="border-border text-muted-foreground">
-                  Depoimentos Reais
-                </Badge>
-                <h2 className="text-3xl font-bold tracking-tight">
-                  O que os vendedores de miniaturas dizem
-                </h2>
-              </div>
 
-              <div className="grid md:grid-cols-3 gap-6">
-                {[
-                  {
-                    name: "Marcos S.",
-                    role: "Colecionador & Vendedor Mini GT",
-                    quote:
-                      "Antes eu perdia horas no WhatsApp conferindo comprovante de sinal e anotando em papel. Agora mando o link e o cliente já faz o PIX direto. Mudou minha rotina!",
-                    stars: 5,
-                  },
-                  {
-                    name: "Rodrigo L.",
-                    role: "Garage 64 Diecast",
-                    quote:
-                      "Zero calotes no meu último lote de Kaido House. O cronômetro de 24h fez todo mundo pagar o sinal rápido. O sistema se pagou em 2 dias.",
-                    stars: 5,
-                  },
-                  {
-                    name: "Felipe A.",
-                    role: "Speed Diecast Store",
-                    quote:
-                      "A experiência para o cliente é sensacional. O comprador copia a chave PIX em 1 toque no celular e já sabe exatamente quanto falta pagar no desembarque.",
-                    stars: 5,
-                  },
-                ].map((dep, i) => (
-                  <div key={i} className="rounded-2xl border border-border/60 bg-card/80 p-6 space-y-4 flex flex-col justify-between">
-                    <div className="space-y-3">
-                      <div className="flex gap-1 text-amber-500">
-                        {Array.from({ length: dep.stars }).map((_, s) => (
-                          <Star key={s} className="size-4 fill-amber-500" />
-                        ))}
-                      </div>
-                      <p className="text-xs text-muted-foreground leading-relaxed italic">
-                        "{dep.quote}"
-                      </p>
-                    </div>
-                    <div className="border-t border-border/30 pt-3">
-                      <p className="text-xs font-bold text-foreground">{dep.name}</p>
-                      <p className="text-[11px] text-primary">{dep.role}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
 
           {/* FAQ Section */}
           <section className="border-t border-border/30 py-16">

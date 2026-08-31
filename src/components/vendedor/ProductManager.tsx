@@ -1618,7 +1618,7 @@ export function ManualReservationDialog({
     queryFn: async () => {
       const { data } = await supabase
         .from("stores")
-        .select("pix_key, whatsapp_number")
+        .select("pix_key, whatsapp_number, default_installment_due_day")
         .eq("id", storeId)
         .maybeSingle();
       return data;
@@ -1852,6 +1852,7 @@ export function ManualReservationDialog({
           total_price: totalPrice,
           down_payment: downPayment,
           payment_status: paymentStatus,
+          delivery_status: "pendente",
           reservation_expires_at: expiresAt,
         };
 
@@ -1868,7 +1869,6 @@ export function ManualReservationDialog({
           .select("id")
           .single();
 
-        // Fallback se .select().single() não retornar ou se houver erro pontual de coluna
         if (orderErr) {
           if (orderErr.message?.includes("installment_count") || orderErr.code === "PGRST204") {
             delete orderPayload.installment_count;
@@ -1876,6 +1876,7 @@ export function ManualReservationDialog({
           const retry = await supabase.from("orders").insert(orderPayload).select("id").maybeSingle();
           orderErr = retry.error;
           if (retry.data?.id) {
+            insertedOrder = retry.data;
             saveCustomerToCache({ id: retry.data.id, name: cleanName, phone: cleanPhone });
           }
         } else if (insertedOrder?.id) {
@@ -1883,6 +1884,38 @@ export function ManualReservationDialog({
         }
 
         if (orderErr) throw orderErr;
+
+        if (insertedOrder?.id) {
+          const effectiveCount = Math.max(installmentCount, 1);
+          const amountToParcel = Math.max(0, totalPrice - downPayment);
+          const amountPerInstallment = amountToParcel / effectiveCount;
+          const defaultDay = storeInfo?.default_installment_due_day;
+          const now = new Date();
+          const newInstallments = Array.from({ length: effectiveCount }).map((_, idx) => {
+            const futureYear = now.getFullYear();
+            const futureMonth = now.getMonth() + idx + 1;
+            
+            let dueDate: Date;
+            if (defaultDay && defaultDay >= 1 && defaultDay <= 31) {
+              dueDate = new Date(futureYear, futureMonth, 1);
+              const lastDayOfMonth = new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0).getDate();
+              dueDate.setDate(Math.min(defaultDay, lastDayOfMonth));
+            } else {
+              dueDate = new Date(futureYear, futureMonth, now.getDate());
+              if (dueDate.getMonth() !== futureMonth % 12) {
+                dueDate.setDate(0);
+              }
+            }
+            return {
+              order_id: insertedOrder!.id,
+              installment_number: idx + 1,
+              amount: amountPerInstallment,
+              due_date: dueDate.toISOString(),
+              status: "pending"
+            };
+          });
+          await supabase.from("order_installments").insert(newInstallments);
+        }
       }
 
       // 6. Abater estoque com concorrência segura (RPC reservar_miniatura com FOR UPDATE)
@@ -2213,7 +2246,6 @@ export function ManualReservationDialog({
           {(() => {
             const selectedProduct = products.find((p) => p.id === selectedProductId);
             const instOptions = selectedProduct ? getInstallmentOptions(selectedProduct, manualQuantity) : [];
-            if (instOptions.length <= 1) return null;
             const chosenOption = instOptions.find((o: any) => o.value === installmentCount) ?? instOptions[0];
             return (
               <div className="space-y-2 min-w-0">

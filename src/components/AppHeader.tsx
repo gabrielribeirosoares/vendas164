@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Car, ChevronDown, LogOut, Menu, Package, Palette, Store as StoreIcon, User, Zap } from "lucide-react";
+import { Car, ChevronDown, LogOut, Menu, Package, Palette, Store as StoreIcon, User, Zap, CreditCard } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -13,6 +13,7 @@ import {
 import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { OnboardingTour, TourTriggerButton } from "@/components/OnboardingTour";
 import { CartDrawer } from "@/components/CartDrawer";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/lib/session";
 import { updateAppFavicon } from "@/lib/favicon";
@@ -169,6 +170,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                 </div>
 
                 <div className="flex items-center gap-1 sm:gap-1.5">
+                  <ThemeToggle />
                   <CartDrawer />
                   <div className="hidden sm:flex"><TourTriggerButton /></div>
                   
@@ -208,6 +210,11 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                                 <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
                                   <Link to="/vendedor" search={{ tab: 'reservas' }}>
                                     <Car className="size-4 text-emerald-500" /> Pedidos/Reservas
+                                  </Link>
+                                </Button>
+                                <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
+                                  <Link to="/vendedor" search={{ tab: 'cobrancas' }}>
+                                    <CreditCard className="size-4 text-emerald-500" /> Cobranças
                                   </Link>
                                 </Button>
                                 <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>

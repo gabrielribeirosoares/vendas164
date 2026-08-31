@@ -39,7 +39,7 @@ export function CartDrawer() {
         // Reservar as unidades necessárias deste item (já salva o parcelamento)
         const orderIds: string[] = [];
         for (let i = 0; i < item.quantity; i++) {
-          const orderId = await reserveQuota(item.productId, item.selectedInstallment);
+          const orderId = await reserveQuota(item.productId, item.selectedInstallment, item.unitPriceForChosenOption);
           orderIds.push(orderId);
         }
 
