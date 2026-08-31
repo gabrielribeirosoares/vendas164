@@ -1135,20 +1135,37 @@ export function OrdersTab({
                     Salvar
                   </Button>
                   {o.tracking_code && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 w-8 p-0 text-primary hover:bg-primary/10"
-                      title="Atualizar rastreio automaticamente"
-                      onClick={() => handleTrackingUpdate(o.id, o.tracking_code!, o.delivery_status)}
-                      disabled={trackingUpdating.has(o.id)}
-                    >
-                      {trackingUpdating.has(o.id) ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <RefreshCw className="size-3.5" />
-                      )}
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 w-8 p-0 text-primary hover:bg-primary/10"
+                        title="Atualizar rastreio automaticamente"
+                        onClick={() => handleTrackingUpdate(o.id, o.tracking_code!, o.delivery_status)}
+                        disabled={trackingUpdating.has(o.id)}
+                      >
+                        {trackingUpdating.has(o.id) ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="size-3.5" />
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                        title="Abrir no site oficial dos Correios"
+                        asChild
+                      >
+                        <a
+                          href={`https://rastreamento.correios.com.br/app/index.php?codigo=${encodeURIComponent(o.tracking_code)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <ExternalLink className="size-3.5" />
+                        </a>
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
@@ -1367,20 +1384,37 @@ export function OrdersTab({
                           OK
                         </Button>
                         {o.tracking_code && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0 text-primary hover:bg-primary/10"
-                            title="Atualizar rastreio automaticamente"
-                            onClick={() => handleTrackingUpdate(o.id, o.tracking_code!, o.delivery_status)}
-                            disabled={trackingUpdating.has(o.id)}
-                          >
-                            {trackingUpdating.has(o.id) ? (
-                              <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                              <RefreshCw className="size-3.5" />
-                            )}
-                          </Button>
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-primary hover:bg-primary/10"
+                              title="Atualizar rastreio automaticamente"
+                              onClick={() => handleTrackingUpdate(o.id, o.tracking_code!, o.delivery_status)}
+                              disabled={trackingUpdating.has(o.id)}
+                            >
+                              {trackingUpdating.has(o.id) ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <RefreshCw className="size-3.5" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                              title="Abrir no site oficial dos Correios"
+                              asChild
+                            >
+                              <a
+                                href={`https://rastreamento.correios.com.br/app/index.php?codigo=${encodeURIComponent(o.tracking_code)}`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <ExternalLink className="size-3.5" />
+                              </a>
+                            </Button>
+                          </>
                         )}
                         <Button
                           size="sm"
