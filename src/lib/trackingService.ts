@@ -218,7 +218,26 @@ async function sleep(ms: number): Promise<void> {
 const TRACKING_CACHE = new Map<string, { result: TrackingResult; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000;
 
-export async function trackOrder(code: string): Promise<TrackingResult | null> {
+export function getMelhorEnvioToken(storeId?: string): string {
+  if (typeof window === "undefined") return "";
+  if (storeId) {
+    const specific = localStorage.getItem(`melhor_envio_token_${storeId}`);
+    if (specific) return specific;
+  }
+  return localStorage.getItem("melhor_envio_token") || "";
+}
+
+export function saveMelhorEnvioToken(storeId: string, token: string): void {
+  if (typeof window === "undefined") return;
+  if (token.trim()) {
+    localStorage.setItem(`melhor_envio_token_${storeId}`, token.trim());
+    localStorage.setItem("melhor_envio_token", token.trim());
+  } else {
+    localStorage.removeItem(`melhor_envio_token_${storeId}`);
+  }
+}
+
+export async function trackOrder(code: string, storeId?: string): Promise<TrackingResult | null> {
   const normalizedCode = code.toUpperCase().trim();
   if (!normalizedCode || normalizedCode.length < 8) return null;
 
@@ -228,11 +247,13 @@ export async function trackOrder(code: string): Promise<TrackingResult | null> {
   }
 
   const provider = detectProvider(code);
+  const token = getMelhorEnvioToken(storeId);
+  const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const response = await fetch(
-        `/api/tracking?code=${encodeURIComponent(normalizedCode)}&provider=${provider}`,
+        `/api/tracking?code=${encodeURIComponent(normalizedCode)}&provider=${provider}${tokenParam}`,
       );
 
       if (!response.ok) {
@@ -265,7 +286,7 @@ export async function trackOrder(code: string): Promise<TrackingResult | null> {
   return null;
 }
 
-export async function trackMultipleOrders(codes: string[]): Promise<Map<string, TrackingResult>> {
+export async function trackMultipleOrders(codes: string[], storeId?: string): Promise<Map<string, TrackingResult>> {
   const results = new Map<string, TrackingResult>();
 
   const validCodes = codes.filter((c) => c && c.trim().length >= 8);
@@ -273,7 +294,7 @@ export async function trackMultipleOrders(codes: string[]): Promise<Map<string, 
 
   await Promise.all(
     validCodes.map(async (code) => {
-      const result = await trackOrder(code);
+      const result = await trackOrder(code, storeId);
       if (result) {
         results.set(code.toUpperCase().trim(), result);
       }

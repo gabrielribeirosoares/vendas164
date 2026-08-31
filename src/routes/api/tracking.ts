@@ -51,6 +51,7 @@ export const Route = createFileRoute("/api/tracking")({
         const url = new URL(request.url);
         const code = url.searchParams.get("code");
         const provider = url.searchParams.get("provider") ?? "correios";
+        const token = url.searchParams.get("token") || request.headers.get("x-melhor-envio-token");
 
         if (!code || code.trim().length < 8) {
           return new Response(JSON.stringify({ error: "Invalid tracking code" }), {
@@ -63,10 +64,21 @@ export const Route = createFileRoute("/api/tracking")({
 
         let result: TrackingResult | null = null;
 
-        // Try primary provider
-        try {
-          result = await trackCorreios(normalizedCode);
-        } catch {}
+        // Se houver token do Melhor Envio, tentar primeiro a API oficial do Melhor Envio
+        if (token) {
+          try {
+            result = await trackWithMelhorEnvioApi(normalizedCode, token);
+          } catch (e) {
+            console.error("[MelhorEnvioAPI] Error:", e);
+          }
+        }
+
+        // Try standard providers if no result yet
+        if (!result) {
+          try {
+            result = await trackCorreios(normalizedCode);
+          } catch {}
+        }
 
         if (!result) {
           try {
@@ -95,6 +107,79 @@ export const Route = createFileRoute("/api/tracking")({
     },
   },
 });
+
+async function trackWithMelhorEnvioApi(code: string, token: string): Promise<TrackingResult | null> {
+  const apiUrl = "https://melhorenvio.com.br/api/v2/me/shipment/tracking";
+
+  try {
+    const cleanToken = token.trim().replace(/^Bearer\s+/i, "");
+    const response = await fetchWithTimeout(apiUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${cleanToken}`,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "Vendas164 (contato@vendas164.com.br)",
+      },
+      body: JSON.stringify({ orders: [code] }),
+    });
+
+    if (!response.ok) {
+      console.warn(`[MelhorEnvioAPI] Response not OK: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const item = data?.[code] || Object.values(data || {})[0];
+    if (!item) return null;
+
+    const events: TrackingEvent[] = [];
+    const rawEvents = item?.events || [];
+
+    for (const ev of rawEvents) {
+      const dt = ev?.created_at ? new Date(ev.created_at) : null;
+      events.push({
+        date: dt ? dt.toLocaleDateString("pt-BR") : "",
+        time: dt ? dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "",
+        location: ev?.location || "Em trânsito",
+        status: ev?.description || ev?.status || "Atualização",
+        details: ev?.description || "",
+      });
+    }
+
+    let status: TrackingResult["status"] = "in_transit";
+    const rawStatus = (item?.status || "").toLowerCase();
+
+    if (
+      rawStatus === "delivered" ||
+      rawStatus === "entregue" ||
+      item?.delivered_at ||
+      events.some(
+        (e) =>
+          e.status.toLowerCase().includes("entregue") ||
+          e.details.toLowerCase().includes("entregue")
+      )
+    ) {
+      status = "delivered";
+    } else if (rawStatus === "canceled" || rawStatus === "cancelado") {
+      status = "not_found";
+    } else if (events.length > 0 || rawStatus === "posted" || rawStatus === "in_transit") {
+      status = "in_transit";
+    }
+
+    return {
+      code,
+      serviceName: item?.service?.name || "Melhor Envio (Correios/Transportadora)",
+      category: "Encomenda",
+      events,
+      status,
+      lastUpdate: events.length > 0 ? `${events[0].date} ${events[0].time}` : (item?.posted_at || null),
+    };
+  } catch (err) {
+    console.error("[MelhorEnvioAPI] Fetch exception:", err);
+    return null;
+  }
+}
 
 async function trackCorreios(code: string): Promise<TrackingResult | null> {
   const apiUrl = `https://proxyapp.correios.com.br:3001/api/rastreamento/${code}`;
