@@ -66,8 +66,6 @@ export function TrackingIntegration({ storeId }: TrackingIntegrationProps) {
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [results, setResults] = useState<Map<string, TrackingResult>>(new Map());
-  const [tokenInput, setTokenInput] = useState(() => getMelhorEnvioToken(storeId));
-  const [isConfigOpen, setIsConfigOpen] = useState(false);
 
   const loadCachedResults = useCallback(() => {
     const cache = getCachedTrackings(storeId);
@@ -83,12 +81,6 @@ export function TrackingIntegration({ storeId }: TrackingIntegrationProps) {
   useEffect(() => {
     loadCachedResults();
   }, [loadCachedResults]);
-
-  function handleSaveToken() {
-    saveMelhorEnvioToken(storeId, tokenInput);
-    toast.success("Token do Melhor Envio salvo com sucesso!");
-    setIsConfigOpen(false);
-  }
 
   async function handleRefreshAll() {
     setLoading(true);
@@ -177,71 +169,18 @@ export function TrackingIntegration({ storeId }: TrackingIntegrationProps) {
             <RefreshCw className="size-5 text-primary" />
             Integração de Rastreamento Automático
           </CardTitle>
-          <div className="flex items-center gap-2">
-            {tokenInput ? (
-              <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-xs gap-1">
-                <CheckCircle2 className="size-3" /> Melhor Envio Ativo
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="text-muted-foreground text-xs">
-                Modo Padrão (Sem Token)
-              </Badge>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs h-8 gap-1.5"
-              onClick={() => setIsConfigOpen(!isConfigOpen)}
-            >
-              <Key className="size-3.5" />
-              {isConfigOpen ? "Fechar Configuração" : "Configurar Token"}
-            </Button>
-          </div>
+          <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-xs gap-1">
+            <CheckCircle2 className="size-3" /> Melhor Envio Conectado
+          </Badge>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {isConfigOpen && (
-          <div className="p-4 rounded-xl bg-muted/30 border border-border/60 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                  <Key className="size-3.5 text-primary" /> Token de API do Melhor Envio
-                </h4>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Insira o seu token pessoal gerado no painel do Melhor Envio para consultar qualquer rastreamento em tempo real sem CAPTCHA.
-                </p>
-              </div>
-              <a
-                href="https://melhorenvio.com.br/painel/gerenciar/tokens"
-                target="_blank"
-                rel="noreferrer"
-                className="text-[11px] text-primary hover:underline flex items-center gap-1 shrink-0"
-              >
-                Gerar Token no Melhor Envio <ExternalLink className="size-3" />
-              </a>
-            </div>
-
-            <div className="flex gap-2">
-              <Input
-                type="password"
-                placeholder="Cole seu token aqui (ex: eyJ0eXAiOiJKV1QiLC...)"
-                value={tokenInput}
-                onChange={(e) => setTokenInput(e.target.value)}
-                className="text-xs font-mono"
-              />
-              <Button size="sm" onClick={handleSaveToken} className="shrink-0 text-xs">
-                Salvar Token
-              </Button>
-            </div>
-          </div>
-        )}
-
         <Alert className="border-blue-500/20 bg-blue-500/5">
           <AlertCircle className="h-4 w-4 text-blue-500" />
           <AlertDescription className="text-xs text-muted-foreground">
             Esta integração consulta automaticamente o status de rastreamento dos Correios e
-            transportadoras e atualiza o status de envio dos pedidos.
+            transportadoras através do Melhor Envio e atualiza o status de envio dos pedidos.
           </AlertDescription>
         </Alert>
 
