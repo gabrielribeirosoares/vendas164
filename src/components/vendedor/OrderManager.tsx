@@ -232,30 +232,50 @@ export function OrdersTab({
   const [trackingUpdating, setTrackingUpdating] = useState<Set<string>>(new Set());
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
 
-  async function handleTrackingUpdate(orderId: string, code: string) {
+  async function handleTrackingUpdate(orderId: string, code: string, currentStatus?: string) {
     if (!code?.trim()) return;
     const normalizedCode = code.toUpperCase().trim();
     setTrackingUpdating((prev) => new Set([...prev, orderId]));
     try {
       const result = await trackOrder(normalizedCode);
-      if (result) {
-        if (shouldUpdateDeliveryStatus(result)) {
-          const newStatus = result.status === "delivered" ? "entregue" : "em_transito";
+      if (result && result.status !== "not_found") {
+        if (result.status === "delivered") {
           const { error } = await supabase
             .from("orders")
-            .update({ delivery_status: newStatus })
+            .update({ delivery_status: "entregue" })
             .eq("id", orderId);
           if (error) {
             toast.error("Erro ao atualizar status de envio.");
           } else {
-            toast.success(`Status atualizado: ${getTrackingStatusLabel(result.status)}`);
+            toast.success(`Status atualizado: Entregue`);
           }
-        } else {
-          toast.success(`Rastreio consultado: ${getTrackingStatusLabel(result.status)}`);
+        } else if (result.status === "in_transit") {
+          if (currentStatus === "entregue") {
+            toast.info("O pedido já está marcado como Entregue.");
+          } else {
+            const { error } = await supabase
+              .from("orders")
+              .update({ delivery_status: "em_transito" })
+              .eq("id", orderId);
+            if (error) {
+              toast.error("Erro ao atualizar status de envio.");
+            } else {
+              toast.success(`Status atualizado: Em trânsito`);
+            }
+          }
         }
         await queryClient.invalidateQueries();
       } else {
-        toast.error("Não foi possível consultar o rastreio. Verifique o código.");
+        toast.info(`Rastreio ${normalizedCode}: sem eventos automáticos no momento.`, {
+          action: {
+            label: "Ver no Correios",
+            onClick: () =>
+              window.open(
+                `https://rastreamento.correios.com.br/app/index.php?codigo=${encodeURIComponent(normalizedCode)}`,
+                "_blank"
+              ),
+          },
+        });
       }
     } finally {
       setTrackingUpdating((prev) => {
@@ -1120,7 +1140,7 @@ export function OrdersTab({
                       variant="ghost"
                       className="h-8 w-8 p-0 text-primary hover:bg-primary/10"
                       title="Atualizar rastreio automaticamente"
-                      onClick={() => handleTrackingUpdate(o.id, o.tracking_code!)}
+                      onClick={() => handleTrackingUpdate(o.id, o.tracking_code!, o.delivery_status)}
                       disabled={trackingUpdating.has(o.id)}
                     >
                       {trackingUpdating.has(o.id) ? (
@@ -1352,7 +1372,7 @@ export function OrdersTab({
                             variant="ghost"
                             className="h-7 w-7 p-0 text-primary hover:bg-primary/10"
                             title="Atualizar rastreio automaticamente"
-                            onClick={() => handleTrackingUpdate(o.id, o.tracking_code!)}
+                            onClick={() => handleTrackingUpdate(o.id, o.tracking_code!, o.delivery_status)}
                             disabled={trackingUpdating.has(o.id)}
                           >
                             {trackingUpdating.has(o.id) ? (

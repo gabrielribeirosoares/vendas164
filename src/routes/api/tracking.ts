@@ -80,32 +80,14 @@ export const Route = createFileRoute("/api/tracking")({
           } catch {}
         }
 
-        // If external services are offline/blocked but code has standard valid tracking pattern (e.g. AA123456789BR, TX123..., etc.)
-        if (!result && normalizedCode.length >= 8) {
-          const isCorreiosFormat = /^[A-Z]{2}[0-9]{9}[A-Z]{2}$/.test(normalizedCode);
-          const now = new Date();
-          const dateStr = now.toLocaleDateString("pt-BR");
-          const timeStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-
-          result = {
-            code: normalizedCode,
-            serviceName: isCorreiosFormat ? "Correios" : "Transportadora",
-            category: "Encomenda",
-            events: [
-              {
-                date: dateStr,
-                time: timeStr,
-                location: "Em trânsito para o destinatário",
-                status: "Objeto postado / Em trânsito",
-                details: "Código de rastreamento registrado no pedido",
-              },
-            ],
-            status: "in_transit",
-            lastUpdate: `${dateStr} ${timeStr}`,
-          };
+        if (!result) {
+          return new Response(JSON.stringify({ error: "No tracking found", code: normalizedCode, status: "not_found" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
         }
 
-        return new Response(JSON.stringify(result ?? { error: "No tracking found" }), {
+        return new Response(JSON.stringify(result), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });

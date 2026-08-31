@@ -127,6 +127,10 @@ export function TrackingIntegration({ storeId }: TrackingIntegrationProps) {
 
         for (const order of ordersToUpdate) {
           if (shouldUpdateDeliveryStatus(result)) {
+            // Se já está entregue, nunca rebaixa para em trânsito
+            if (order.delivery_status === "entregue" && result.status !== "delivered") {
+              continue;
+            }
             const newStatus = result.status === "delivered" ? "entregue" : "em_transito";
             if (order.delivery_status !== newStatus) {
               await supabase
