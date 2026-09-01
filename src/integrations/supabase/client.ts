@@ -33,7 +33,7 @@ function getCookieDomain(): string | undefined {
   if (typeof window === "undefined") return undefined;
   const hostname = window.location.hostname.toLowerCase();
 
-  if (hostname.endsWith(".vendas164.com.br") || hostname === "vendas164.com.br") {
+  if (hostname.endsWith("vendas164.com.br")) {
     return ".vendas164.com.br";
   }
 
