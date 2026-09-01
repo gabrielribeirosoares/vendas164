@@ -15,7 +15,6 @@ import {
   ChevronDown,
   TrendingUp,
   XCircle,
-  Star,
   Check,
 } from "lucide-react";
 import { useState } from "react";
@@ -26,6 +25,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import heroImage from "@/assets/hero-miniaturas.jpg";
+import { useSubdomain } from "@/lib/subdomain";
+import { StoreView } from "./loja.$slug";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -141,6 +142,12 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
+  const { subdomain } = useSubdomain();
+
+  if (subdomain) {
+    return <StoreView slug={subdomain} />;
+  }
+
   return (
     <ErrorBoundary>
       <div className="min-h-screen flex flex-col bg-background text-foreground">

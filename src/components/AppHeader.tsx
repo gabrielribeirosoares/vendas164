@@ -17,6 +17,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/lib/session";
 import { updateAppFavicon } from "@/lib/favicon";
+import { getStoreFullUrl } from "@/lib/subdomain";
 
 interface AppHeaderProps {
   store?: {
@@ -136,7 +137,9 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                           <DropdownMenuItem
                             key={s.id}
                             className="cursor-pointer gap-2"
-                            onClick={() => navigate({ to: "/loja/$slug", params: { slug: s.slug } })}
+                            onClick={() => {
+                              window.location.href = getStoreFullUrl(s.slug);
+                            }}
                           >
                             {s.logo_url ? (
                               <img src={s.logo_url} alt={s.name} className="size-5 rounded object-cover" loading="lazy" />
@@ -248,15 +251,15 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                               <div className="pt-4 pb-2">
                                 <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-3 px-2">Lojas Seguidas</h4>
                                 {myLinkedStores.map((s: any) => (
-                                  <Button key={s.id} asChild variant="ghost" className="w-full justify-start gap-3 h-11 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
-                                    <Link to="/loja/$slug" params={{ slug: s.slug }}>
+                                  <Button key={s.id} asChild variant="ghost" className="w-full justify-start gap-3 h-11 mb-1">
+                                    <a href={getStoreFullUrl(s.slug)}>
                                       {s.logo_url ? (
                                         <img src={s.logo_url} alt={s.name} className="size-5 rounded object-cover border border-border" />
                                       ) : (
                                         <StoreIcon className="size-5 text-muted-foreground" />
                                       )}
                                       <span className="truncate">{s.name}</span>
-                                    </Link>
+                                    </a>
                                   </Button>
                                 ))}
                               </div>

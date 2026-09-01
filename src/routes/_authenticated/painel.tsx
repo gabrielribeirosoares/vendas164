@@ -20,7 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getCustomerFromCache } from "@/lib/customerCache";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -28,6 +27,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { brl, getProductSignalAmount, isProntaEntrega, whatsappLink } from "@/lib/format";
 import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
+import { getStoreFullUrl, getStoreDisplayDomain, redirectToMainIfOnSubdomain } from "@/lib/subdomain";
 
 export const Route = createFileRoute("/_authenticated/painel")({
   head: () => ({
@@ -60,6 +60,11 @@ function CustomerDashboardContent() {
   const [garageSearchQuery, setGarageSearchQuery] = useState("");
   const [ordersPage, setOrdersPage] = useState(0);
   const [waitlistPage, setWaitlistPage] = useState(0);
+
+  // Redirect to main domain if accessed from a store subdomain
+  useEffect(() => {
+    redirectToMainIfOnSubdomain();
+  }, []);
 
   const { data: profile } = useQuery({
     queryKey: ["my-profile", user?.id],
@@ -291,7 +296,7 @@ function CustomerDashboardContent() {
             </h2>
             <div className="mt-3 flex flex-wrap gap-2.5">
               {feed.links.map((l) => (
-                <Link key={l.store_id} to="/loja/$slug" params={{ slug: l.stores?.slug ?? "" }}>
+                <a key={l.store_id} href={getStoreFullUrl(l.stores?.slug ?? "")}>
                   <Card className="border-border/30 bg-muted/20 hover:bg-muted/40 transition-colors">
                     <CardContent className="flex items-center gap-3 p-3 px-4">
                       {l.stores?.logo_url ? (
@@ -308,11 +313,11 @@ function CustomerDashboardContent() {
                       )}
                       <div>
                         <p className="text-sm font-semibold text-foreground">{l.stores?.name}</p>
-                        <p className="text-xs text-muted-foreground font-mono">/loja/{l.stores?.slug}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{getStoreDisplayDomain(l.stores?.slug ?? "")}</p>
                       </div>
                     </CardContent>
                   </Card>
-                </Link>
+                </a>
               ))}
             </div>
           </div>

@@ -22,6 +22,7 @@ import { useCartStore } from "@/lib/cart";
 import { saveCustomerToCache } from "@/lib/customerCache";
 import { getStoreBanner, getProductBadge } from "@/lib/storeCustomizations";
 import { StoreReviewsSection } from "@/components/StoreReviewsSection";
+import { getSubdomain, getStoreFullUrl, getProductUrl } from "@/lib/subdomain";
 
 const fetchStoreBySlug = createServerFn({ method: "GET" })
   .validator((d: { slug: string }) => d)
@@ -108,17 +109,31 @@ function StorePage() {
 
   return (
     <ErrorBoundary>
-      {isProductPage ? <Outlet /> : <StorePageContent />}
+      {isProductPage ? <Outlet /> : <StoreView />}
     </ErrorBoundary>
   );
 }
 
-function StorePageContent() {
-  const { slug } = Route.useParams();
+export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
+  let paramsFromRoute: { slug?: string } = {};
+  try {
+    paramsFromRoute = Route.useParams();
+  } catch {}
+  const slug = slugProp || paramsFromRoute?.slug || "";
   const { user } = useSession();
   const cart = useCartStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !slug) return;
+    const currentSub = getSubdomain();
+    if (currentSub && currentSub !== slug) {
+      window.location.href = getStoreFullUrl(slug);
+    } else if (currentSub && currentSub === slug && window.location.pathname.startsWith("/loja/")) {
+      window.history.replaceState(null, "", "/");
+    }
+  }, [slug]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBrand, setSelectedBrand] = useState<string>("all");
@@ -728,10 +743,9 @@ function StorePageContent() {
                         const signal = getProductSignalAmount(p);
                         const customBadge = getProductBadge(p.id);
                         return (
-                          <Link
+                          <a
                             key={p.id}
-                            to="/loja/$slug/$itemSlug"
-                            params={{ slug: slug ?? "loja", itemSlug: p.slug || p.id }}
+                            href={getProductUrl(slug ?? "loja", p.slug || p.id)}
                             className="group block"
                           >
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border border-border/30 bg-card/60 hover:bg-card hover:border-primary/40 transition-all shadow-sm">
@@ -823,17 +837,16 @@ function StorePageContent() {
                                 </div>
                               </div>
                             </div>
-                          </Link>
+                          </a>
                         );
                       })}
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
                       {brandProducts.map((p) => (
-                        <Link
+                        <a
                           key={p.id}
-                          to="/loja/$slug/$itemSlug"
-                          params={{ slug: slug ?? "loja", itemSlug: p.slug || p.id }}
+                          href={getProductUrl(slug ?? "loja", p.slug || p.id)}
                           className="group"
                         >
                           <Card className="flex h-full flex-col overflow-hidden border-border/30 bg-card/60 transition-transform group-hover:-translate-y-1 shadow-sm">
@@ -956,7 +969,7 @@ function StorePageContent() {
                               </div>
                             </CardContent>
                           </Card>
-                        </Link>
+                        </a>
                       ))}
                     </div>
                   )}

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Copy,
+  ExternalLink,
   Loader2,
   Package,
   Palette,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
+import { getStoreFullUrl, getStoreDisplayDomain, redirectToMainIfOnSubdomain } from "@/lib/subdomain";
 import { PhoneInput } from "@/components/PhoneInput";
 import { getCustomerFromCache } from "@/lib/customerCache";
 import { Button } from "@/components/ui/button";
@@ -164,6 +166,12 @@ function SellerDashboard() {
   const activeTab = search.tab || "produtos";
   const setActiveTab = (tab: string) => navigate({ search: { tab }, replace: true });
   const [trialDismissed, setTrialDismissed] = useState(false);
+
+  // If accessed from a store subdomain (e.g. teste.localhost:8080/vendedor),
+  // redirect back to the main platform domain.
+  useEffect(() => {
+    redirectToMainIfOnSubdomain();
+  }, []);
 
   const { data: store, isLoading } = useQuery({
     queryKey: ["my-store", user?.id],
@@ -417,7 +425,7 @@ function SellerDashboard() {
                 </Badge>
               )}
             </div>
-            <p className="text-sm text-muted-foreground font-mono">/loja/{store.slug}</p>
+            <p className="text-sm text-muted-foreground font-mono">{getStoreDisplayDomain(store.slug)}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             {isAdmin && (
@@ -431,17 +439,28 @@ function SellerDashboard() {
             )}
 
             <Button
+              variant="outline"
+              size="sm"
+              className="text-xs gap-1.5"
+              asChild
+            >
+              <a href={getStoreFullUrl(store.slug)} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="size-3.5" /> Ver minha loja
+              </a>
+            </Button>
+
+            <Button
               variant="secondary"
               size="sm"
               className="text-xs"
               onClick={() => {
                 navigator.clipboard.writeText(
-                  `${window.location.origin}/auth?loja=${store.id}&next=/loja/${store.slug}`,
+                  getStoreFullUrl(store.slug),
                 );
-                toast.success("Link de convite da loja copiado!");
+                toast.success("Link da loja copiado!");
               }}
             >
-              <Copy className="size-3.5 mr-1" /> Link de convite
+              <Copy className="size-3.5 mr-1" /> Copiar link da loja
             </Button>
           </div>
         </div>

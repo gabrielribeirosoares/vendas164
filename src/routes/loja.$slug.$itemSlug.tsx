@@ -19,6 +19,7 @@ import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 import { joinWaitlist, reservationErrorMessage } from "@/lib/reservations";
 import { useCartStore } from "@/lib/cart";
+import { getSubdomain, getStoreFullUrl } from "@/lib/subdomain";
 
 const fetchProductBySlugs = createServerFn({ method: "GET" })
   .validator((d: { slug: string; itemSlug: string }) => d)
@@ -81,13 +82,20 @@ export const Route = createFileRoute("/loja/$slug/$itemSlug")({
 function ProductPage() {
   return (
     <ErrorBoundary>
-      <ProductPageContent />
+      <ProductView />
     </ErrorBoundary>
   );
 }
 
-function ProductPageContent() {
-  const { slug, itemSlug } = Route.useParams();
+export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?: string; itemSlug?: string } = {}) {
+  let paramsFromRoute: { slug?: string; itemSlug?: string; id?: string } = {};
+  try {
+    paramsFromRoute = Route.useParams();
+  } catch {}
+
+  const currentSubdomain = getSubdomain();
+  const slug = slugProp || paramsFromRoute?.slug || currentSubdomain || "";
+  const itemSlug = itemSlugProp || paramsFromRoute?.itemSlug || paramsFromRoute?.id || "";
   const { user } = useSession();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -98,16 +106,20 @@ function ProductPageContent() {
   const cart = useCartStore();
 
   const { data: product, isLoading } = useQuery({
-    queryKey: ["product", itemSlug],
+    queryKey: ["product", slug, itemSlug],
     retry: 2,
     queryFn: async () => {
-      // Tenta buscar por slug primeiro. Se não achar, tenta buscar por ID caso a pessoa tenha salvo a URL antiga ou seja um fallback.
-      let { data, error } = await supabase
+      // Tenta buscar por slug primeiro.
+      let query = supabase
         .from("products")
         .select("*, stores!inner(id, owner_id, name, slug, primary_color, whatsapp_number, contact_email, contact_instagram)")
-        .eq("slug", itemSlug)
-        .eq("stores.slug", slug)
-        .maybeSingle();
+        .eq("slug", itemSlug);
+
+      if (slug) {
+        query = query.eq("stores.slug", slug);
+      }
+
+      let { data, error } = await query.maybeSingle();
 
       if (!data) {
          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(itemSlug);
@@ -241,9 +253,9 @@ function ProductPageContent() {
             O item que você procura não está disponível ou o link está incorreto.
           </p>
           <Button asChild className="mt-4" variant="outline">
-            <Link to="/loja/$slug" params={{ slug }}>
+            <a href={getStoreFullUrl(slug)}>
               Ir para a página da loja
-            </Link>
+            </a>
           </Button>
         </main>
       </div>
@@ -256,10 +268,10 @@ function ProductPageContent() {
       <main className="mx-auto max-w-5xl px-4 py-10">
         <div className="mb-6">
           <Button variant="ghost" size="sm" asChild className="-ml-3 text-muted-foreground hover:text-foreground">
-            <Link to="/loja/$slug" params={{ slug: product?.stores?.slug ?? "" }}>
+            <a href={getStoreFullUrl(product?.stores?.slug || slug)}>
               <ArrowLeft className="size-4 mr-1.5" />
               Voltar para {product?.stores?.name}
-            </Link>
+            </a>
           </Button>
         </div>
         <div className="grid gap-8 md:grid-cols-2">

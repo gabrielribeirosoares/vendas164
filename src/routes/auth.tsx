@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/lib/session";
+import { redirectToMainIfOnSubdomain } from "@/lib/subdomain";
 
 type AuthSearch = { loja?: string; produto?: string; next?: string };
 
@@ -98,6 +99,11 @@ function AuthPageContent() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+
+  // If accessed from a store subdomain, redirect to main domain
+  useEffect(() => {
+    redirectToMainIfOnSubdomain();
+  }, []);
 
   const { data: invitedStore } = useQuery({
     queryKey: ["invited-store", search.loja, search.next],
