@@ -41,6 +41,14 @@ function getCookieDomain(): string | undefined {
     return ".localhost";
   }
 
+  if (hostname.endsWith(".vercel.app")) {
+    const parts = hostname.split(".");
+    if (parts.length >= 4) {
+      return "." + parts.slice(1).join(".");
+    }
+    return "." + hostname;
+  }
+
   return undefined;
 }
 
