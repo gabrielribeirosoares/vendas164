@@ -1,4 +1,4 @@
-// Custom Supabase Client with Subdomain Cookie Session Persistence
+// Custom Supabase Client with Subdomain Cookie Session Persistence & Hash Auth Handoff
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
@@ -87,8 +87,8 @@ function removeCookie(name: string) {
 }
 
 /**
- * Storage adapter that persists Supabase Auth session tokens in a domain-wide Cookie.
- * This allows seamless single sign-on (SSO) across all store subdomains.
+ * Storage adapter that persists Supabase Auth session tokens in a domain-wide Cookie
+ * and synchronizes with localStorage as backup.
  */
 const subdomainCookieStorage = {
   getItem: (key: string): string | null => {
@@ -140,7 +140,7 @@ function createSupabaseClient() {
     throw new Error(message);
   }
 
-  return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  const client = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     global: {
       fetch: createSupabaseFetch(SUPABASE_PUBLISHABLE_KEY),
     },
@@ -148,8 +148,27 @@ function createSupabaseClient() {
       storage: typeof window !== 'undefined' ? subdomainCookieStorage : undefined,
       persistSession: true,
       autoRefreshToken: true,
+      detectSessionInUrl: true,
     }
   });
+
+  // Cross-subdomain session token handoff via URL hash
+  if (typeof window !== "undefined" && window.location.hash.includes("access_token=")) {
+    try {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token");
+      if (accessToken && refreshToken) {
+        client.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }).then(() => {
+          if (window.history && window.history.replaceState) {
+            window.history.replaceState(null, "", window.location.pathname + window.location.search);
+          }
+        });
+      }
+    } catch {}
+  }
+
+  return client;
 }
 
 let _supabase: ReturnType<typeof createSupabaseClient> | undefined;

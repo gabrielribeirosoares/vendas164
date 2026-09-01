@@ -58,11 +58,14 @@ export function getSubdomain(hostname?: string): string | null {
 
 /**
  * Builds the appropriate full store URL based on the current environment.
+ * If user is currently logged in, appends session tokens in URL hash to seamlessly
+ * hand off the active session across subdomains and localhost without logging out.
+ *
  * Examples:
  * - In local dev: http://zero51-garage.localhost:8080
  * - In production: https://zero51-garage.vendas164.com.br
  */
-export function getStoreFullUrl(slug: string): string {
+export function getStoreFullUrl(slug: string, withSession = true): string {
   if (!slug) return "/";
 
   if (typeof window === "undefined") {
@@ -73,22 +76,45 @@ export function getStoreFullUrl(slug: string): string {
   const port = window.location.port ? `:${window.location.port}` : "";
   const protocol = window.location.protocol;
 
+  let targetUrl = "";
+
   // Local testing with .localhost or localhost:PORT
   if (hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".localhost")) {
-    return `${protocol}//${slug}.localhost${port}`;
-  }
-
-  if (hostname.endsWith("vendas164.com.br")) {
-    return `https://${slug}.vendas164.com.br`;
-  }
-
-  // Fallback for Vercel preview URLs or custom environments
-  if (hostname.endsWith(".vercel.app")) {
+    targetUrl = `${protocol}//${slug}.localhost${port}`;
+  } else if (hostname.endsWith("vendas164.com.br")) {
+    targetUrl = `https://${slug}.vendas164.com.br`;
+  } else if (hostname.endsWith(".vercel.app")) {
     const baseVercelHost = hostname.split(".").slice(-3).join(".");
-    return `${protocol}//${slug}.${baseVercelHost}${port}`;
+    targetUrl = `${protocol}//${slug}.${baseVercelHost}${port}`;
+  } else {
+    targetUrl = `${window.location.origin}/loja/${slug}`;
   }
 
-  return `${window.location.origin}/loja/${slug}`;
+  // Session handoff across subdomains / origins:
+  // If user is currently logged in, pass session tokens via hash so Supabase Auth logs user in on target origin.
+  if (withSession && typeof window !== "undefined" && typeof localStorage !== "undefined") {
+    try {
+      const storageKey = Object.keys(localStorage).find(
+        (k) => (k.startsWith("sb-") && k.endsWith("-auth-token")) || k === "supabase.auth.token"
+      );
+      if (storageKey) {
+        const sessionDataStr = localStorage.getItem(storageKey);
+        if (sessionDataStr) {
+          const sessionData = JSON.parse(sessionDataStr);
+          const accessToken = sessionData?.access_token || sessionData?.currentSession?.access_token;
+          const refreshToken = sessionData?.refresh_token || sessionData?.currentSession?.refresh_token;
+
+          if (accessToken && refreshToken) {
+            targetUrl += `#access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&token_type=bearer&type=signup`;
+          }
+        }
+      }
+    } catch (e) {
+      // Ignore JSON parse errors
+    }
+  }
+
+  return targetUrl;
 }
 
 /**
@@ -144,7 +170,7 @@ export function useSubdomain() {
  * Returns the base URL of the main platform (no subdomain).
  * e.g. "http://localhost:8080" or "https://vendas164.com.br"
  */
-export function getMainPlatformUrl(path: string = ""): string {
+export function getMainPlatformUrl(path: string = "", withSession = true): string {
   if (typeof window === "undefined") {
     return `https://vendas164.com.br${path}`;
   }
@@ -153,26 +179,48 @@ export function getMainPlatformUrl(path: string = ""): string {
   const port = window.location.port ? `:${window.location.port}` : "";
   const protocol = window.location.protocol;
 
+  let mainUrl = "";
+
   // If on a *.localhost subdomain, strip the subdomain
   if (hostname.endsWith(".localhost")) {
-    return `${protocol}//localhost${port}${path}`;
+    mainUrl = `${protocol}//localhost${port}${path}`;
+  } else if (hostname.endsWith(".vendas164.com.br") && hostname !== "vendas164.com.br") {
+    mainUrl = `https://vendas164.com.br${path}`;
+  } else if (hostname.endsWith(".vercel.app")) {
+    const baseVercelHost = hostname.split(".").slice(-3).join(".");
+    mainUrl = `${protocol}//${baseVercelHost}${port}${path}`;
+  } else {
+    mainUrl = `${window.location.origin}${path}`;
   }
 
-  // If on a *.vendas164.com.br subdomain, go back to main domain
-  if (hostname.endsWith(".vendas164.com.br") && hostname !== "vendas164.com.br") {
-    return `https://vendas164.com.br${path}`;
+  // Session handoff when returning to main platform
+  if (withSession && typeof window !== "undefined" && typeof localStorage !== "undefined") {
+    try {
+      const storageKey = Object.keys(localStorage).find(
+        (k) => (k.startsWith("sb-") && k.endsWith("-auth-token")) || k === "supabase.auth.token"
+      );
+      if (storageKey) {
+        const sessionDataStr = localStorage.getItem(storageKey);
+        if (sessionDataStr) {
+          const sessionData = JSON.parse(sessionDataStr);
+          const accessToken = sessionData?.access_token || sessionData?.currentSession?.access_token;
+          const refreshToken = sessionData?.refresh_token || sessionData?.currentSession?.refresh_token;
+
+          if (accessToken && refreshToken) {
+            mainUrl += `#access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&token_type=bearer&type=signup`;
+          }
+        }
+      }
+    } catch (e) {}
   }
 
-  // Already on main domain
-  return `${window.location.origin}${path}`;
+  return mainUrl;
 }
 
 /**
  * If the current page is running on a store subdomain but is a
  * platform-level route (e.g. /vendedor, /painel, /auth),
  * redirects to the main domain automatically.
- *
- * Call this at the top of platform-only components.
  */
 export function redirectToMainIfOnSubdomain(path?: string): boolean {
   if (typeof window === "undefined") return false;
@@ -180,9 +228,8 @@ export function redirectToMainIfOnSubdomain(path?: string): boolean {
   if (!subdomain) return false;
 
   const targetPath = path || window.location.pathname + window.location.search;
-  const mainUrl = getMainPlatformUrl(targetPath);
+  const mainUrl = getMainPlatformUrl(targetPath, true);
 
-  // Only redirect if URLs differ (avoids infinite loops)
   if (mainUrl !== window.location.href) {
     window.location.replace(mainUrl);
     return true;
