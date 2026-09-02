@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement } from "@/lib/format";
+import { brl, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
 import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 import { useCartStore } from "@/lib/cart";
@@ -301,8 +301,8 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
       if (!p.is_open) return false;
       if (onlyInStock && p.stock <= 0) return false;
 
-      if (selectedType === "pre" && hasNoSignalRequirement(p)) return false;
-      if (selectedType === "pronta" && !hasNoSignalRequirement(p)) return false;
+      if (selectedType === "pre" && isProntaEntrega(p)) return false;
+      if (selectedType === "pronta" && !isProntaEntrega(p)) return false;
 
       const matchBrand = selectedBrand === "all" || (p.brand || "Outros").trim() === selectedBrand;
       const matchScale = selectedScale === "all" || p.scale === selectedScale;
@@ -863,9 +863,14 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                                     Últimas {p.stock} un.
                                   </span>
                                 )}
-                                {hasNoSignalRequirement(p) && (
+                                {!isProntaEntrega(p) && hasNoSignalRequirement(p) && (
                                   <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-emerald-600/90 border border-emerald-400/30">
                                     Sem Sinal
+                                  </span>
+                                )}
+                                {isProntaEntrega(p) && !getProductBadge(p.id) && (
+                                  <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-emerald-600 border border-emerald-400/40">
+                                    ⚡ Pronta Entrega
                                   </span>
                                 )}
                               </div>
