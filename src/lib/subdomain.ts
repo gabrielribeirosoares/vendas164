@@ -69,21 +69,18 @@ export function getStoreFullUrl(slug: string): string {
   if (!slug) return "/";
 
   if (typeof window === "undefined") {
-    return `https://${slug}.vendas164.com.br`;
+    return `https://www.vendas164.com.br/loja/${slug}`;
   }
 
   const hostname = window.location.hostname.toLowerCase();
   const port = window.location.port ? `:${window.location.port}` : "";
   const protocol = window.location.protocol;
 
-  // Local testing with .localhost or localhost:PORT
+  // Local testing with localhost
   if (hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".localhost")) {
-    return `${protocol}//${slug}.localhost${port}`;
+    return `${protocol}//localhost${port}/loja/${slug}`;
   } else if (hostname.endsWith("vendas164.com.br")) {
-    return `https://${slug}.vendas164.com.br`;
-  } else if (hostname.endsWith(".vercel.app")) {
-    const baseVercelHost = hostname.split(".").slice(-3).join(".");
-    return `${protocol}//${slug}.${baseVercelHost}${port}`;
+    return `https://www.vendas164.com.br/loja/${slug}`;
   }
 
   return `${window.location.origin}/loja/${slug}`;
@@ -91,18 +88,11 @@ export function getStoreFullUrl(slug: string): string {
 
 /**
  * Returns user-friendly domain text representation for display.
- * e.g. "gabriel-minis.vendas164.com.br"
+ * e.g. "vendas164.com.br/loja/teste"
  */
 export function getStoreDisplayDomain(slug: string): string {
   if (!slug) return "";
-  if (typeof window !== "undefined") {
-    const hostname = window.location.hostname.toLowerCase();
-    const port = window.location.port ? `:${window.location.port}` : "";
-    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".localhost")) {
-      return `${slug}.localhost${port}`;
-    }
-  }
-  return `${slug}.vendas164.com.br`;
+  return `vendas164.com.br/loja/${slug}`;
 }
 
 /**
