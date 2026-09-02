@@ -430,7 +430,7 @@ export function ProductsTab({
                 <div className="space-y-1.5">
                   <Label htmlFor="badge" className="text-xs font-medium text-muted-foreground">Selo (Badge)</Label>
                   <Select
-                    value={(form as any).badge || (mode === "pronta_entrega" ? "Pronta Entrega" : "__none")}
+                    value={(form as any).badge || "__none"}
                     onValueChange={(val) => setForm({ ...form, badge: val === "__none" ? "" : val } as any)}
                   >
                     <SelectTrigger id="badge" className="bg-muted/20 border-border/30">
@@ -754,7 +754,7 @@ export function ProductsTab({
             <Button
               type="button"
               size="sm"
-              onClick={() => { setForm({ ...emptyProduct, category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda" }); setIsCustomBrand(false); setSheetOpen(true); }}
+              onClick={() => { setForm({ ...emptyProduct, category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda", badge: mode === "pronta_entrega" ? "Pronta Entrega" : "" }); setIsCustomBrand(false); setSheetOpen(true); }}
               className={`gap-1.5 ${mode === "pronta_entrega" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
             >
               <Plus className="size-4" /> {mode === "pronta_entrega" ? "Nova pronta entrega" : "Nova pré-venda"}
@@ -1134,7 +1134,8 @@ function EditProductDialog({
     }
 
     saveProductCategory(product.id, isPronta ? "pronta_entrega" : "pre_venda");
-    const effectiveBadge = (form as any).badge || (isPronta ? "Pronta Entrega" : "");
+    const explicitBadge = (form as any).badge;
+    const effectiveBadge = explicitBadge !== undefined ? explicitBadge : (isPronta ? "Pronta Entrega" : "");
     saveProductBadge(product.id, effectiveBadge);
 
     queryClient.invalidateQueries({ queryKey: ["store-products"] });
@@ -1178,12 +1179,23 @@ function EditProductDialog({
               value={(form as any).category || "pre_venda"}
               onValueChange={(val) => {
                 const isP = val === "pronta_entrega";
+                const currentBadge = (form as any).badge;
+                let nextBadge = currentBadge;
+                if (isP) {
+                  if (!currentBadge || currentBadge === "__none") {
+                    nextBadge = "Pronta Entrega";
+                  }
+                } else {
+                  if (currentBadge === "Pronta Entrega") {
+                    nextBadge = "";
+                  }
+                }
                 setForm({
                   ...form,
                   category: val,
                   signal_rule: isP ? "sem_sinal" : ((form as any).signal_rule || "aguardando_sinal"),
                   down_payment_amount: isP ? "" : form.down_payment_amount,
-                  badge: isP && !(form as any).badge ? "Pronta Entrega" : (form as any).badge,
+                  badge: nextBadge,
                 } as any);
               }}
             >
@@ -1266,7 +1278,7 @@ function EditProductDialog({
             <div className="space-y-1.5">
               <Label htmlFor="edit-badge" className="text-xs font-medium text-muted-foreground">Selo (Badge)</Label>
               <Select
-                value={(form as any).badge || (isProntaMode ? "Pronta Entrega" : "__none")}
+                value={(form as any).badge || "__none"}
                 onValueChange={(val) => setForm({ ...form, badge: val === "__none" ? "" : val } as any)}
               >
                 <SelectTrigger id="edit-badge" className="bg-muted/20 border-border/30">
