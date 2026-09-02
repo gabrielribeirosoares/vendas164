@@ -65,7 +65,7 @@ export function getSubdomain(hostname?: string): string | null {
  * - In local dev: http://zero51-garage.localhost:8080
  * - In production: https://zero51-garage.vendas164.com.br
  */
-export function getStoreFullUrl(slug: string, withSession = true): string {
+export function getStoreFullUrl(slug: string): string {
   if (!slug) return "/";
 
   if (typeof window === "undefined") {
@@ -76,45 +76,17 @@ export function getStoreFullUrl(slug: string, withSession = true): string {
   const port = window.location.port ? `:${window.location.port}` : "";
   const protocol = window.location.protocol;
 
-  let targetUrl = "";
-
   // Local testing with .localhost or localhost:PORT
   if (hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".localhost")) {
-    targetUrl = `${protocol}//${slug}.localhost${port}`;
+    return `${protocol}//${slug}.localhost${port}`;
   } else if (hostname.endsWith("vendas164.com.br")) {
-    targetUrl = `https://${slug}.vendas164.com.br`;
+    return `https://${slug}.vendas164.com.br`;
   } else if (hostname.endsWith(".vercel.app")) {
     const baseVercelHost = hostname.split(".").slice(-3).join(".");
-    targetUrl = `${protocol}//${slug}.${baseVercelHost}${port}`;
-  } else {
-    targetUrl = `${window.location.origin}/loja/${slug}`;
+    return `${protocol}//${slug}.${baseVercelHost}${port}`;
   }
 
-  // Session handoff across subdomains / origins:
-  // If user is currently logged in, pass session tokens via hash so Supabase Auth logs user in on target origin.
-  if (withSession && typeof window !== "undefined" && typeof localStorage !== "undefined") {
-    try {
-      const storageKey = Object.keys(localStorage).find(
-        (k) => (k.startsWith("sb-") && k.endsWith("-auth-token")) || k === "supabase.auth.token"
-      );
-      if (storageKey) {
-        const sessionDataStr = localStorage.getItem(storageKey);
-        if (sessionDataStr) {
-          const sessionData = JSON.parse(sessionDataStr);
-          const accessToken = sessionData?.access_token || sessionData?.currentSession?.access_token;
-          const refreshToken = sessionData?.refresh_token || sessionData?.currentSession?.refresh_token;
-
-          if (accessToken && refreshToken) {
-            targetUrl += `#access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&token_type=bearer&type=signup`;
-          }
-        }
-      }
-    } catch (e) {
-      // Ignore JSON parse errors
-    }
-  }
-
-  return targetUrl;
+  return `${window.location.origin}/loja/${slug}`;
 }
 
 /**
@@ -170,7 +142,7 @@ export function useSubdomain() {
  * Returns the base URL of the main platform (no subdomain).
  * e.g. "http://localhost:8080" or "https://vendas164.com.br"
  */
-export function getMainPlatformUrl(path: string = "", withSession = true): string {
+export function getMainPlatformUrl(path: string = ""): string {
   if (typeof window === "undefined") {
     return `https://vendas164.com.br${path}`;
   }
@@ -179,42 +151,17 @@ export function getMainPlatformUrl(path: string = "", withSession = true): strin
   const port = window.location.port ? `:${window.location.port}` : "";
   const protocol = window.location.protocol;
 
-  let mainUrl = "";
-
   // If on a *.localhost subdomain, strip the subdomain
   if (hostname.endsWith(".localhost")) {
-    mainUrl = `${protocol}//localhost${port}${path}`;
+    return `${protocol}//localhost${port}${path}`;
   } else if (hostname.endsWith(".vendas164.com.br") && hostname !== "vendas164.com.br") {
-    mainUrl = `https://vendas164.com.br${path}`;
+    return `https://vendas164.com.br${path}`;
   } else if (hostname.endsWith(".vercel.app")) {
     const baseVercelHost = hostname.split(".").slice(-3).join(".");
-    mainUrl = `${protocol}//${baseVercelHost}${port}${path}`;
-  } else {
-    mainUrl = `${window.location.origin}${path}`;
+    return `${protocol}//${baseVercelHost}${port}${path}`;
   }
 
-  // Session handoff when returning to main platform
-  if (withSession && typeof window !== "undefined" && typeof localStorage !== "undefined") {
-    try {
-      const storageKey = Object.keys(localStorage).find(
-        (k) => (k.startsWith("sb-") && k.endsWith("-auth-token")) || k === "supabase.auth.token"
-      );
-      if (storageKey) {
-        const sessionDataStr = localStorage.getItem(storageKey);
-        if (sessionDataStr) {
-          const sessionData = JSON.parse(sessionDataStr);
-          const accessToken = sessionData?.access_token || sessionData?.currentSession?.access_token;
-          const refreshToken = sessionData?.refresh_token || sessionData?.currentSession?.refresh_token;
-
-          if (accessToken && refreshToken) {
-            mainUrl += `#access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&token_type=bearer&type=signup`;
-          }
-        }
-      }
-    } catch (e) {}
-  }
-
-  return mainUrl;
+  return `${window.location.origin}${path}`;
 }
 
 /**
@@ -228,7 +175,7 @@ export function redirectToMainIfOnSubdomain(path?: string): boolean {
   if (!subdomain) return false;
 
   const targetPath = path || window.location.pathname + window.location.search;
-  const mainUrl = getMainPlatformUrl(targetPath, true);
+  const mainUrl = getMainPlatformUrl(targetPath);
 
   if (mainUrl !== window.location.href) {
     window.location.replace(mainUrl);
