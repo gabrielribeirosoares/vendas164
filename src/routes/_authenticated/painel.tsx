@@ -221,9 +221,10 @@ function CustomerDashboardContent() {
 
   const total = useMemo(() => active.reduce((s, o) => s + Number(o.total_price), 0), [active]);
   const paid = useMemo(() => active.reduce((s, o) => {
+    const totalPrice = Number(o.total_price || 0);
     const signalPaid = (o.payment_status === "sinal_pago" || o.payment_status === "quitado") ? Number(o.down_payment || 0) : 0;
     const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid").reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-    return s + signalPaid + paidInsts;
+    return s + Math.min(totalPrice, signalPaid + paidInsts);
   }, 0), [active]);
 
   if (sessionLoading || ordersLoading) {

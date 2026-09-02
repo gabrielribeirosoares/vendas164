@@ -290,9 +290,11 @@ function SellerDashboard() {
     const active = (orders ?? []).filter((o) => o.payment_status !== "cancelado");
     const projected = active.reduce((s, o) => s + Number(o.total_price), 0);
     const received = active.reduce((s, o) => {
+      const totalPrice = Number(o.total_price || 0);
       const signalPaid = (o.payment_status === "sinal_pago" || o.payment_status === "quitado") ? Number(o.down_payment || 0) : 0;
       const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid").reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-      return s + signalPaid + paidInsts;
+      const orderReceived = Math.min(totalPrice, signalPaid + paidInsts);
+      return s + orderReceived;
     }, 0);
     const pending = Math.max(0, projected - received);
     const avgTicket = active.length > 0 ? projected / active.length : 0;
@@ -511,7 +513,7 @@ function SellerDashboard() {
           </TabsContent>
 
            <TabsContent value="clientes" className="mt-5">
-            <ClientsTab orders={orders ?? []} />
+            <ClientsTab orders={orders ?? []} storeId={store?.id} />
           </TabsContent>
 
           <TabsContent value="rastreamento" className="mt-5 space-y-6">

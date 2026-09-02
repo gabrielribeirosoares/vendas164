@@ -186,6 +186,30 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
     }
   }, [data?.store]);
 
+  // Vincular automaticamente o visitante logado à loja ao acessar a URL da loja
+  useEffect(() => {
+    async function autoLinkCustomerOnVisit() {
+      if (!user || !data?.store?.id) return;
+      if (data.store.owner_id === user.id) return; // Não vincular o próprio lojista à sua loja
+
+      try {
+        const { error } = await supabase.from("customer_store_link").upsert(
+          { user_id: user.id, store_id: data.store.id },
+          { onConflict: "user_id,store_id" }
+        );
+
+        if (!error) {
+          queryClient.invalidateQueries({ queryKey: ["is-following-store", user.id, data.store.id] });
+          queryClient.invalidateQueries({ queryKey: ["customer-store-links", data.store.id] });
+        }
+      } catch (e) {
+        console.error("Erro ao vincular cliente à loja:", e);
+      }
+    }
+
+    autoLinkCustomerOnVisit();
+  }, [user?.id, data?.store?.id]);
+
 
   async function toggleFollow() {
     if (!data?.store) return;

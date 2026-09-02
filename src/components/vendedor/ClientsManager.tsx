@@ -5,6 +5,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { getCustomerFromCache } from '@/lib/customerCache';
 import { Search, Trophy, Star, MessageCircle, Crown, Sparkles, Users, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +17,7 @@ import { brl, whatsappLink } from '@/lib/format';
 
 import type { OrderRow } from '@/components/vendedor/OrderManager';
 import { toast } from "sonner";
+
 function getClientTier(totalSpent: number, orderCount: number) {
   if (totalSpent >= 1000 || orderCount >= 5) {
     return {
@@ -31,6 +35,14 @@ function getClientTier(totalSpent: number, orderCount: number) {
       icon: Star,
     };
   }
+  if (orderCount === 0) {
+    return {
+      name: "Seguidor",
+      level: "follower",
+      color: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30",
+      icon: Users,
+    };
+  }
   return {
     name: "Bronze",
     level: "bronze",
@@ -39,7 +51,7 @@ function getClientTier(totalSpent: number, orderCount: number) {
   };
 }
 
-export function ClientsTab({ orders }: { orders: OrderRow[] }) {
+export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: string }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTier, setSelectedTier] = useState<string>("all");
   const [selectedClient, setSelectedClient] = useState<any>(null);
@@ -58,6 +70,39 @@ export function ClientsTab({ orders }: { orders: OrderRow[] }) {
   const [configOpen, setConfigOpen] = useState(false);
   const [tempWaTemplate, setTempWaTemplate] = useState(waTemplate);
 
+  // Buscar links de clientes que seguem a loja
+  const { data: storeLinks } = useQuery({
+    queryKey: ["customer-store-links", storeId],
+    enabled: !!storeId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("customer_store_link")
+        .select("user_id, created_at")
+        .eq("store_id", storeId!);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Obter IDs de todos os usuários (seguidores + compradores)
+  const linkUserIds = (storeLinks || []).map((l) => l.user_id);
+  const orderUserIds = orders.map((o) => o.user_id);
+  const allUserIds = Array.from(new Set([...linkUserIds, ...orderUserIds]));
+
+  // Buscar dados de perfil de todos os clientes
+  const { data: profilesData } = useQuery({
+    queryKey: ["client-profiles", allUserIds],
+    enabled: allUserIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, name, email, phone, created_at")
+        .in("id", allUserIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   function saveWaTemplate() {
     setWaTemplate(tempWaTemplate);
     localStorage.setItem("wa_template", tempWaTemplate);
@@ -66,37 +111,25 @@ export function ClientsTab({ orders }: { orders: OrderRow[] }) {
   }
 
   function handleSaveNote(userId: string) {
+    if (!userId) return;
     const updated = { ...clientNotes, [userId]: editingNote };
     setClientNotes(updated);
     localStorage.setItem("store_client_notes", JSON.stringify(updated));
     toast.success("Anotação do cliente salva!");
   }
 
-  const clientsMap = new Map<string, { profile: any; orders: OrderRow[]; totalSpent: number; firstOrderDate: Date }>();
+  const profilesMap = new Map((profilesData || []).map((p) => [p.id, p]));
+  const linkDateMap = new Map((storeLinks || []).map((l) => [l.user_id, new Date(l.created_at)]));
+  const ordersByUserMap = new Map<string, OrderRow[]>();
   const brandCountMap = new Map<string, number>();
 
   for (const order of orders) {
-    const userId = order.user_id;
-    const orderDate = new Date(order.created_at);
-
-    if (!clientsMap.has(userId)) {
-      clientsMap.set(userId, {
-        profile: order.profiles || { name: "Desconhecido", email: "", phone: "" },
-        orders: [],
-        totalSpent: 0,
-        firstOrderDate: orderDate,
-      });
+    if (!ordersByUserMap.has(order.user_id)) {
+      ordersByUserMap.set(order.user_id, []);
     }
-    const client = clientsMap.get(userId)!;
-    client.orders.push(order);
+    ordersByUserMap.get(order.user_id)!.push(order);
 
-    if (orderDate < client.firstOrderDate) {
-      client.firstOrderDate = orderDate;
-    }
-
-    if (order.payment_status !== "cancelado" && order.delivery_status !== "cancelado") {
-      client.totalSpent += Number(order.total_price || 0);
-
+    if (order.payment_status !== "cancelado" && (order as any).delivery_status !== "cancelado") {
       const brand = order.products?.brand;
       if (brand) {
         brandCountMap.set(brand, (brandCountMap.get(brand) || 0) + 1);
@@ -118,10 +151,47 @@ export function ClientsTab({ orders }: { orders: OrderRow[] }) {
   const currentYear = now.getFullYear();
   let newClientsThisMonth = 0;
 
-  const allClients = Array.from(clientsMap.values()).sort((a, b) => b.totalSpent - a.totalSpent);
+  const allClients = allUserIds.map((userId) => {
+    const userOrders = ordersByUserMap.get(userId) || [];
+    const dbProfile = profilesMap.get(userId);
+    const orderProfile = userOrders.find((o) => o.profiles)?.profiles;
+    const cached = getCustomerFromCache(userId);
+
+    const name =
+      (dbProfile?.name && dbProfile.name !== "Cliente" && dbProfile.name !== "Cliente cadastrado"
+        ? dbProfile.name
+        : orderProfile?.name || cached?.name) || "Cliente";
+    const email = dbProfile?.email || orderProfile?.email || cached?.email || "";
+    const phone = dbProfile?.phone || orderProfile?.phone || cached?.phone || "";
+
+    let totalSpent = 0;
+    let firstOrderDate: Date | null = null;
+
+    for (const order of userOrders) {
+      const orderDate = new Date(order.created_at);
+      if (!firstOrderDate || orderDate < firstOrderDate) {
+        firstOrderDate = orderDate;
+      }
+      if (order.payment_status !== "cancelado" && (order as any).delivery_status !== "cancelado") {
+        totalSpent += Number(order.total_price || 0);
+      }
+    }
+
+    const followDate = linkDateMap.get(userId) || (dbProfile?.created_at ? new Date(dbProfile.created_at) : new Date());
+    const entryDate = firstOrderDate || followDate;
+
+    return {
+      userId,
+      profile: { id: userId, name, email, phone },
+      orders: userOrders,
+      totalSpent,
+      firstOrderDate: entryDate,
+      isFollowerOnly: userOrders.length === 0,
+    };
+  }).sort((a, b) => b.totalSpent - a.totalSpent);
 
   for (const client of allClients) {
-    if (client.firstOrderDate.getMonth() === currentMonth && client.firstOrderDate.getFullYear() === currentYear) {
+    if (client.firstOrderDate && client.firstOrderDate.getMonth() === currentMonth && client.firstOrderDate.getFullYear() === currentYear) {
       newClientsThisMonth++;
     }
   }
@@ -135,7 +205,7 @@ export function ClientsTab({ orders }: { orders: OrderRow[] }) {
     const name = (c.profile.name || "").toLowerCase();
     const email = (c.profile.email || "").toLowerCase();
     const phone = (c.profile.phone || "").toLowerCase();
-    const note = (clientNotes[c.orders[0]?.user_id] || "").toLowerCase();
+    const note = (clientNotes[c.userId] || "").toLowerCase();
     return name.includes(q) || email.includes(q) || phone.includes(q) || note.includes(q);
   });
 
@@ -183,7 +253,7 @@ export function ClientsTab({ orders }: { orders: OrderRow[] }) {
               const tier = getClientTier(c.totalSpent, c.orders.length);
               const TierIcon = tier.icon;
               return (
-                <div key={c.orders[0]?.user_id || i} className="flex justify-between items-center text-xs gap-2 min-w-0">
+                <div key={c.userId || i} className="flex justify-between items-center text-xs gap-2 min-w-0">
                   <span className="truncate font-medium flex items-center gap-1 min-w-0">
                     <TierIcon className="size-3 text-amber-500 shrink-0" />
                     <span className="truncate">{i + 1}. {c.profile.name || "Desconhecido"}</span>
@@ -222,14 +292,14 @@ export function ClientsTab({ orders }: { orders: OrderRow[] }) {
                   size="sm"
                   onClick={() => {
                     const csvRows = [
-                      ["Cliente", "WhatsApp", "Email", "Nível Fidelidade", "Qtd Pedidos", "Total Comprado (R$)", "Primeiro Pedido", "Notas"].join(";"),
+                      ["Cliente", "WhatsApp", "Email", "Nível Fidelidade", "Qtd Pedidos", "Total Comprado (R$)", "Data", "Notas"].join(";"),
                       ...clients.map((c) => {
                         const tier = getClientTier(c.totalSpent, c.orders.length);
                         const name = c.profile.name || "Cliente";
                         const phone = c.profile.phone || "";
                         const email = c.profile.email || "";
                         const firstDate = c.firstOrderDate ? new Date(c.firstOrderDate).toLocaleDateString("pt-BR") : "";
-                        const note = (clientNotes[c.profile.id || ""] || "").replace(/"/g, '""');
+                        const note = (clientNotes[c.userId] || "").replace(/"/g, '""');
                         return [
                           `"${name}"`,
                           `"${phone}"`,
@@ -280,6 +350,7 @@ export function ClientsTab({ orders }: { orders: OrderRow[] }) {
               { id: "gold", label: "👑 VIP Ouro" },
               { id: "silver", label: "⭐ VIP Prata" },
               { id: "bronze", label: "🌟 Bronze" },
+              { id: "follower", label: "👥 Seguidores" },
             ].map((f) => (
               <button
                 key={f.id}
@@ -307,7 +378,7 @@ export function ClientsTab({ orders }: { orders: OrderRow[] }) {
               {/* VISUALIZAÇÃO MOBILE (CARDS OTIMIZADOS) */}
               <div className="grid grid-cols-1 gap-3 md:hidden">
                 {clients.map((c) => {
-                  const userId = c.orders[0]?.user_id;
+                  const userId = c.userId;
                   const tier = getClientTier(c.totalSpent, c.orders.length);
                   const TierIcon = tier.icon;
                   const note = clientNotes[userId] || "";
@@ -321,7 +392,7 @@ export function ClientsTab({ orders }: { orders: OrderRow[] }) {
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold text-sm truncate">{c.profile.name || "Desconhecido"}</p>
                           <p className="text-[10px] text-muted-foreground">
-                            Cliente desde {c.firstOrderDate.toLocaleDateString("pt-BR")}
+                            {c.orders.length > 0 ? "Cliente desde" : "Seguindo desde"} {c.firstOrderDate.toLocaleDateString("pt-BR")}
                           </p>
                         </div>
                         <Badge variant="outline" className={`gap-1 font-semibold shrink-0 text-[11px] ${tier.color}`}>
@@ -398,7 +469,7 @@ export function ClientsTab({ orders }: { orders: OrderRow[] }) {
                   </TableHeader>
                   <TableBody>
                     {clients.map((c) => {
-                      const userId = c.orders[0]?.user_id;
+                      const userId = c.userId;
                       const tier = getClientTier(c.totalSpent, c.orders.length);
                       const TierIcon = tier.icon;
                       const note = clientNotes[userId] || "";
@@ -408,7 +479,7 @@ export function ClientsTab({ orders }: { orders: OrderRow[] }) {
                           <TableCell className="font-medium">
                             <p className="font-semibold">{c.profile.name || "Desconhecido"}</p>
                             <p className="text-[10px] text-muted-foreground">
-                              Cliente desde {c.firstOrderDate.toLocaleDateString("pt-BR")}
+                              {c.orders.length > 0 ? "Cliente desde" : "Seguindo desde"} {c.firstOrderDate.toLocaleDateString("pt-BR")}
                             </p>
                           </TableCell>
                           <TableCell>
@@ -534,7 +605,7 @@ export function ClientsTab({ orders }: { orders: OrderRow[] }) {
                   size="sm"
                   variant="secondary"
                   className="text-xs h-7"
-                  onClick={() => selectedClient && handleSaveNote(selectedClient.orders[0]?.user_id)}
+                  onClick={() => selectedClient && handleSaveNote(selectedClient.userId)}
                 >
                   Salvar anotação
                 </Button>
@@ -543,48 +614,54 @@ export function ClientsTab({ orders }: { orders: OrderRow[] }) {
 
             <div className="space-y-3">
               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Histórico de Reservas</h4>
-              {(() => {
-                const grouped = new Map<string, { order: OrderRow; quantity: number }>();
-                selectedClient?.orders.forEach((order: OrderRow) => {
-                  const key = `${order.product_id}_${order.payment_status}`;
-                  if (grouped.has(key)) {
-                    grouped.get(key)!.quantity += 1;
-                  } else {
-                    grouped.set(key, { order, quantity: 1 });
-                  }
-                });
+              {selectedClient?.orders?.length === 0 ? (
+                <div className="text-xs text-muted-foreground italic py-6 bg-muted/20 px-4 rounded-xl text-center border border-border/40">
+                  Nenhum pedido ou reserva realizado ainda. Este cliente está seguindo a sua loja.
+                </div>
+              ) : (
+                (() => {
+                  const grouped = new Map<string, { order: OrderRow; quantity: number }>();
+                  selectedClient?.orders?.forEach((order: OrderRow) => {
+                    const key = `${order.product_id}_${order.payment_status}`;
+                    if (grouped.has(key)) {
+                      grouped.get(key)!.quantity += 1;
+                    } else {
+                      grouped.set(key, { order, quantity: 1 });
+                    }
+                  });
 
-                return Array.from(grouped.values()).map(({ order, quantity }) => (
-                  <div key={`${order.product_id}_${order.payment_status}`} className="border rounded-xl p-3 flex flex-col sm:flex-row gap-3 sm:gap-4 justify-between items-start sm:items-center bg-card/40 shadow-sm">
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      {order.products?.image_url ? (
-                        <img src={order.products.image_url} alt="Produto" className="size-12 rounded-lg object-cover border border-border/40 shrink-0" />
-                      ) : (
-                        <div className="size-12 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
-                          <Package className="size-6" />
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold text-sm flex items-center flex-wrap">
-                          {quantity > 1 && <Badge variant="secondary" className="mr-2 text-xs py-0 h-5 px-1.5">{quantity}x</Badge>}
-                          <span className="truncate">{order.products?.brand || "Desconhecido"} {order.products?.model || "Produto indisponível"}</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground flex flex-wrap gap-2 items-center mt-1">
-                          <span>Reserva: {new Date(order.created_at).toLocaleDateString("pt-BR")}</span>
-                          {order.tracking_code && (
-                            <span className="font-mono text-primary">📦 {order.tracking_code}</span>
-                          )}
+                  return Array.from(grouped.values()).map(({ order, quantity }) => (
+                    <div key={`${order.product_id}_${order.payment_status}`} className="border rounded-xl p-3 flex flex-col sm:flex-row gap-3 sm:gap-4 justify-between items-start sm:items-center bg-card/40 shadow-sm">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        {order.products?.image_url ? (
+                          <img src={order.products.image_url} alt="Produto" className="size-12 rounded-lg object-cover border border-border/40 shrink-0" />
+                        ) : (
+                          <div className="size-12 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
+                            <Package className="size-6" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-sm flex items-center flex-wrap">
+                            {quantity > 1 && <Badge variant="secondary" className="mr-2 text-xs py-0 h-5 px-1.5">{quantity}x</Badge>}
+                            <span className="truncate">{order.products?.brand || "Desconhecido"} {order.products?.model || "Produto indisponível"}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground flex flex-wrap gap-2 items-center mt-1">
+                            <span>Reserva: {new Date(order.created_at).toLocaleDateString("pt-BR")}</span>
+                            {order.tracking_code && (
+                              <span className="font-mono text-primary">📦 {order.tracking_code}</span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start w-full sm:w-auto gap-1 text-sm pt-2 sm:pt-0 border-t sm:border-t-0 border-border/30">
-                      <div className="font-semibold">{brl(Number(order.total_price) * quantity)}</div>
-                      <PaymentBadge status={order.payment_status} />
+                      <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start w-full sm:w-auto gap-1 text-sm pt-2 sm:pt-0 border-t sm:border-t-0 border-border/30">
+                        <div className="font-semibold">{brl(Number(order.total_price) * quantity)}</div>
+                        <PaymentBadge status={order.payment_status} />
+                      </div>
                     </div>
-                  </div>
-                ));
-              })()}
+                  ));
+                })()
+              )}
             </div>
           </div>
         </DialogContent>

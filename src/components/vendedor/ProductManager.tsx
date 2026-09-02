@@ -1,5 +1,5 @@
 import { BookmarkCheck, CopyPlus, Zap } from "lucide-react";
-import { formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
+import { formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Pencil, Plus, Search, Share2, Trash2 } from "lucide-react";
@@ -1898,8 +1898,14 @@ export function ManualReservationDialog({
         if (orderErr) throw orderErr;
 
         if (insertedOrder?.id) {
+          const signalInfo = getProductSignalAmount(product, 1);
+          const expectedSignal = signalInfo.amount;
+          const signalToDeduct = (paymentStatus === "pronta_entrega" || paymentStatus === "sem_sinal")
+            ? 0
+            : (paymentStatus === "quitado" ? 0 : Math.max(expectedSignal, downPayment));
+
           const effectiveCount = Math.max(installmentCount, 1);
-          const amountToParcel = Math.max(0, totalPrice - downPayment);
+          const amountToParcel = Math.max(0, totalPrice - signalToDeduct);
           const amountPerInstallment = amountToParcel / effectiveCount;
           const defaultDay = storeInfo?.default_installment_due_day;
           const now = new Date();

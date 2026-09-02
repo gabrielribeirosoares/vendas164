@@ -33,21 +33,6 @@ export function OrderInstallmentsDialog({
   const [customCount, setCustomCount] = useState(installmentCount || 1);
   const queryClient = useQueryClient();
 
-  const { data: installments, isLoading } = useQuery({
-    queryKey: ["order_installments", orderId],
-    enabled: open,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("order_installments")
-        .select("*")
-        .eq("order_id", orderId)
-        .order("installment_number", { ascending: true });
-      
-      if (error) throw error;
-      return data;
-    }
-  });
-
   const { data: orderMeta } = useQuery({
     queryKey: ["order_meta", orderId],
     enabled: open,
@@ -61,6 +46,31 @@ export function OrderInstallmentsDialog({
   const actualSignal = Number(orderMeta?.down_payment || 0);
   const signalToDeduct = Math.max(expectedSignal, actualSignal);
   const amountToParcel = Math.max(0, totalPrice - signalToDeduct);
+
+  const { data: installments, isLoading } = useQuery({
+    queryKey: ["order_installments", orderId, signalToDeduct],
+    enabled: open,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("order_installments")
+        .select("*")
+        .eq("order_id", orderId)
+        .order("installment_number", { ascending: true });
+      
+      if (error) throw error;
+      const list = data ?? [];
+
+      // Se existir 1 única parcela pendente cujo valor é igual ao valor total do produto (sem o sinal deduzido),
+      // ajustamos automaticamente para abater o sinal
+      if (list.length === 1 && list[0].status === "pending" && signalToDeduct > 0 && Math.abs(Number(list[0].amount) - totalPrice) < 0.01) {
+        const adjustedAmount = Math.max(0, totalPrice - signalToDeduct);
+        await supabase.from("order_installments").update({ amount: adjustedAmount }).eq("id", list[0].id);
+        list[0].amount = adjustedAmount;
+      }
+
+      return list;
+    }
+  });
 
   const generateInstallments = useMutation({
     mutationFn: async () => {
@@ -233,9 +243,15 @@ export function OrderInstallmentsDialog({
             )}
             
             {installments && installments.length > 0 && (
-              <div className="flex justify-between bg-muted/50 p-3 rounded-lg text-sm">
+              <div className="flex flex-wrap justify-between items-center bg-muted/50 p-3 rounded-lg text-sm gap-2">
+                {actualSignal > 0 && (
+                  <div>
+                    <span className="text-muted-foreground">Sinal Pago: </span>
+                    <span className="font-semibold text-emerald-500">{brl(actualSignal)}</span>
+                  </div>
+                )}
                 <div>
-                  <span className="text-muted-foreground">Total Pago: </span>
+                  <span className="text-muted-foreground">Parcelas Pagas: </span>
                   <span className="font-semibold text-emerald-500">
                     {brl(installments.filter(i => i.status === "paid").reduce((acc, curr) => acc + Number(curr.amount), 0))}
                   </span>

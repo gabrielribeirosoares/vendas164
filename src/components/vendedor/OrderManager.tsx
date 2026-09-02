@@ -474,6 +474,15 @@ export function OrdersTab({
       }
       patch.down_payment = downPayment;
       patch.reservation_expires_at = null;
+
+      // Ajustar parcelas pendentes para descontar o sinal recém-pago
+      for (const id of ids) {
+        const { data: insts } = await supabase.from("order_installments").select("id, amount, status").eq("order_id", id);
+        if (insts && insts.length === 1 && insts[0].status === "pending") {
+          const expectedAmount = Math.max(0, totalPrice - downPayment);
+          await supabase.from("order_installments").update({ amount: expectedAmount }).eq("id", insts[0].id);
+        }
+      }
     } else if (newStatus === "quitado") {
       // Manter o sinal original, não substituir pelo total
       patch.down_payment = downPayment;
