@@ -738,7 +738,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                             setEditingNote(clientNotes[c.userId] || "");
                           }}
                         >
-                          Ver Acervo
+                          Ver histórico
                         </Button>
                       </div>
                     </div>
@@ -840,7 +840,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                                   setEditingNote(clientNotes[c.userId] || "");
                                 }}
                               >
-                                Ver Acervo
+                                Ver histórico
                               </Button>
                             </div>
                           </TableCell>

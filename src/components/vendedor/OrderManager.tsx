@@ -1090,15 +1090,15 @@ export function OrdersTab({
                                     <SelectItem value="cancelado">Cancelado</SelectItem>
                                   </SelectContent>
                                 </Select>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                    title="Excluir reserva permanentemente"
-                                    onClick={() => handleDeleteGroup(item)}
-                                  >
-                                    <Trash2 className="size-4" />
-                                  </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                  title="Excluir reserva permanentemente"
+                                  onClick={() => handleDeleteGroup(item)}
+                                >
+                                  <Trash2 className="size-4" />
+                                </Button>
                                 </div>
                                 <div className="mt-2 flex justify-end">
                                   <OrderInstallmentsDialog
