@@ -1,4 +1,4 @@
-import { BookmarkCheck, CopyPlus, Zap } from "lucide-react";
+import { BookmarkCheck, CopyPlus, Zap, Sparkles } from "lucide-react";
 import { formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { PhoneInput } from "@/components/PhoneInput";
 import { getCustomerFromCache, saveCustomerToCache } from "@/lib/customerCache";
 import { getProductBadge, saveProductBadge, saveProductCategory, PRESET_BADGES } from "@/lib/storeCustomizations";
+import { BlingIntegrationDialog } from "@/components/vendedor/BlingIntegrationDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -87,6 +88,9 @@ export function ProductsTab({
   const [selectedBrand, setSelectedBrand] = useState<string>("all");
   const [isCustomBrand, setIsCustomBrand] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [blingOpen, setBlingOpen] = useState(false);
+
+  const isBlingEligible = store.slug === "gabriel-minis" || (store.name && store.name.toLowerCase().includes("gabriel"));
 
   const displayedProducts = useMemo(() => {
     if (mode === "pronta_entrega") {
@@ -751,6 +755,19 @@ export function ProductsTab({
                 ))}
               </div>
             )}
+            {isBlingEligible && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setBlingOpen(true)}
+                className="gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 font-semibold"
+                title="Sincronizar e importar catálogo do Bling ERP"
+              >
+                <Sparkles className="size-3.5 fill-current" />
+                <span>Bling ERP</span>
+              </Button>
+            )}
             <Button
               type="button"
               size="sm"
@@ -937,6 +954,15 @@ export function ProductsTab({
           onSelectTab?.("reservas");
         }}
       />
+
+      {isBlingEligible && (
+        <BlingIntegrationDialog
+          storeId={store.id}
+          storeName={store.name}
+          open={blingOpen}
+          onOpenChange={setBlingOpen}
+        />
+      )}
     </>
   );
 }
