@@ -220,7 +220,7 @@ export function BlingIntegrationDialog({
         const model = item.nome.replace(new RegExp(`^${brand}\\s*`, "i"), "").trim() || item.nome;
         const stockQty = Number(item.estoque?.saldoVirtualTotal ?? 1);
         const isPreVenda = importMode === "pre_venda";
-        const slug = slugify(`${brand}-${model}-${Date.now()}`);
+        const slug = slugify(`${brand}-${model}`);
 
         const payload: any = {
           store_id: storeId,
