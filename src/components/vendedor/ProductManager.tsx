@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, slugify } from "@/lib/format";
+import { getStoreFullUrl, getProductUrl } from "@/lib/subdomain";
 import { useSession } from "@/lib/session";
 import { uploadImage } from "@/lib/upload";
 import { getStoreBrands, saveStoreBrands } from "@/lib/brands";
@@ -168,7 +169,7 @@ export function ProductsTab({
       stock: Number(form.stock || 0),
       initial_stock: Number(form.stock || 0),
       image_url: form.image_url || null,
-      slug: slugify(form.model.trim()),
+      slug: slugify(`${form.brand.trim()}-${form.model.trim()}`),
       bulk_discount_threshold: (form as any).bulk_discount_threshold ? Number((form as any).bulk_discount_threshold) : null,
       bulk_discount_price: (form as any).bulk_discount_price ? Number((form as any).bulk_discount_price) : null,
       bulk_has_installment_surcharge: (form as any).bulk_has_installment_surcharge === "true",
@@ -903,7 +904,8 @@ export function ProductsTab({
                               size="sm"
                               title="Copiar link"
                               onClick={() => {
-                                navigator.clipboard.writeText(`${window.location.origin}/produto/${p.id}`);
+                                const fullUrl = `${getStoreFullUrl(store.slug).replace(/\/$/, '')}/${p.slug || p.id}`;
+                                navigator.clipboard.writeText(fullUrl);
                                 toast.success("Link do produto copiado!");
                               }}
                             >
@@ -1101,7 +1103,7 @@ function EditProductDialog({
       initial_stock: newInitial,
       is_open: form.is_open,
       image_url: form.image_url || null,
-      slug: slugify(form.model.trim()),
+      slug: slugify(`${form.brand.trim()}-${form.model.trim()}`),
       bulk_discount_threshold: (form as any).bulk_discount_threshold ? Number((form as any).bulk_discount_threshold) : null,
       bulk_discount_price: (form as any).bulk_discount_price ? Number((form as any).bulk_discount_price) : null,
       bulk_has_installment_surcharge: (form as any).bulk_has_installment_surcharge === "true",

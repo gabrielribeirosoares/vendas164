@@ -148,7 +148,7 @@ export function BlingIntegrationDialog({
       }
 
       setBlingProducts(result.products as BlingProduct[]);
-      setSelectedProductIds(result.products.map((p) => p.id));
+      setSelectedProductIds([]);
       toast.success(`${result.products.length} produtos carregados do Bling!`);
     } catch (err: any) {
       toast.error(err.message || "Erro ao consultar produtos no Bling");
@@ -179,16 +179,40 @@ export function BlingIntegrationDialog({
     return "Colecionáveis";
   }
 
+  const filteredBlingProducts = blingProducts.filter((p) => {
+    if (!searchFilter.trim()) return true;
+    const q = searchFilter.toLowerCase().trim();
+    return p.nome.toLowerCase().includes(q) || (p.codigo && p.codigo.toLowerCase().includes(q));
+  });
+
+  // Itens a serem importados (respeita o filtro ativo)
+  const itemsToImport = searchFilter.trim()
+    ? filteredBlingProducts.filter((p) => selectedProductIds.includes(p.id))
+    : blingProducts.filter((p) => selectedProductIds.includes(p.id));
+
+  const isAllFilteredSelected =
+    filteredBlingProducts.length > 0 &&
+    filteredBlingProducts.every((p) => selectedProductIds.includes(p.id));
+
+  function toggleSelectAllFiltered() {
+    if (isAllFilteredSelected) {
+      const filteredIds = new Set(filteredBlingProducts.map((p) => p.id));
+      setSelectedProductIds((prev) => prev.filter((id) => !filteredIds.has(id)));
+    } else {
+      const filteredIds = filteredBlingProducts.map((p) => p.id);
+      setSelectedProductIds((prev) => Array.from(new Set([...prev, ...filteredIds])));
+    }
+  }
+
   // Importar os produtos selecionados para o banco de dados da loja
   async function handleImportProducts() {
-    if (selectedProductIds.length === 0) {
-      toast.error("Selecione pelo menos um produto para importar.");
+    if (itemsToImport.length === 0) {
+      toast.error("Selecione pelo menos um produto visível para importar.");
       return;
     }
 
     setImporting(true);
     try {
-      const itemsToImport = blingProducts.filter((p) => selectedProductIds.includes(p.id));
       let successCount = 0;
 
       for (const item of itemsToImport) {
@@ -196,7 +220,7 @@ export function BlingIntegrationDialog({
         const model = item.nome.replace(new RegExp(`^${brand}\\s*`, "i"), "").trim() || item.nome;
         const stockQty = Number(item.estoque?.saldoVirtualTotal ?? 1);
         const isPreVenda = importMode === "pre_venda";
-        const slug = slugify(`${brand}-${model}-${Date.now()}`);
+        const slug = slugify(`${brand}-${model}`);
 
         const payload: any = {
           store_id: storeId,
@@ -229,12 +253,6 @@ export function BlingIntegrationDialog({
       setImporting(false);
     }
   }
-
-  const filteredBlingProducts = blingProducts.filter((p) => {
-    if (!searchFilter) return true;
-    const q = searchFilter.toLowerCase();
-    return p.nome.toLowerCase().includes(q) || (p.codigo && p.codigo.toLowerCase().includes(q));
-  });
 
   const authUrl = formClientId
     ? `https://www.bling.com.br/Api/v3/oauth/authorize?response_type=code&client_id=${formClientId}&state=${slugify(storeName)}`
@@ -394,15 +412,9 @@ export function BlingIntegrationDialog({
                   variant="ghost"
                   size="sm"
                   className="h-6 text-[11px] text-primary"
-                  onClick={() => {
-                    if (selectedProductIds.length === filteredBlingProducts.length) {
-                      setSelectedProductIds([]);
-                    } else {
-                      setSelectedProductIds(filteredBlingProducts.map((p) => p.id));
-                    }
-                  }}
+                  onClick={toggleSelectAllFiltered}
                 >
-                  {selectedProductIds.length === filteredBlingProducts.length ? "Desmarcar Todos" : "Marcar Todos"}
+                  {isAllFilteredSelected ? "Desmarcar Todos" : "Marcar Todos"}
                 </Button>
               </div>
 
@@ -469,7 +481,7 @@ export function BlingIntegrationDialog({
         {/* Rodapé de Ações */}
         <div className="flex items-center justify-between pt-3 border-t border-border/40 shrink-0">
           <span className="text-xs text-muted-foreground">
-            {selectedProductIds.length} de {blingProducts.length} selecionados
+            {itemsToImport.length} de {filteredBlingProducts.length} selecionados
           </span>
 
           <div className="flex gap-2">
@@ -480,10 +492,10 @@ export function BlingIntegrationDialog({
               size="sm"
               className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5"
               onClick={handleImportProducts}
-              disabled={importing || selectedProductIds.length === 0}
+              disabled={importing || itemsToImport.length === 0}
             >
               <Download className="size-3.5" />
-              {importing ? "Importando..." : `Importar (${selectedProductIds.length}) para ${storeName}`}
+              {importing ? "Importando..." : `Importar (${itemsToImport.length}) para ${storeName}`}
             </Button>
           </div>
         </div>
