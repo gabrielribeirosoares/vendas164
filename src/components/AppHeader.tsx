@@ -216,11 +216,6 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                                   </Link>
                                 </Button>
                                 <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
-                                  <Link to="/vendedor" search={{ tab: 'cobrancas' }}>
-                                    <CreditCard className="size-4 text-emerald-500" /> Cobranças
-                                  </Link>
-                                </Button>
-                                <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
                                   <Link to="/vendedor" search={{ tab: 'clientes' }}>
                                     <User className="size-4 text-emerald-500" /> Clientes
                                   </Link>

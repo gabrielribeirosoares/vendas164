@@ -44,7 +44,6 @@ import { ClientsTab } from "@/components/vendedor/ClientsManager";
 import { SmartNotifications } from "@/components/vendedor/SmartNotifications";
 import { ProductsTab } from "@/components/vendedor/ProductManager";
 import { SellerOverview } from "@/components/vendedor/SellerOverview";
-import { InstallmentsManager } from "@/components/vendedor/InstallmentsManager";
 import { TrackingIntegration } from "@/components/vendedor/TrackingIntegration";
 import { RefreshCw } from "lucide-react";
 
@@ -478,9 +477,6 @@ function SellerDashboard() {
               <Zap className="size-3.5 fill-emerald-500 text-emerald-500" /> Pronta Entrega
             </TabsTrigger>
             <TabsTrigger value="reservas" className="text-xs sm:text-sm">Reservas</TabsTrigger>
-            <TabsTrigger value="cobrancas" className="gap-1.5 text-xs sm:text-sm">
-              <Calendar className="size-3.5" /> Cobranças
-            </TabsTrigger>
             <TabsTrigger value="clientes" className="text-xs sm:text-sm">Clientes</TabsTrigger>
             <TabsTrigger value="rastreamento" className="text-xs sm:text-sm text-blue-600 dark:text-blue-400">
               <RefreshCw className="size-3.5" /> Rastreamento
@@ -506,10 +502,6 @@ function SellerDashboard() {
           <TabsContent value="reservas" className="mt-5 space-y-6">
             <SellerOverview totals={totals} brandData={brandData} />
             <OrdersTab storeId={store.id} storeColor={store.primary_color} products={products ?? []} orders={orders ?? []} />
-          </TabsContent>
-
-          <TabsContent value="cobrancas" className="mt-5">
-            <InstallmentsManager storeId={store.id} />
           </TabsContent>
 
            <TabsContent value="clientes" className="mt-5">

@@ -17,40 +17,40 @@ export async function reserveQuota(productId: string, installmentCount?: number,
   }
   await supabase.from("orders").update(payload).eq("id", orderId);
   
-  // Gerar as parcelas automaticamente
-  const { data: orderData } = await supabase.from("orders").select("total_price, stores(default_installment_due_day), products(*)").eq("id", orderId).maybeSingle();
-  if (orderData) {
-    const signalInfo = getProductSignalAmount(orderData.products, 1);
-    const amountToParcel = Math.max(0, Number(orderData.total_price) - signalInfo.amount);
-    const amountPerInstallment = amountToParcel / count;
-    const defaultDay = (orderData.stores as any)?.default_installment_due_day;
-    const now = new Date();
-    const newInstallments = Array.from({ length: count }).map((_, i) => {
-        // Criamos a data pro dia 1 do mês futuro para evitar o bug do dia 31 pular para o próximo mês
-        const futureYear = now.getFullYear();
-        const futureMonth = now.getMonth() + i + 1;
-        
-        let dueDate: Date;
-        if (defaultDay && defaultDay >= 1 && defaultDay <= 31) {
-          dueDate = new Date(futureYear, futureMonth, 1);
-          const lastDayOfMonth = new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0).getDate();
-          dueDate.setDate(Math.min(defaultDay, lastDayOfMonth));
-        } else {
-          // Lógica padrão: Tenta manter o dia original, mas se o mês futuro for menor que o dia original, ajusta pro último dia
-          dueDate = new Date(futureYear, futureMonth, now.getDate());
-          if (dueDate.getMonth() !== futureMonth % 12) {
-            dueDate.setDate(0);
+  // Gerar as parcelas automaticamente apenas se o cliente/loja selecionou parcelamento fixo (> 1 parcela)
+  if (count > 1) {
+    const { data: orderData } = await supabase.from("orders").select("total_price, stores(default_installment_due_day), products(*)").eq("id", orderId).maybeSingle();
+    if (orderData) {
+      const signalInfo = getProductSignalAmount(orderData.products, 1);
+      const amountToParcel = Math.max(0, Number(orderData.total_price) - signalInfo.amount);
+      const amountPerInstallment = amountToParcel / count;
+      const defaultDay = (orderData.stores as any)?.default_installment_due_day;
+      const now = new Date();
+      const newInstallments = Array.from({ length: count }).map((_, i) => {
+          const futureYear = now.getFullYear();
+          const futureMonth = now.getMonth() + i + 1;
+          
+          let dueDate: Date;
+          if (defaultDay && defaultDay >= 1 && defaultDay <= 31) {
+            dueDate = new Date(futureYear, futureMonth, 1);
+            const lastDayOfMonth = new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0).getDate();
+            dueDate.setDate(Math.min(defaultDay, lastDayOfMonth));
+          } else {
+            dueDate = new Date(futureYear, futureMonth, now.getDate());
+            if (dueDate.getMonth() !== futureMonth % 12) {
+              dueDate.setDate(0);
+            }
           }
-        }
-        return {
-          order_id: orderId,
-          installment_number: i + 1,
-          amount: amountPerInstallment,
-          due_date: dueDate.toISOString(),
-          status: "pending"
-        };
-      });
+          return {
+            order_id: orderId,
+            installment_number: i + 1,
+            amount: amountPerInstallment,
+            due_date: dueDate.toISOString(),
+            status: "pending"
+          };
+        });
       await supabase.from("order_installments").insert(newInstallments);
+    }
   }
   return orderId;
 }
