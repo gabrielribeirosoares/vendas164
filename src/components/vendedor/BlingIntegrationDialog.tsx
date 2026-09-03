@@ -6,30 +6,15 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Package, RefreshCw, CheckCircle2, AlertCircle, ArrowRight, Download, Search, Sparkles } from "lucide-react";
+import { Package, RefreshCw, CheckCircle2, Download, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, slugify } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 
-interface BlingProduct {
-  id: number;
-  nome: string;
-  codigo?: string;
-  preco: number;
-  estoque?: {
-    saldoVirtualTotal?: number;
-  };
-  imagemURL?: string;
-  descricaoCurta?: string;
-}
+import { fetchBlingProductsServer, type BlingProductItem } from "@/lib/bling";
 
-const DEFAULT_BLING_CONFIG = {
-  clientId: "a9edee22552004de6910069d7b6de18064bd313a",
-  clientSecret: "aa8fcc07a56cfec1df445900ff89649db8b0c52eba1b38e49625d7b739cd",
-  accessToken: "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpZCI6ImJmMWE5YjRmNGYxZWQ3NzJlMDFkZGM4YjU3ZWQxMDhmMWUxMjdhYjQiLCJqdGkiOiJiZjFhOWI0ZjRmMWVkNzcyZTAxZGRjOGI1N2VkMTA4ZjFlMTI3YWI0IiwiaXNzIjpudWxsLCJhdWQiOiJhOWVkZWUyMjU1MjAwNGRlNjkxMDA2OWQ3YjZkZTE4MDY0YmQzMTNhIiwic3ViIjoiMTQ3ODUwMjY4MDQiLCJleHAiOjE3ODg0MjA1NzEsImlhdCI6MTc4ODM5ODk3MSwidG9rZW5fdHlwZSI6ImJlYXJlciIsInNjb3BlIjpudWxsLCJwZXJtIjoiMmU4MGEzMzg0ZTNlMDAwMDEwMDAwMGUxIiwiZ3JhbnRUeXBlcyI6ImF1dGhvcml6YXRpb25fY29kZSByZWZyZXNoX3Rva2VuIiwiYXBwX2lkIjoiMzk1MjY0IiwiY29tcGFueV9pZCI6MTQ5MTgxOTI3NjUsInJvbGUiOiJhZG0iLCJwbGFuX25hbWUiOiJQbGFub1RpdGFuaW9UaWVyMSIsImFwcHJvdmVkIjpmYWxzZX0.nFp83hCYcCXH5JSkc4RbYn69OJ1BWcrbMmuvOOEZjkXr5-wu3ll3RZAL75pdf-Nfdq7AOfLSV-hwXQaZKxJkdmFuRoNDbbwLfOY0PVzNBAnUlYGx3TKa89uu6_Xvh6r5k68xj5s4viEi737TKbS74UNtRwlkRMf4h0HEW2ZberlMEL--Vwma-EzPtrzsQgeBW4RzleGxl_-fR_3K2c33s8pFrJZF-yy06HbUGxXaItYJss1kSU7lYgBVmMtUTkCYFQXtbFPf4U3N6My_8bSl4X_6jdd6YpI1E-sLVOq-tEZTS1sZk5I54G0j9UueSgWMOmIl_DMtc4MC2uOBx28L8g",
-  refreshToken: "e46824420f854fe643142189c715d8cf454b5870",
-};
+interface BlingProduct extends BlingProductItem {}
 
 export function BlingIntegrationDialog({
   storeId,
@@ -50,40 +35,17 @@ export function BlingIntegrationDialog({
   const [importing, setImporting] = useState(false);
   const [searchFilter, setSearchFilter] = useState("");
 
-  // Config do Bling gravada por loja
-  const [config, setConfig] = useState(() => {
-    try {
-      const saved = localStorage.getItem(`bling_cfg_${storeId}`);
-      return saved ? JSON.parse(saved) : DEFAULT_BLING_CONFIG;
-    } catch {
-      return DEFAULT_BLING_CONFIG;
-    }
-  });
+  const storeKey = storeName.toLowerCase().includes("mf") ? "mf" : "gabriel";
 
   // Função para buscar produtos do Bling
   async function fetchBlingProducts() {
     setLoadingProducts(true);
     try {
-      const token = config.accessToken;
-      if (!token) {
-        throw new Error("Token de acesso do Bling não configurado.");
-      }
-
-      const res = await fetch("https://api.bling.com.br/Api/v3/produtos?limite=100", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
+      const list = await fetchBlingProductsServer({
+        data: { storeKey, limit: 100 },
       });
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData?.error?.message || `Erro ${res.status} ao conectar no Bling`);
-      }
-
-      const json = await res.json();
-      const list: BlingProduct[] = json?.data || [];
-      setBlingProducts(list);
+      setBlingProducts(list as BlingProduct[]);
       setSelectedProductIds(list.map((p) => p.id));
       toast.success(`${list.length} produtos carregados do Bling!`);
     } catch (err: any) {
@@ -177,7 +139,7 @@ export function BlingIntegrationDialog({
               Integração Bling ERP &bull; {storeName}
             </DialogTitle>
             <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-xs">
-              🟢 API v3 Ativa
+              🟢 Bling Conectado
             </Badge>
           </div>
           <DialogDescription className="text-xs">
@@ -186,17 +148,17 @@ export function BlingIntegrationDialog({
         </DialogHeader>
 
         <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-0.5">
-          {/* Status e Configurações Rápidas */}
+          {/* Painel Superior de Ações */}
           <div className="bg-muted/30 p-3 rounded-xl border border-border/40 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="text-xs">
-                <span className="font-semibold text-foreground block">Conta Bling Vinculada</span>
-                <span className="text-muted-foreground text-[11px]">Empresa: Gabriel Minis (Plano Titânio)</span>
+                <span className="font-semibold text-foreground block">Catálogo Oficial do Bling</span>
+                <span className="text-muted-foreground text-[11px]">Sincronização em tempo real via API v3</span>
               </div>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 text-xs gap-1.5 shrink-0"
+                className="h-8 text-xs gap-1.5 shrink-0 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 font-semibold"
                 onClick={fetchBlingProducts}
                 disabled={loadingProducts}
               >

@@ -90,7 +90,10 @@ export function ProductsTab({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [blingOpen, setBlingOpen] = useState(false);
 
-  const isBlingEligible = store.slug === "gabriel-minis" || (store.name && store.name.toLowerCase().includes("gabriel"));
+  const isBlingEligible =
+    store.slug === "gabriel-minis" ||
+    store.slug === "mf-minis-diecast" ||
+    (store.name && (store.name.toLowerCase().includes("gabriel") || store.name.toLowerCase().includes("mf")));
 
   const displayedProducts = useMemo(() => {
     if (mode === "pronta_entrega") {
