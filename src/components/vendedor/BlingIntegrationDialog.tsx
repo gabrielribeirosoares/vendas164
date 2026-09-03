@@ -6,15 +6,27 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Package, RefreshCw, CheckCircle2, Download, Search, Sparkles } from "lucide-react";
+import { Package, RefreshCw, CheckCircle2, AlertCircle, ArrowRight, Download, Search, Sparkles, Key, ExternalLink, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, slugify } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { fetchBlingProductsServer, type BlingProductItem } from "@/lib/bling";
+import { fetchBlingProductsServer, exchangeBlingCodeServer, type BlingProductItem, type BlingTokenData } from "@/lib/bling";
 
 interface BlingProduct extends BlingProductItem {}
+
+// Credenciais padrão das lojas
+const KNOWN_STORE_CREDS: Record<string, { clientId: string; clientSecret: string }> = {
+  gabriel: {
+    clientId: "a9edee22552004de6910069d7b6de18064bd313a",
+    clientSecret: "aa8fcc07a56cfec1df445900ff89649db8b0c52eba1b38e49625d7b739cd",
+  },
+  mf: {
+    clientId: "fc7160470be3728be6287c8f6e04d8f8c8718275",
+    clientSecret: "01bce5db8c136fb793d844dcc8869ec0ed7b69e652c3adf2411cf200772b",
+  },
+};
 
 export function BlingIntegrationDialog({
   storeId,
@@ -34,25 +46,120 @@ export function BlingIntegrationDialog({
   const [importMode, setImportMode] = useState<"pronta_entrega" | "pre_venda">("pronta_entrega");
   const [importing, setImporting] = useState(false);
   const [searchFilter, setSearchFilter] = useState("");
+  const [showConfig, setShowConfig] = useState(false);
+  const [authenticating, setAuthenticating] = useState(false);
 
   const storeKey = storeName.toLowerCase().includes("mf") ? "mf" : "gabriel";
+  const defaultCreds = KNOWN_STORE_CREDS[storeKey] || { clientId: "", clientSecret: "" };
 
-  // Função para buscar produtos do Bling
-  async function fetchBlingProducts() {
-    setLoadingProducts(true);
+  // Config e tokens salvos por loja
+  const [tokens, setTokens] = useState<BlingTokenData | null>(() => {
     try {
-      const list = await fetchBlingProductsServer({
-        data: { storeKey, limit: 100 },
+      const saved = localStorage.getItem(`bling_tokens_${storeId}`);
+      if (saved) return JSON.parse(saved);
+      // Fallback para Gabriel se ainda não tiver token salvo
+      if (storeKey === "gabriel") {
+        return {
+          access_token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpZCI6ImYyYTBjMWQzZmQxMTljYTgwNTI4OWI5OGFiMTU1MDJjZTlhMDFiNmIiLCJqdGkiOiJmMmEwYzFkM2ZkMTE5Y2E4MDUyODliOThhYjE1NTAyY2U5YTAxYjZiIiwiaXNzIjpudWxsLCJhdWQiOiJhOWVkZWUyMjU1MjAwNGRlNjkxMDA2OWQ3YjZkZTE4MDY0YmQzMTNhIiwic3ViIjoiMTQ3ODUwMjY4MDQiLCJleHAiOjE3ODg0MjM4ODIsImlhdCI6MTc4ODQwMjI4MiwidG9rZW5fdHlwZSI6ImJlYXJlciIsInNjb3BlIjpudWxsLCJwZXJtIjoiMmU4MGEzMzg0ZTNlMDAwMDEwMDAwMGUxIiwiZ3JhbnRUeXBlcyI6ImF1dGhvcml6YXRpb25fY29kZSByZWZyZXNoX3Rva2VuIiwiYXBwX2lkIjoiMzk1MjY0IiwiY29tcGFueV9pZCI6MTQ5MTgxOTI3NjUsInJvbGUiOiJhZG0iLCJwbGFuX25hbWUiOiJQbGFub1RpdGFuaW9UaWVyMSIsImFwcHJvdmVkIjpmYWxzZX0.c5-B-lpnoPF4nouOxWuvYo9_xcfU9bxHP_zv-2_Uq7MfhQHn9SucK33pF8gnBaiadEPnKE_eBEQ0zax3oTIK5UUevaAVg6X0DNkCYgSAxPZ6DtFfqsLRxa9YkfD7zTOSLeob_lrH3yfSVnJci-yu2wh4W8ON5fjhn_vUAMUIvS-bQTKHCAEl0lulAI9vXIzELkJO6DV-wgsd8oXBD7LnCS0HdBeNGuMtFiYCOIT0FoiQvK5GnEuXlefj7jo20Ybydl7mwYMWMs9EzfSRoeGfS9sBhJTueN7rIiYWPzEh_v6h6khzbwVhsx0FRhNZWsRaLoUldSfD7a1TLWog0cZgsQ",
+          refresh_token: "deebdf03de174a9e5c48f9847cc18d50026565af",
+        };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [formClientId, setFormClientId] = useState(defaultCreds.clientId);
+  const [formClientSecret, setFormClientSecret] = useState(defaultCreds.clientSecret);
+  const [authCodeInput, setAuthCodeInput] = useState("");
+
+  const isConnected = !!tokens?.access_token;
+
+  // Função para autenticar o código do Bling
+  async function handleConnectWithCode() {
+    if (!formClientId.trim() || !formClientSecret.trim()) {
+      toast.error("Informe o Client ID e o Client Secret.");
+      return;
+    }
+
+    let codeToUse = authCodeInput.trim();
+    if (codeToUse.includes("code=")) {
+      const match = codeToUse.match(/code=([^&]+)/);
+      if (match) codeToUse = match[1];
+    }
+
+    if (!codeToUse) {
+      toast.error("Cole o link ou código gerado pelo Bling.");
+      return;
+    }
+
+    setAuthenticating(true);
+    try {
+      const tokenData = await exchangeBlingCodeServer({
+        data: {
+          clientId: formClientId.trim(),
+          clientSecret: formClientSecret.trim(),
+          code: codeToUse,
+        },
       });
 
-      setBlingProducts(list as BlingProduct[]);
-      setSelectedProductIds(list.map((p) => p.id));
-      toast.success(`${list.length} produtos carregados do Bling!`);
+      if (!tokenData.access_token) {
+        throw new Error("Não foi possível obter o token do Bling.");
+      }
+
+      setTokens(tokenData);
+      localStorage.setItem(`bling_tokens_${storeId}`, JSON.stringify(tokenData));
+      setShowConfig(false);
+      setAuthCodeInput("");
+      toast.success(`🎉 Bling conectado com sucesso para ${storeName}!`);
+
+      // Buscar produtos automaticamente após conectar
+      setTimeout(() => {
+        fetchBlingProductsWithToken(tokenData);
+      }, 300);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao conectar conta do Bling.");
+    } finally {
+      setAuthenticating(false);
+    }
+  }
+
+  // Função interna para buscar produtos com tokens
+  async function fetchBlingProductsWithToken(currentTokenData: BlingTokenData | null) {
+    setLoadingProducts(true);
+    try {
+      const activeClientId = formClientId.trim() || defaultCreds.clientId;
+      const activeClientSecret = formClientSecret.trim() || defaultCreds.clientSecret;
+
+      const result = await fetchBlingProductsServer({
+        data: {
+          accessToken: currentTokenData?.access_token,
+          refreshToken: currentTokenData?.refresh_token,
+          clientId: activeClientId,
+          clientSecret: activeClientSecret,
+          limit: 100,
+        },
+      });
+
+      if (result.newTokens) {
+        setTokens(result.newTokens);
+        localStorage.setItem(`bling_tokens_${storeId}`, JSON.stringify(result.newTokens));
+      }
+
+      setBlingProducts(result.products as BlingProduct[]);
+      setSelectedProductIds(result.products.map((p) => p.id));
+      toast.success(`${result.products.length} produtos carregados do Bling!`);
     } catch (err: any) {
       toast.error(err.message || "Erro ao consultar produtos no Bling");
+      setShowConfig(true);
     } finally {
       setLoadingProducts(false);
     }
+  }
+
+  function fetchBlingProducts() {
+    fetchBlingProductsWithToken(tokens);
   }
 
   // Detecta marca com base no nome do produto
@@ -129,6 +236,10 @@ export function BlingIntegrationDialog({
     return p.nome.toLowerCase().includes(q) || (p.codigo && p.codigo.toLowerCase().includes(q));
   });
 
+  const authUrl = formClientId
+    ? `https://www.bling.com.br/Api/v3/oauth/authorize?response_type=code&client_id=${formClientId}&state=${slugify(storeName)}`
+    : "";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[96vw] max-w-2xl max-h-[90vh] flex flex-col p-4 sm:p-6 gap-4 overflow-hidden">
@@ -138,9 +249,27 @@ export function BlingIntegrationDialog({
               <Sparkles className="size-5 text-amber-500 fill-amber-500" />
               Integração Bling ERP &bull; {storeName}
             </DialogTitle>
-            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-xs">
-              🟢 Bling Conectado
-            </Badge>
+            <div className="flex items-center gap-1.5">
+              <Badge
+                variant="outline"
+                className={
+                  isConnected
+                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-xs"
+                    : "bg-amber-500/10 text-amber-600 border-amber-500/30 text-xs"
+                }
+              >
+                {isConnected ? "🟢 Conectado" : "🟡 Desconectado"}
+              </Badge>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7"
+                onClick={() => setShowConfig(!showConfig)}
+                title="Configurações e Reconexão"
+              >
+                <Settings className="size-4 text-muted-foreground" />
+              </Button>
+            </div>
           </div>
           <DialogDescription className="text-xs">
             Importe itens cadastrados no seu Bling ERP direto para a sua loja com fotos, preços e estoque sincronizados.
@@ -148,54 +277,111 @@ export function BlingIntegrationDialog({
         </DialogHeader>
 
         <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-0.5">
-          {/* Painel Superior de Ações */}
-          <div className="bg-muted/30 p-3 rounded-xl border border-border/40 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="text-xs">
-                <span className="font-semibold text-foreground block">Catálogo Oficial do Bling</span>
-                <span className="text-muted-foreground text-[11px]">Sincronização em tempo real via API v3</span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs gap-1.5 shrink-0 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 font-semibold"
-                onClick={fetchBlingProducts}
-                disabled={loadingProducts}
-              >
-                <RefreshCw className={`size-3.5 ${loadingProducts ? "animate-spin" : ""}`} />
-                {blingProducts.length > 0 ? "Atualizar Lista do Bling" : "Buscar Produtos no Bling"}
-              </Button>
-            </div>
-
-            {/* Configuração do Tipo de Importação */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-border/30">
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold">Importar catálogo como:</Label>
-                <Select value={importMode} onValueChange={(val: any) => setImportMode(val)}>
-                  <SelectTrigger className="text-xs h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pronta_entrega">⚡ Pronta Entrega (Em estoque)</SelectItem>
-                    <SelectItem value="pre_venda">⏳ Pré-venda (Aguardando lote)</SelectItem>
-                  </SelectContent>
-                </Select>
+          {/* Card de Autorização quando não conectado ou clicou em configurações */}
+          {(!isConnected || showConfig) && (
+            <div className="bg-muted/40 p-3.5 rounded-xl border border-amber-500/30 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs flex items-center gap-1.5 text-foreground">
+                  <Key className="size-3.5 text-amber-500" />
+                  Conectar Conta do Bling
+                </span>
+                {isConnected && (
+                  <Button variant="ghost" size="sm" className="h-6 text-[11px]" onClick={() => setShowConfig(false)}>
+                    Fechar Config
+                  </Button>
+                )}
               </div>
 
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold">Filtrar produtos:</Label>
-                <div className="relative">
-                  <Search className="absolute left-2 top-2 size-3.5 text-muted-foreground" />
+              {/* Botão de Autorização e Campo de Código */}
+              <div className="space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-background p-2.5 rounded-lg border border-border/40">
+                  <div className="text-xs">
+                    <span className="font-semibold block">1. Autorizar acesso no Bling</span>
+                    <span className="text-muted-foreground text-[11px]">Abre a tela de permissão da conta no Bling</span>
+                  </div>
+                  {authUrl && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs gap-1.5 text-primary shrink-0 font-semibold"
+                      onClick={() => window.open(authUrl, "_blank")}
+                    >
+                      <ExternalLink className="size-3.5" />
+                      1. Abrir Autorização
+                    </Button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
                   <Input
-                    placeholder="Filtrar por nome ou SKU..."
-                    value={searchFilter}
-                    onChange={(e) => setSearchFilter(e.target.value)}
-                    className="pl-7 text-xs h-8"
+                    placeholder="2. Cole aqui o link ou código gerado (code=...)"
+                    value={authCodeInput}
+                    onChange={(e) => setAuthCodeInput(e.target.value)}
+                    className="h-9 text-xs font-mono flex-1 bg-background"
                   />
+                  <Button
+                    size="sm"
+                    className="h-9 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 font-semibold"
+                    onClick={handleConnectWithCode}
+                    disabled={authenticating || !authCodeInput}
+                  >
+                    {authenticating ? "Conectando..." : "2. Conectar"}
+                  </Button>
                 </div>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* Painel de Produtos quando conectado */}
+          {isConnected && (
+            <div className="bg-muted/30 p-3 rounded-xl border border-border/40 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="text-xs">
+                  <span className="font-semibold text-foreground block">Catálogo Oficial do Bling</span>
+                  <span className="text-muted-foreground text-[11px]">Sincronização em tempo real via API v3</span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs gap-1.5 shrink-0 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 font-semibold"
+                  onClick={fetchBlingProducts}
+                  disabled={loadingProducts}
+                >
+                  <RefreshCw className={`size-3.5 ${loadingProducts ? "animate-spin" : ""}`} />
+                  {blingProducts.length > 0 ? "Atualizar Lista do Bling" : "Buscar Produtos no Bling"}
+                </Button>
+              </div>
+
+              {/* Configuração do Tipo de Importação */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-border/30">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Importar catálogo como:</Label>
+                  <Select value={importMode} onValueChange={(val: any) => setImportMode(val)}>
+                    <SelectTrigger className="text-xs h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pronta_entrega">⚡ Pronta Entrega (Em estoque)</SelectItem>
+                      <SelectItem value="pre_venda">⏳ Pré-venda (Aguardando lote)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Filtrar produtos:</Label>
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2 size-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Filtrar por nome ou SKU..."
+                      value={searchFilter}
+                      onChange={(e) => setSearchFilter(e.target.value)}
+                      className="pl-7 text-xs h-8"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Lista de Produtos do Bling */}
           {blingProducts.length > 0 ? (
@@ -270,7 +456,7 @@ export function BlingIntegrationDialog({
                 })}
               </div>
             </div>
-          ) : (
+          ) : isConnected && (
             <div className="text-center py-8 border border-dashed rounded-xl space-y-2 bg-muted/10">
               <Package className="size-8 mx-auto text-muted-foreground opacity-50" />
               <p className="text-xs text-muted-foreground">
