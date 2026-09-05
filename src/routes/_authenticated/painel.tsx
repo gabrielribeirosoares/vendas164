@@ -97,8 +97,15 @@ function CustomerDashboardContent() {
     enabled: !!user,
     retry: 2,
     queryFn: async () => {
-      // A migração de reservas antigas é feita automaticamente em src/lib/session.ts
-      // via a RPC migrate_reservations_by_phone (mais eficiente e sem consultas pesadas).
+      // Sincronizar reservas guest anteriores pelo WhatsApp se o cliente tiver telefone
+      if (profile?.phone) {
+        try {
+          await supabase.rpc("migrate_reservations_by_phone", {
+            p_new_user_id: user!.id,
+            p_phone: profile.phone,
+          });
+        } catch {}
+      }
 
       // Buscar ordens atualizadas do usuário (excluindo canceladas)
       const { data, error } = await supabase
@@ -879,9 +886,23 @@ function EditProfileDialog({
       phone: cleanPhone || null,
     });
 
-    setSaving(false);
-    if (error) return toast.error("Não foi possível salvar o perfil.");
+    if (error) {
+      setSaving(false);
+      return toast.error("Não foi possível salvar o perfil.");
+    }
 
+    if (cleanPhone) {
+      try {
+        await supabase.rpc("migrate_reservations_by_phone", {
+          p_new_user_id: user.id,
+          p_phone: cleanPhone,
+        });
+      } catch (err) {
+        console.warn("Aviso ao migrar reservas:", err);
+      }
+    }
+
+    setSaving(false);
     queryClient.invalidateQueries();
     toast.success("Perfil atualizado com sucesso!");
     onOpenChange(false);
@@ -965,9 +986,19 @@ function SyncPhoneModal({
 
       if (profError) throw profError;
 
+      // Migrar reservas GUEST associadas a este WhatsApp
+      try {
+        await supabase.rpc("migrate_reservations_by_phone", {
+          p_new_user_id: user.id,
+          p_phone: cleanPhone,
+        });
+      } catch (err) {
+        console.warn("Aviso ao rodar RPC de sincronização:", err);
+      }
+
       // Atualiza os dados na tela em tempo real
       await queryClient.invalidateQueries();
-      toast.success("WhatsApp salvo com sucesso! Suas reservas serão sincronizadas automaticamente.");
+      toast.success("WhatsApp salvo com sucesso! Suas reservas foram sincronizadas.");
       onOpenChange(false);
     } catch (err: any) {
       toast.error(`Erro ao salvar: ${err?.message || "Tente novamente"}`);
