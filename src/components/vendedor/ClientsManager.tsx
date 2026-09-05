@@ -1,6 +1,6 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PaymentBadge } from "@/components/StatusBadge";
-import { Package, Copy, MessageCircle, Search, Trophy, Star, Crown, Users, Sparkles, Zap, ArrowDownRight, CheckCircle2, ListOrdered, Calendar } from 'lucide-react';
+import { Package, Copy, MessageCircle, Search, Trophy, Star, Crown, Users, Sparkles, Zap, ArrowDownRight, CheckCircle2, ListOrdered, Calendar, FileSpreadsheet } from 'lucide-react';
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -16,6 +16,7 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { brl, whatsappLink } from '@/lib/format';
 import { OrderInstallmentsDialog } from '@/components/vendedor/OrderInstallmentsDialog';
+import { SpreadsheetImporterDialog } from '@/components/vendedor/SpreadsheetImporterDialog';
 
 import type { OrderRow } from '@/components/vendedor/OrderManager';
 import { toast } from "sonner";
@@ -93,6 +94,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
   });
   const [configOpen, setConfigOpen] = useState(false);
   const [tempWaTemplate, setTempWaTemplate] = useState(waTemplate);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   // Buscar dados da loja para Chave PIX e Nome
   const { data: storeData } = useQuery({
@@ -632,6 +634,18 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
               />
             </div>
 
+            {storeId && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setImportDialogOpen(true)}
+                className="text-xs h-9 gap-1.5 border-primary/40 text-primary hover:bg-primary/5"
+              >
+                <FileSpreadsheet className="size-3.5" />
+                Importar Planilha
+              </Button>
+            )}
+
             <Button
               variant="outline"
               size="sm"
@@ -738,7 +752,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                             setEditingNote(clientNotes[c.userId] || "");
                           }}
                         >
-                          Ver Acervo
+                          Ver histórico
                         </Button>
                       </div>
                     </div>
@@ -840,7 +854,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                                   setEditingNote(clientNotes[c.userId] || "");
                                 }}
                               >
-                                Ver Acervo
+                                Ver histórico
                               </Button>
                             </div>
                           </TableCell>
@@ -1401,6 +1415,14 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
           </div>
         </DialogContent>
       </Dialog>
+
+      {storeId && (
+        <SpreadsheetImporterDialog
+          open={importDialogOpen}
+          onOpenChange={setImportDialogOpen}
+          storeId={storeId}
+        />
+      )}
     </div>
   );
 }

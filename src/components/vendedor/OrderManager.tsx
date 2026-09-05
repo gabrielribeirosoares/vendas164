@@ -5,7 +5,7 @@ import { brl, isProntaEntrega, whatsappLink } from '@/lib/format';
 import { trackOrder, getTrackingStatusLabel, shouldUpdateDeliveryStatus } from '@/lib/trackingService';
 import { toast } from 'sonner';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw } from 'lucide-react';
+import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,7 @@ import { prepararDadosExportacaoFinanceira } from '@/lib/exportFinanceiro';
 import { getCustomerFromCache } from '@/lib/customerCache';
 import { ManualReservationDialog } from '@/components/vendedor/ProductManager';
 import { OrderInstallmentsDialog } from '@/components/vendedor/OrderInstallmentsDialog';
+import { SpreadsheetImporterDialog } from '@/components/vendedor/SpreadsheetImporterDialog';
 import type { Tables } from '@/integrations/supabase/types';
 
 export type Product = Tables<'products'>;
@@ -231,6 +232,7 @@ export function OrdersTab({
   const [trackingDrafts, setTrackingDrafts] = useState<Record<string, string>>({});
   const [trackingUpdating, setTrackingUpdating] = useState<Set<string>>(new Set());
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   async function handleTrackingUpdate(orderId: string, code: string, currentStatus?: string) {
     if (!code?.trim()) return;
@@ -727,6 +729,18 @@ export function OrdersTab({
               </Button>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {storeId && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setImportDialogOpen(true)}
+                  className="h-9 text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/5"
+                >
+                  <FileSpreadsheet className="size-3.5" />
+                  <span>Importar Planilha (CSV)</span>
+                </Button>
+              )}
+
               <Button
                 size="sm"
                 variant="outline"
@@ -1090,15 +1104,15 @@ export function OrdersTab({
                                     <SelectItem value="cancelado">Cancelado</SelectItem>
                                   </SelectContent>
                                 </Select>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                    title="Excluir reserva permanentemente"
-                                    onClick={() => handleDeleteGroup(item)}
-                                  >
-                                    <Trash2 className="size-4" />
-                                  </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                  title="Excluir reserva permanentemente"
+                                  onClick={() => handleDeleteGroup(item)}
+                                >
+                                  <Trash2 className="size-4" />
+                                </Button>
                                 </div>
                                 <div className="mt-2 flex justify-end">
                                   <OrderInstallmentsDialog
@@ -1549,6 +1563,14 @@ export function OrdersTab({
             </Button>
           </div>
         </div>
+      )}
+
+      {storeId && (
+        <SpreadsheetImporterDialog
+          open={importDialogOpen}
+          onOpenChange={setImportDialogOpen}
+          storeId={storeId}
+        />
       )}
 
     </Card>

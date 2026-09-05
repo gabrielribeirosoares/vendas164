@@ -16,6 +16,9 @@ import {
   Crown,
   Calendar,
   Plus,
+  Car,
+  User,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
@@ -45,7 +48,6 @@ import { SmartNotifications } from "@/components/vendedor/SmartNotifications";
 import { ProductsTab } from "@/components/vendedor/ProductManager";
 import { SellerOverview } from "@/components/vendedor/SellerOverview";
 import { TrackingIntegration } from "@/components/vendedor/TrackingIntegration";
-import { RefreshCw } from "lucide-react";
 
 export function parseStoreSubscription(store: any) {
   const status = store?.status;
@@ -471,22 +473,26 @@ function SellerDashboard() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-10">
           <TabsList className="hidden md:flex w-full overflow-x-auto justify-start sm:justify-center whitespace-nowrap p-1 max-w-full bg-muted/30">
             <TabsTrigger value="produtos" className="gap-1.5 text-xs sm:text-sm">
-              <Package className="size-3.5" /> Pré-vendas
+              <Package className="size-3.5 text-amber-500" /> Pré-vendas
             </TabsTrigger>
             <TabsTrigger value="pronta_entrega" className="gap-1.5 text-xs sm:text-sm text-emerald-600 dark:text-emerald-400 font-semibold">
               <Zap className="size-3.5 fill-emerald-500 text-emerald-500" /> Pronta Entrega
             </TabsTrigger>
-            <TabsTrigger value="reservas" className="text-xs sm:text-sm">Reservas</TabsTrigger>
-            <TabsTrigger value="clientes" className="text-xs sm:text-sm">Clientes</TabsTrigger>
-            <TabsTrigger value="rastreamento" className="text-xs sm:text-sm text-blue-600 dark:text-blue-400">
-              <RefreshCw className="size-3.5" /> Rastreamento
+            <TabsTrigger value="reservas" className="gap-1.5 text-xs sm:text-sm">
+              <Car className="size-3.5 text-emerald-500" /> Reservas
+            </TabsTrigger>
+            <TabsTrigger value="clientes" className="gap-1.5 text-xs sm:text-sm">
+              <User className="size-3.5 text-emerald-500" /> Clientes
+            </TabsTrigger>
+            <TabsTrigger value="rastreamento" className="gap-1.5 text-xs sm:text-sm text-blue-600 dark:text-blue-400">
+              <RefreshCw className="size-3.5 text-blue-500" /> Rastreamento
             </TabsTrigger>
             <TabsTrigger value="loja" className="gap-1.5 text-xs sm:text-sm">
-              <Palette className="size-3.5" /> Personalização
+              <Palette className="size-3.5 text-emerald-500" /> Personalização
             </TabsTrigger>
             {isAdmin && (
               <TabsTrigger value="admin_moderation" className="gap-1.5 text-xs sm:text-sm text-amber-600">
-                <ShieldCheck className="size-3.5" /> Moderação
+                <ShieldCheck className="size-3.5 text-amber-500" /> Moderação
               </TabsTrigger>
             )}
           </TabsList>
