@@ -1,4 +1,6 @@
 -- RPC Segura para migrar reservas de convidados (GUEST) para o cliente quando ele informa o WhatsApp
+DROP FUNCTION IF EXISTS public.migrate_reservations_by_phone(UUID, TEXT);
+
 CREATE OR REPLACE FUNCTION public.migrate_reservations_by_phone(p_new_user_id UUID, p_phone TEXT)
 RETURNS INTEGER
 LANGUAGE plpgsql
