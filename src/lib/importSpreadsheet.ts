@@ -98,6 +98,15 @@ export function parseCurrency(val: string | number): number {
   return isNaN(parsed) ? 0 : parsed;
 }
 
+export function normalizeModelName(name?: string): string {
+  if (!name) return "";
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
 /**
  * Converte texto CSV em objetos para pré-visualização
  */
@@ -183,13 +192,19 @@ export function parseCSVText(
       }
     }
 
-    // Tentar vincular produto existente na loja por modelo/marca
+    // Tentar vincular produto existente na loja por modelo/marca com normalização robusta
     let matchedProductId: string | undefined = undefined;
-    if (productModel) {
-      const normalizedModel = productModel.toLowerCase().replace(/\s+/g, "");
+    if (productModel && existingProducts.length > 0) {
+      const normalizedModel = normalizeModelName(productModel);
       const matched = existingProducts.find((p) => {
-        const pModelNorm = p.model.toLowerCase().replace(/\s+/g, "");
-        return pModelNorm.includes(normalizedModel) || normalizedModel.includes(pModelNorm);
+        const pModelNorm = normalizeModelName(p.model);
+        if (!pModelNorm || !normalizedModel) return false;
+        return (
+          pModelNorm === normalizedModel ||
+          (pModelNorm.length >= 3 &&
+            normalizedModel.length >= 3 &&
+            (pModelNorm.includes(normalizedModel) || normalizedModel.includes(pModelNorm)))
+        );
       });
       if (matched) matchedProductId = matched.id;
     }
@@ -261,6 +276,42 @@ export async function processSpreadsheetImport({
 
   const storeOwnerId = targetStore?.owner_id || currentSellerId;
 
+  // Obter todos os produtos já cadastrados na loja para evitar qualquer duplicata
+  const { data: dbProducts } = await supabase
+    .from("products")
+    .select("id, model, brand")
+    .eq("store_id", storeId);
+
+  // Cache dinâmico de produtos: chave normalizada -> produto
+  const productCache = new Map<string, { id: string; model: string; brand: string }>();
+
+  (dbProducts || []).forEach((p) => {
+    const key = normalizeModelName(p.model);
+    if (key && !productCache.has(key)) {
+      productCache.set(key, p);
+    }
+  });
+
+  const findProductInCache = (targetModel: string) => {
+    const targetKey = normalizeModelName(targetModel);
+    if (!targetKey) return null;
+
+    if (productCache.has(targetKey)) {
+      return productCache.get(targetKey)!;
+    }
+
+    // Busca por inclusão se tamanho for suficiente
+    for (const [key, prod] of productCache.entries()) {
+      if (key.length >= 3 && targetKey.length >= 3) {
+        if (key === targetKey || key.includes(targetKey) || targetKey.includes(key)) {
+          return prod;
+        }
+      }
+    }
+
+    return null;
+  };
+
   for (let i = 0; i < validRows.length; i++) {
     const row = validRows[i];
     onProgress(i + 1, validRows.length);
@@ -301,9 +352,20 @@ export async function processSpreadsheetImport({
         } catch {}
       }
 
-      // 4. Tratar Produto (Usar existente ou Criar Produto em estoque para a reserva)
+      // 4. Tratar Produto (Reutilizar existente na loja ou criar no máximo 1 vez se não existir)
       let productId = row.productId;
-      if (!productId) {
+      let matchedProd = productId
+        ? Array.from(productCache.values()).find((p) => p.id === productId)
+        : null;
+
+      if (!matchedProd) {
+        matchedProd = findProductInCache(row.productModel);
+      }
+
+      if (matchedProd) {
+        productId = matchedProd.id;
+      } else {
+        // O produto NÃO existe na loja. Criar apenas uma vez!
         const { data: newProd, error: prodErr } = await supabase
           .from("products")
           .insert({
@@ -311,25 +373,22 @@ export async function processSpreadsheetImport({
             model: row.productModel,
             brand: row.productBrand || "Importado",
             price: row.totalPrice,
-            stock: 1,
+            stock: 0,
             is_open: true,
             scale: "1:64",
           })
-          .select("id")
+          .select("id, model, brand")
           .single();
 
         if (!prodErr && newProd) {
           productId = newProd.id;
+          // Adicionar imediatamente no cache para que as próximas linhas do mesmo modelo usem este mesmo ID
+          const key = normalizeModelName(newProd.model);
+          if (key) productCache.set(key, newProd);
         } else {
-          const { data: fallbackProd } = await supabase
-            .from("products")
-            .select("id")
-            .eq("store_id", storeId)
-            .limit(1)
-            .maybeSingle();
-
-          if (fallbackProd) {
-            productId = fallbackProd.id;
+          const anyFallback = productCache.values().next().value;
+          if (anyFallback) {
+            productId = anyFallback.id;
           }
         }
       }

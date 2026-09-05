@@ -85,10 +85,20 @@ export function SpreadsheetImporterDialog({
     setImportSummary(null);
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const text = event.target?.result as string;
       if (text) {
-        const rows = parseCSVText(text, storeProducts);
+        let currentProds = storeProducts;
+        if (currentProds.length === 0 && storeId) {
+          const { data } = await supabase
+            .from("products")
+            .select("id, model, brand")
+            .eq("store_id", storeId);
+          if (data && data.length > 0) {
+            currentProds = data;
+          }
+        }
+        const rows = parseCSVText(text, currentProds);
         setParsedRows(rows);
         if (rows.length === 0) {
           toast.error("Nenhuma linha válida encontrada no arquivo CSV.");
