@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Copy,
   ExternalLink,
+  FileSpreadsheet,
   Loader2,
   Package,
   Palette,
@@ -48,6 +49,7 @@ import { SmartNotifications } from "@/components/vendedor/SmartNotifications";
 import { ProductsTab } from "@/components/vendedor/ProductManager";
 import { SellerOverview } from "@/components/vendedor/SellerOverview";
 import { TrackingIntegration } from "@/components/vendedor/TrackingIntegration";
+import { SpreadsheetImporterDialog } from "@/components/vendedor/SpreadsheetImporterDialog";
 
 export function parseStoreSubscription(store: any) {
   const status = store?.status;
@@ -670,6 +672,7 @@ function CreateStore({ userId, userEmail, onCreated }: { userId: string; userEma
 function AdminModerationPanel() {
   const queryClient = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
+  const [importStoreId, setImportStoreId] = useState<string | null>(null);
 
   // Estado do Modal de Gerenciamento de Assinatura e Dias de Teste
   const [managingStore, setManagingStore] = useState<any>(null);
@@ -813,6 +816,14 @@ function AdminModerationPanel() {
 
   return (
     <div className="space-y-6">
+      {/* Modal de Importação de Planilha para qualquer loja */}
+      {importStoreId && (
+        <SpreadsheetImporterDialog
+          open={!!importStoreId}
+          onOpenChange={(open) => { if (!open) setImportStoreId(null); }}
+          storeId={importStoreId}
+        />
+      )}
       {/* METRICAS GLOBAIS DA PLATAFORMA */}
       <div className="grid gap-3 sm:grid-cols-4">
         <Card className="panel border-primary/30 bg-primary/5 p-4">
@@ -933,7 +944,7 @@ function AdminModerationPanel() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
                       <Button
                         size="sm"
                         variant="default"
@@ -941,6 +952,15 @@ function AdminModerationPanel() {
                         onClick={() => openManageModal(st)}
                       >
                         <Settings className="size-3.5" /> Gerenciar Assinatura / Dias
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/5"
+                        onClick={() => setImportStoreId(st.id)}
+                      >
+                        <FileSpreadsheet className="size-3.5" /> Importar Planilha
                       </Button>
 
                       {cleanPhone && (
