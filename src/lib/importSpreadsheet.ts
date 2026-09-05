@@ -248,6 +248,15 @@ export async function processSpreadsheetImport({
   let errorCount = 0;
   const errors: string[] = [];
 
+  // Obter o dono real da loja alvo para atribuir reservas guest ao vendedor correto (não ao admin)
+  const { data: targetStore } = await supabase
+    .from("stores")
+    .select("owner_id")
+    .eq("id", storeId)
+    .maybeSingle();
+
+  const storeOwnerId = targetStore?.owner_id || currentSellerId;
+
   for (let i = 0; i < validRows.length; i++) {
     const row = validRows[i];
     onProgress(i + 1, validRows.length);
@@ -261,7 +270,7 @@ export async function processSpreadsheetImport({
       }
 
       // 2. Buscar ou vincular perfil do cliente
-      let effectiveUserId = currentSellerId;
+      let effectiveUserId = storeOwnerId;
       let isGuest = true;
 
       // Buscar por telefone no banco de perfis registrados em auth.users
