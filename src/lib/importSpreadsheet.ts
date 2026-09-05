@@ -155,7 +155,11 @@ export function parseCSVText(
 
     let paymentStatus = (idxPayStatus >= 0 ? cols[idxPayStatus] || "" : "").toLowerCase().trim();
     if (!["aguardando_sinal", "sinal_pago", "quitado", "pronta_entrega", "sem_sinal", "cancelado"].includes(paymentStatus)) {
-      if (paymentStatus.includes("sinal") || paymentStatus.includes("pago") || downPayment > 0) {
+      if (paymentStatus.includes("sem") || paymentStatus.includes("chegada") || paymentStatus.includes("nao") || paymentStatus.includes("não")) {
+        paymentStatus = "sem_sinal";
+      } else if (paymentStatus.includes("pronta")) {
+        paymentStatus = "pronta_entrega";
+      } else if (paymentStatus.includes("sinal") || paymentStatus.includes("pago") || downPayment > 0) {
         paymentStatus = downPayment >= totalPrice ? "quitado" : "sinal_pago";
       } else if (paymentStatus.includes("quit") || paymentStatus.includes("total")) {
         paymentStatus = "quitado";
