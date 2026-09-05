@@ -879,26 +879,11 @@ function EditProfileDialog({
       phone: cleanPhone || null,
     });
 
-    if (error) {
-      setSaving(false);
-      return toast.error("Não foi possível salvar o perfil.");
-    }
-
-    // Se informou telefone, disparar a sincronização de reservas
-    if (cleanPhone) {
-      try {
-        await supabase.rpc("migrate_reservations_by_phone", {
-          p_new_user_id: user.id,
-          p_phone: cleanPhone,
-        });
-      } catch (err) {
-        console.error("Erro ao sincronizar reservas:", err);
-      }
-    }
-
     setSaving(false);
+    if (error) return toast.error("Não foi possível salvar o perfil.");
+
     queryClient.invalidateQueries();
-    toast.success("Perfil atualizado e reservas sincronizadas com sucesso!");
+    toast.success("Perfil atualizado com sucesso!");
     onOpenChange(false);
   }
 
@@ -969,7 +954,7 @@ function SyncPhoneModal({
 
     setSaving(true);
     try {
-      // 1. Salva telefone no perfil do cliente
+      // Salva telefone no perfil do cliente
       const customerName = profile?.name || user?.user_metadata?.name || user?.user_metadata?.full_name || "Cliente";
       const { error: profError } = await supabase.from("profiles").upsert({
         id: user.id,
@@ -980,19 +965,9 @@ function SyncPhoneModal({
 
       if (profError) throw profError;
 
-      // 2. Dispara a rotina de migração de reservas anteriores feitas pelo lojista
-      const { error: rpcError } = await supabase.rpc("migrate_reservations_by_phone", {
-        p_new_user_id: user.id,
-        p_phone: cleanPhone,
-      });
-
-      if (rpcError) {
-        console.warn("Aviso ao rodar RPC:", rpcError);
-      }
-
-      // 3. Atualiza os dados na tela em tempo real
+      // Atualiza os dados na tela em tempo real
       await queryClient.invalidateQueries();
-      toast.success("WhatsApp salvo! Suas reservas e garagens foram sincronizadas com sucesso.");
+      toast.success("WhatsApp salvo com sucesso! Suas reservas serão sincronizadas automaticamente.");
       onOpenChange(false);
     } catch (err: any) {
       toast.error(`Erro ao salvar: ${err?.message || "Tente novamente"}`);
