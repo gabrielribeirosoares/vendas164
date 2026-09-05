@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Car, CheckCircle2, Copy, ExternalLink, Loader2, MessageCircle, Package, Search, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
+import { BookmarkCheck, Car, CheckCircle2, Copy, ExternalLink, Loader2, MessageCircle, Package, Search, Sparkles, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { AppFooter } from "@/components/AppFooter";
@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -57,6 +58,7 @@ function CustomerDashboard() {
 function CustomerDashboardContent() {
   const { user, loading: sessionLoading } = useSession();
   const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [phonePromptOpen, setPhonePromptOpen] = useState(false);
   const [garageSearchQuery, setGarageSearchQuery] = useState("");
   const [ordersPage, setOrdersPage] = useState(0);
   const [waitlistPage, setWaitlistPage] = useState(0);
@@ -79,6 +81,16 @@ function CustomerDashboardContent() {
       return data;
     },
   });
+
+  // Abrir modal de WhatsApp no primeiro acesso para usuários sem telefone (ex: login com Google)
+  useEffect(() => {
+    if (profile && !profile.phone && typeof window !== "undefined") {
+      const dismissed = sessionStorage.getItem("dismissed_phone_prompt");
+      if (!dismissed) {
+        setPhonePromptOpen(true);
+      }
+    }
+  }, [profile]);
 
   const { data: orders, isLoading: ordersLoading } = useQuery({
     queryKey: ["my-orders", user?.id],
@@ -283,6 +295,37 @@ function CustomerDashboardContent() {
           open={editProfileOpen}
           onOpenChange={setEditProfileOpen}
         />
+
+        <SyncPhoneModal
+          user={user}
+          profile={profile}
+          open={phonePromptOpen}
+          onOpenChange={setPhonePromptOpen}
+        />
+
+        {/* Banner de aviso amigável quando o cliente ainda não tem WhatsApp cadastrado */}
+        {profile && !profile.phone && (
+          <div className="mt-6 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+                <MessageCircle className="size-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">Sincronize suas reservas pelo WhatsApp</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Informe seu WhatsApp para que o sistema encontre e liste automaticamente seus pedidos e miniaturas feitos diretamente com os lojistas.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold whitespace-nowrap shrink-0 w-full sm:w-auto"
+              onClick={() => setPhonePromptOpen(true)}
+            >
+              Vincular WhatsApp
+            </Button>
+          </div>
+        )}
 
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
           <StatCard label="Total reservado" value={brl(total)} />
@@ -827,18 +870,35 @@ function EditProfileDialog({
     if (!name.trim()) return toast.error("Por favor, informe seu nome.");
     setSaving(true);
 
+    const cleanPhone = phone.trim();
+
     const { error } = await supabase.from("profiles").upsert({
       id: user.id,
       name: name.trim(),
       email: user.email,
-      phone: phone.trim() || null,
+      phone: cleanPhone || null,
     });
 
-    setSaving(false);
-    if (error) return toast.error("Não foi possível salvar o perfil.");
+    if (error) {
+      setSaving(false);
+      return toast.error("Não foi possível salvar o perfil.");
+    }
 
+    // Se informou telefone, disparar a sincronização de reservas
+    if (cleanPhone) {
+      try {
+        await supabase.rpc("migrate_reservations_by_phone", {
+          p_new_user_id: user.id,
+          p_phone: cleanPhone,
+        });
+      } catch (err) {
+        console.error("Erro ao sincronizar reservas:", err);
+      }
+    }
+
+    setSaving(false);
     queryClient.invalidateQueries();
-    toast.success("Perfil atualizado com sucesso!");
+    toast.success("Perfil atualizado e reservas sincronizadas com sucesso!");
     onOpenChange(false);
   }
 
@@ -877,6 +937,127 @@ function EditProfileDialog({
             </Button>
             <Button type="submit" disabled={saving}>
               {saving && <Loader2 className="size-4 animate-spin" />} Salvar Perfil
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SyncPhoneModal({
+  user,
+  profile,
+  open,
+  onOpenChange,
+}: {
+  user: any;
+  profile: any;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [phone, setPhone] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSync(e: React.FormEvent) {
+    e.preventDefault();
+    const cleanPhone = phone.trim();
+    if (!cleanPhone || cleanPhone.replace(/\D/g, "").length < 8) {
+      return toast.error("Por favor, informe um número de WhatsApp com DDD válido.");
+    }
+
+    setSaving(true);
+    try {
+      // 1. Salva telefone no perfil do cliente
+      const customerName = profile?.name || user?.user_metadata?.name || user?.user_metadata?.full_name || "Cliente";
+      const { error: profError } = await supabase.from("profiles").upsert({
+        id: user.id,
+        name: customerName,
+        email: user.email,
+        phone: cleanPhone,
+      });
+
+      if (profError) throw profError;
+
+      // 2. Dispara a rotina de migração de reservas anteriores feitas pelo lojista
+      const { error: rpcError } = await supabase.rpc("migrate_reservations_by_phone", {
+        p_new_user_id: user.id,
+        p_phone: cleanPhone,
+      });
+
+      if (rpcError) {
+        console.warn("Aviso ao rodar RPC:", rpcError);
+      }
+
+      // 3. Atualiza os dados na tela em tempo real
+      await queryClient.invalidateQueries();
+      toast.success("WhatsApp salvo! Suas reservas e garagens foram sincronizadas com sucesso.");
+      onOpenChange(false);
+    } catch (err: any) {
+      toast.error(`Erro ao salvar: ${err?.message || "Tente novamente"}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const handleDismiss = () => {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("dismissed_phone_prompt", "true");
+    }
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md panel border-border/60">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+              <Sparkles className="size-6 text-primary" />
+            </div>
+            <div>
+              <DialogTitle className="text-xl font-bold">Vincular Reservas com WhatsApp</DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                Conecte seu WhatsApp para sincronizar automaticamente pedidos e reservas feitas com lojistas.
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <form onSubmit={handleSync} className="space-y-4 pt-2">
+          <div className="p-3 rounded-lg bg-muted/40 border border-border/40 text-xs text-muted-foreground leading-relaxed">
+            Identificamos que você fez login com a sua conta Google. Para encontrarmos suas reservas de miniaturas feitas diretamente com os lojistas e adicioná-las ao seu painel e garagem, informe o número de WhatsApp usado nos seus pedidos.
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="sync-phone" className="text-xs font-semibold">
+              Seu WhatsApp com DDD
+            </Label>
+            <PhoneInput id="sync-phone" value={phone} onChange={setPhone} required />
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleDismiss}
+              disabled={saving}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Lembrar mais tarde
+            </Button>
+            <Button type="submit" size="sm" disabled={saving} className="gap-2">
+              {saving ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Sincronizando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="size-4" /> Salvar e Sincronizar
+                </>
+              )}
             </Button>
           </div>
         </form>

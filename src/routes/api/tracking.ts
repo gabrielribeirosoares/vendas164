@@ -32,12 +32,18 @@ const FETCH_TIMEOUT = 3000;
 
 async function fetchWithTimeout(
   url: string,
-  headers: Record<string, string> = {},
+  optionsOrHeaders: RequestInit | Record<string, string> = {},
 ): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
   try {
-    const response = await fetch(url, { headers, signal: controller.signal });
+    let init: RequestInit;
+    if ("headers" in optionsOrHeaders || "method" in optionsOrHeaders || "body" in optionsOrHeaders) {
+      init = { ...(optionsOrHeaders as RequestInit), signal: controller.signal };
+    } else {
+      init = { headers: optionsOrHeaders as HeadersInit, signal: controller.signal };
+    }
+    const response = await fetch(url, init);
     return response;
   } finally {
     clearTimeout(timeoutId);
