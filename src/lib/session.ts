@@ -49,28 +49,6 @@ export function useSession() {
           phone: u.user_metadata?.phone || null,
         });
       }
-
-      // Migração automática de reservas anteriores pelo telefone (Tudo via RPC para contornar RLS)
-      const effectivePhone = existing?.phone || u.user_metadata?.phone;
-      if (effectivePhone) {
-        try {
-          const { error: rpcError } = await supabase.rpc("migrate_reservations_by_phone", {
-            p_new_user_id: u.id,
-            p_phone: effectivePhone,
-          });
-          if (rpcError) {
-            console.error("Erro ao rodar RPC de mesclagem:", rpcError);
-            if (typeof window !== "undefined") {
-              const { toast } = await import("sonner");
-              toast.error("Erro ao tentar migrar reservas antigas. Verifique a função no Supabase.");
-            }
-          } else {
-            console.log("Reservas sincronizadas com sucesso via RPC.");
-          }
-        } catch (e) {
-          console.error("Erro de exceção na RPC:", e);
-        }
-      }
     }
 
     supabase.auth.getSession().then(({ data }) => {

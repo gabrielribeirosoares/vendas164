@@ -199,24 +199,6 @@ function AuthPageContent() {
         email: user.email,
         phone: cleanPhone,
       });
-
-// Lógica de Garagem: Migração de reservas vinculadas por telefone/email temporário para o novo user.id
-       try {
-         // Migração via RPC: a função de banco acha os IDs antigos ou via metadados pix_key GUEST e atualiza
-        const { error: rpcError } = await supabase.rpc("migrate_reservations_by_phone", {
-          p_new_user_id: user.id,
-          p_phone: cleanPhone,
-        });
-        
-        if (rpcError) {
-          console.error("Erro na RPC de migração via auth.tsx:", rpcError);
-        } else {
-          console.log("Migração RPC disparada com sucesso no auth.tsx.");
-        }
-
-      } catch (err) {
-        console.error("Erro ao migrar reservas pendentes para a conta do cliente:", err);
-      }
     }
 
     const dest = search.next ?? (search.produto ? `/produto/${search.produto}` : "/painel");
