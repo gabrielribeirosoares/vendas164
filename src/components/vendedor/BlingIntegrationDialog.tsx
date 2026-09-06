@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,27 +6,15 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Package, RefreshCw, CheckCircle2, AlertCircle, ArrowRight, Download, Search, Sparkles, Key, ExternalLink, Settings } from "lucide-react";
+import { Package, RefreshCw, Download, Search, Sparkles, Key, ExternalLink, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, slugify } from "@/lib/format";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { fetchBlingProductsServer, exchangeBlingCodeServer, type BlingProductItem, type BlingTokenData } from "@/lib/bling";
+import { fetchBlingProductsServer, exchangeBlingCodeServer, type BlingProductItem, blingStatusServer, beginBlingConnectionServer } from "@/lib/bling";
 
 interface BlingProduct extends BlingProductItem {}
-
-// Credenciais padrão das lojas
-const KNOWN_STORE_CREDS: Record<string, { clientId: string; clientSecret: string }> = {
-  gabriel: {
-    clientId: "a9edee22552004de6910069d7b6de18064bd313a",
-    clientSecret: "aa8fcc07a56cfec1df445900ff89649db8b0c52eba1b38e49625d7b739cd",
-  },
-  mf: {
-    clientId: "fc7160470be3728be6287c8f6e04d8f8c8718275",
-    clientSecret: "01bce5db8c136fb793d844dcc8869ec0ed7b69e652c3adf2411cf200772b",
-  },
-};
 
 export function BlingIntegrationDialog({
   storeId,
@@ -49,117 +37,46 @@ export function BlingIntegrationDialog({
   const [showConfig, setShowConfig] = useState(false);
   const [authenticating, setAuthenticating] = useState(false);
 
-  const storeKey = storeName.toLowerCase().includes("mf") ? "mf" : "gabriel";
-  const defaultCreds = KNOWN_STORE_CREDS[storeKey] || { clientId: "", clientSecret: "" };
-
-  // Config e tokens salvos por loja
-  const [tokens, setTokens] = useState<BlingTokenData | null>(() => {
-    try {
-      const saved = localStorage.getItem(`bling_tokens_${storeId}`);
-      if (saved) return JSON.parse(saved);
-      // Fallback para Gabriel se ainda não tiver token salvo
-      if (storeKey === "gabriel") {
-        return {
-          access_token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpZCI6ImYyYTBjMWQzZmQxMTljYTgwNTI4OWI5OGFiMTU1MDJjZTlhMDFiNmIiLCJqdGkiOiJmMmEwYzFkM2ZkMTE5Y2E4MDUyODliOThhYjE1NTAyY2U5YTAxYjZiIiwiaXNzIjpudWxsLCJhdWQiOiJhOWVkZWUyMjU1MjAwNGRlNjkxMDA2OWQ3YjZkZTE4MDY0YmQzMTNhIiwic3ViIjoiMTQ3ODUwMjY4MDQiLCJleHAiOjE3ODg0MjM4ODIsImlhdCI6MTc4ODQwMjI4MiwidG9rZW5fdHlwZSI6ImJlYXJlciIsInNjb3BlIjpudWxsLCJwZXJtIjoiMmU4MGEzMzg0ZTNlMDAwMDEwMDAwMGUxIiwiZ3JhbnRUeXBlcyI6ImF1dGhvcml6YXRpb25fY29kZSByZWZyZXNoX3Rva2VuIiwiYXBwX2lkIjoiMzk1MjY0IiwiY29tcGFueV9pZCI6MTQ5MTgxOTI3NjUsInJvbGUiOiJhZG0iLCJwbGFuX25hbWUiOiJQbGFub1RpdGFuaW9UaWVyMSIsImFwcHJvdmVkIjpmYWxzZX0.c5-B-lpnoPF4nouOxWuvYo9_xcfU9bxHP_zv-2_Uq7MfhQHn9SucK33pF8gnBaiadEPnKE_eBEQ0zax3oTIK5UUevaAVg6X0DNkCYgSAxPZ6DtFfqsLRxa9YkfD7zTOSLeob_lrH3yfSVnJci-yu2wh4W8ON5fjhn_vUAMUIvS-bQTKHCAEl0lulAI9vXIzELkJO6DV-wgsd8oXBD7LnCS0HdBeNGuMtFiYCOIT0FoiQvK5GnEuXlefj7jo20Ybydl7mwYMWMs9EzfSRoeGfS9sBhJTueN7rIiYWPzEh_v6h6khzbwVhsx0FRhNZWsRaLoUldSfD7a1TLWog0cZgsQ",
-          refresh_token: "deebdf03de174a9e5c48f9847cc18d50026565af",
-        };
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  });
-
-  const [formClientId, setFormClientId] = useState(defaultCreds.clientId);
-  const [formClientSecret, setFormClientSecret] = useState(defaultCreds.clientSecret);
   const [authCodeInput, setAuthCodeInput] = useState("");
+  const [authUrl, setAuthUrl] = useState("");
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const connection = useQuery({ queryKey: ["bling-connection", storeId], enabled: open,
+    queryFn: () => blingStatusServer({ data: { storeId } }) });
+  const isConnected = connection.data?.connected === true;
 
-  const isConnected = !!tokens?.access_token;
+  useEffect(() => {
+    // Remove legacy credentials from this browser; never upload or reuse them.
+    try { localStorage.removeItem(`bling_tokens_${storeId}`); } catch { /* storage disabled */ }
+    setBlingProducts([]); setSelectedProductIds([]); setAuthCodeInput(""); setAuthUrl(""); setPage(1); setHasMore(false);
+  }, [storeId]);
 
-  // Função para autenticar o código do Bling
-  async function handleConnectWithCode() {
-    if (!formClientId.trim() || !formClientSecret.trim()) {
-      toast.error("Informe o Client ID e o Client Secret.");
-      return;
-    }
-
-    let codeToUse = authCodeInput.trim();
-    if (codeToUse.includes("code=")) {
-      const match = codeToUse.match(/code=([^&]+)/);
-      if (match) codeToUse = match[1];
-    }
-
-    if (!codeToUse) {
-      toast.error("Cole o link ou código gerado pelo Bling.");
-      return;
-    }
-
+  async function beginAuthorization() {
     setAuthenticating(true);
     try {
-      const tokenData = await exchangeBlingCodeServer({
-        data: {
-          clientId: formClientId.trim(),
-          clientSecret: formClientSecret.trim(),
-          code: codeToUse,
-        },
-      });
-
-      if (!tokenData.access_token) {
-        throw new Error("Não foi possível obter o token do Bling.");
-      }
-
-      setTokens(tokenData);
-      localStorage.setItem(`bling_tokens_${storeId}`, JSON.stringify(tokenData));
-      setShowConfig(false);
-      setAuthCodeInput("");
-      toast.success(`🎉 Bling conectado com sucesso para ${storeName}!`);
-
-      // Buscar produtos automaticamente após conectar
-      setTimeout(() => {
-        fetchBlingProductsWithToken(tokenData);
-      }, 300);
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao conectar conta do Bling.");
-    } finally {
-      setAuthenticating(false);
-    }
+      const result = await beginBlingConnectionServer({ data: { storeId } });
+      setAuthUrl(result.url);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível iniciar a conexão."); }
+    finally { setAuthenticating(false); }
   }
-
-  // Função interna para buscar produtos com tokens
-  async function fetchBlingProductsWithToken(currentTokenData: BlingTokenData | null) {
+  async function handleConnectWithCode() {
+    setAuthenticating(true);
+    try {
+      await exchangeBlingCodeServer({ data: { storeId, callbackUrl: authCodeInput.trim() } });
+      await connection.refetch(); setShowConfig(false); setAuthCodeInput(""); setAuthUrl("");
+      toast.success(`Bling conectado à loja ${storeName}.`);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível conectar o Bling."); }
+    finally { setAuthenticating(false); }
+  }
+  async function fetchBlingProducts(nextPage = 1) {
     setLoadingProducts(true);
     try {
-      const activeClientId = formClientId.trim() || defaultCreds.clientId;
-      const activeClientSecret = formClientSecret.trim() || defaultCreds.clientSecret;
-
-      const result = await fetchBlingProductsServer({
-        data: {
-          accessToken: currentTokenData?.access_token,
-          refreshToken: currentTokenData?.refresh_token,
-          clientId: activeClientId,
-          clientSecret: activeClientSecret,
-          limit: 100,
-        },
-      });
-
-      if (result.newTokens) {
-        setTokens(result.newTokens);
-        localStorage.setItem(`bling_tokens_${storeId}`, JSON.stringify(result.newTokens));
-      }
-
-      setBlingProducts(result.products as BlingProduct[]);
-      setSelectedProductIds([]);
-      toast.success(`${result.products.length} produtos carregados do Bling!`);
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao consultar produtos no Bling");
-      setShowConfig(true);
-    } finally {
-      setLoadingProducts(false);
-    }
-  }
-
-  function fetchBlingProducts() {
-    fetchBlingProductsWithToken(tokens);
+      const result = await fetchBlingProductsServer({ data: { storeId, page: nextPage } });
+      setBlingProducts(previous => nextPage === 1 ? result.products : [...new Map([...previous, ...result.products].map(p => [p.id, p])).values()]);
+      setPage(nextPage); setHasMore(result.hasMore);
+      if (nextPage === 1) setSelectedProductIds([]);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível consultar o Bling."); }
+    finally { setLoadingProducts(false); }
   }
 
   // Detecta marca com base no nome do produto
@@ -254,9 +171,6 @@ export function BlingIntegrationDialog({
     }
   }
 
-  const authUrl = formClientId
-    ? `https://www.bling.com.br/Api/v3/oauth/authorize?response_type=code&client_id=${formClientId}&state=${slugify(storeName)}`
-    : "";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -296,6 +210,8 @@ export function BlingIntegrationDialog({
 
         <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-0.5">
           {/* Card de Autorização quando não conectado ou clicou em configurações */}
+          {connection.isError && <p role="alert" className="text-sm text-destructive">Não foi possível consultar a integração. <Button variant="link" onClick={() => connection.refetch()}>Tentar novamente</Button></p>}
+          {connection.data && !connection.data.configured && <p className="text-sm text-muted-foreground">A integração está aguardando configuração pelo administrador.</p>}
           {(!isConnected || showConfig) && (
             <div className="bg-muted/40 p-3.5 rounded-xl border border-amber-500/30 space-y-3">
               <div className="flex items-center justify-between">
@@ -317,12 +233,13 @@ export function BlingIntegrationDialog({
                     <span className="font-semibold block">1. Autorizar acesso no Bling</span>
                     <span className="text-muted-foreground text-[11px]">Abre a tela de permissão da conta no Bling</span>
                   </div>
+                  {!authUrl && <Button size="sm" disabled={authenticating || !connection.data?.configured} onClick={beginAuthorization}>Preparar autorização</Button>}
                   {authUrl && (
                     <Button
                       size="sm"
                       variant="outline"
                       className="h-8 text-xs gap-1.5 text-primary shrink-0 font-semibold"
-                      onClick={() => window.open(authUrl, "_blank")}
+                      onClick={() => window.open(authUrl, "_blank", "noopener,noreferrer")}
                     >
                       <ExternalLink className="size-3.5" />
                       1. Abrir Autorização
@@ -332,7 +249,8 @@ export function BlingIntegrationDialog({
 
                 <div className="flex items-center gap-2">
                   <Input
-                    placeholder="2. Cole aqui o link ou código gerado (code=...)"
+                    placeholder="2. Cole o link completo retornado pelo Bling"
+                    aria-label="Link de retorno da autorização Bling"
                     value={authCodeInput}
                     onChange={(e) => setAuthCodeInput(e.target.value)}
                     className="h-9 text-xs font-mono flex-1 bg-background"
@@ -356,13 +274,13 @@ export function BlingIntegrationDialog({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="text-xs">
                   <span className="font-semibold text-foreground block">Catálogo Oficial do Bling</span>
-                  <span className="text-muted-foreground text-[11px]">Sincronização em tempo real via API v3</span>
+                  <span className="text-muted-foreground text-[11px]">Importação do catálogo da sua conta</span>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
                   className="h-8 text-xs gap-1.5 shrink-0 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 font-semibold"
-                  onClick={fetchBlingProducts}
+                  onClick={() => fetchBlingProducts()}
                   disabled={loadingProducts}
                 >
                   <RefreshCw className={`size-3.5 ${loadingProducts ? "animate-spin" : ""}`} />
@@ -370,6 +288,7 @@ export function BlingIntegrationDialog({
                 </Button>
               </div>
 
+              {hasMore && <Button variant="outline" disabled={loadingProducts} onClick={() => fetchBlingProducts(page + 1)}>Carregar mais produtos</Button>}
               {/* Configuração do Tipo de Importação */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-border/30">
                 <div className="space-y-1">

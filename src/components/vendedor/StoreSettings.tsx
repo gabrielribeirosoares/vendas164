@@ -3,14 +3,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { slugify } from '@/lib/format';
 import { toast } from 'sonner';
-import { Loader2, Plus, Package } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { PhoneInput } from '@/components/PhoneInput';
-import { Badge } from '@/components/ui/badge';
+
 import { DEFAULT_PRESET_BRANDS, getStoreBrands, saveStoreBrands } from '@/lib/brands';
 import { getStoreBanner, saveStoreBanner } from '@/lib/storeCustomizations';
 import { uploadImage } from '@/lib/upload';

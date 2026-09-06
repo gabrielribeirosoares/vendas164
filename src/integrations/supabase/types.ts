@@ -358,6 +358,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_manual_reservations: {
+        Args: { _request_id: string; _product_id: string; _quantity: number; _order: Json };
+        Returns: string[];
+      }
+      catalog_page: {
+        Args: { _store_id: string; _search?: string; _brand?: string; _scale?: string; _type?: string; _in_stock?: boolean; _sort?: string; _page?: number; _page_size?: number };
+        Returns: Json;
+      }
+      checkout_cart: {
+        Args: { _request_id: string; _items: { product_id: string; quantity: number; installments: number; expected_total: number; expected_signal: number }[] };
+        Returns: string[];
+      }
       create_reservation: { Args: { _product_id: string }; Returns: string }
       expire_stale_orders: { Args: never; Returns: number }
       is_store_owner: { Args: { _store_id: string }; Returns: boolean }

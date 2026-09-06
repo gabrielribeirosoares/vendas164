@@ -1,58 +1,25 @@
 import { supabase } from "@/integrations/supabase/client";
-import { getProductSignalAmount } from "./format";
 
 export async function linkCustomerToStore(userId: string, storeId: string) {
   await supabase.from("customer_store_link").insert({ user_id: userId, store_id: storeId });
 }
 
-export async function reserveQuota(productId: string, installmentCount?: number, finalTotalPrice?: number) {
-  const { data, error } = await supabase.rpc("create_reservation", { _product_id: productId });
+export interface CheckoutItem {
+  product_id: string;
+  quantity: number;
+  installments: number;
+  expected_total: number;
+  expected_signal: number;
+}
+
+export async function checkoutCart(requestId: string, items: CheckoutItem[]) {
+  const { data, error } = await supabase.rpc("checkout_cart", {
+    _request_id: requestId,
+    _items: items,
+  });
   if (error) throw error;
-  const orderId = data as string;
-  // Salvar parcelamento e preço final diretamente no insert via update logo após criação
-  const count = installmentCount || 1;
-  const payload: any = { installment_count: count };
-  if (finalTotalPrice && finalTotalPrice > 0) {
-    payload.total_price = finalTotalPrice;
-  }
-  await supabase.from("orders").update(payload).eq("id", orderId);
-  
-  // Gerar as parcelas automaticamente apenas se o cliente/loja selecionou parcelamento fixo (> 1 parcela)
-  if (count > 1) {
-    const { data: orderData } = await supabase.from("orders").select("total_price, stores(default_installment_due_day), products(*)").eq("id", orderId).maybeSingle();
-    if (orderData) {
-      const signalInfo = getProductSignalAmount(orderData.products, 1);
-      const amountToParcel = Math.max(0, Number(orderData.total_price) - signalInfo.amount);
-      const amountPerInstallment = amountToParcel / count;
-      const defaultDay = (orderData.stores as any)?.default_installment_due_day;
-      const now = new Date();
-      const newInstallments = Array.from({ length: count }).map((_, i) => {
-          const futureYear = now.getFullYear();
-          const futureMonth = now.getMonth() + i + 1;
-          
-          let dueDate: Date;
-          if (defaultDay && defaultDay >= 1 && defaultDay <= 31) {
-            dueDate = new Date(futureYear, futureMonth, 1);
-            const lastDayOfMonth = new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0).getDate();
-            dueDate.setDate(Math.min(defaultDay, lastDayOfMonth));
-          } else {
-            dueDate = new Date(futureYear, futureMonth, now.getDate());
-            if (dueDate.getMonth() !== futureMonth % 12) {
-              dueDate.setDate(0);
-            }
-          }
-          return {
-            order_id: orderId,
-            installment_number: i + 1,
-            amount: amountPerInstallment,
-            due_date: dueDate.toISOString(),
-            status: "pending"
-          };
-        });
-      await supabase.from("order_installments").insert(newInstallments);
-    }
-  }
-  return orderId;
+  if (!data?.length) throw new Error("empty_checkout");
+  return data;
 }
 
 export async function joinWaitlist(userId: string, productId: string, storeId: string) {
@@ -67,13 +34,17 @@ export async function joinWaitlist(userId: string, productId: string, storeId: s
 }
 
 export function reservationErrorMessage(error: unknown) {
-  console.error("[reservationErrorMessage] Error details:", error);
+
   const err = error as { message?: string; details?: string; hint?: string; code?: string };
   const message = String(err?.message || err?.details || error || "");
   if (message.includes("out_of_stock")) return "Unidades esgotadas. Entre na fila de espera.";
   if (message.includes("presale_closed")) return "Esta pré-venda está fechada.";
   if (message.includes("not_authenticated")) return "Faça login para reservar.";
   if (message.includes("product_not_found")) return "Produto não encontrado ou indisponível.";
-  if (err?.message) return `Não foi possível concluir a reserva: ${err.message}`;
+  if (message.includes("price_changed")) return "O preço ou o sinal mudou. Atualize os valores do carrinho antes de confirmar.";
+  if (message.includes("invalid_installments")) return "O parcelamento selecionado não está mais disponível. Revise o produto.";
+  if (message.includes("own_store")) return "Use o painel do vendedor para cadastrar reservas da sua própria loja.";
+  if (message.includes("invalid_quantity") || message.includes("invalid_cart")) return "Revise as quantidades do carrinho (máximo de 100 unidades).";
+  if (message.includes("checkout_conflict")) return "Esta tentativa já foi registrada com outros itens. Reabra o carrinho para conferir.";
   return "Não foi possível concluir a reserva.";
 }

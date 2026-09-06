@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { brl, isProntaEntrega, whatsappLink } from '@/lib/format';
-import { trackOrder, getTrackingStatusLabel, shouldUpdateDeliveryStatus } from '@/lib/trackingService';
+import { trackOrder } from '@/lib/trackingService';
 import { toast } from 'sonner';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw, FileSpreadsheet } from 'lucide-react';
@@ -19,7 +19,7 @@ import { Countdown } from '@/components/Countdown';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { prepararDadosExportacaoFinanceira } from '@/lib/exportFinanceiro';
 import { getCustomerFromCache } from '@/lib/customerCache';
-import { ManualReservationDialog } from '@/components/vendedor/ProductManager';
+import { ManualReservationDialog } from '@/components/vendedor/ManualReservationDialog';
 import { OrderInstallmentsDialog } from '@/components/vendedor/OrderInstallmentsDialog';
 import { SpreadsheetImporterDialog } from '@/components/vendedor/SpreadsheetImporterDialog';
 import type { Tables } from '@/integrations/supabase/types';
@@ -209,7 +209,11 @@ export function OrdersTab({
   storeId,
   storeColor,
   products = [],
+  focusFilter,
+  onClearFocus,
 }: {
+  focusFilter?: "atrasado" | "envios";
+  onClearFocus?: () => void;
   orders: OrderRow[];
   storeId?: string;
   storeColor?: string;
@@ -324,6 +328,8 @@ export function OrdersTab({
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
+      if (focusFilter === "atrasado" && (o.payment_status !== "aguardando_sinal" || !o.reservation_expires_at || new Date(o.reservation_expires_at) >= new Date())) return false;
+      if (focusFilter === "envios" && (o.payment_status !== "quitado" || ["enviado", "em_transito", "cancelado", "entregue"].includes(o.delivery_status))) return false;
       if (startDate) {
         const start = new Date(`${startDate}T00:00:00.000Z`);
         if (new Date(o.created_at) < start) return false;
@@ -381,7 +387,7 @@ export function OrdersTab({
         trackingCode.includes(q)
       );
     });
-  }, [orders, searchQuery, startDate, endDate, paymentFilter, deliveryFilter, categoryFilter]);
+  }, [orders, focusFilter, searchQuery, startDate, endDate, paymentFilter, deliveryFilter, categoryFilter]);
 
   type GroupedOrderRow = { order: OrderRow; quantity: number; ids: string[] };
 
@@ -687,6 +693,7 @@ export function OrdersTab({
 
   return (
     <div className="space-y-6">
+      {focusFilter && <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-sm"><span>{focusFilter === "atrasado" ? "Sinais atrasados" : "Envios pendentes"}</span><Button variant="ghost" size="sm" onClick={onClearFocus}>Limpar filtro do alerta</Button></div>}
       <Card className="border-border/60 panel relative">
         {/* FILTRO POR TIPO DE PEDIDO (PRÉ-VENDA VS PRONTA ENTREGA) */}
         <div className="flex flex-wrap items-center gap-2 p-4 pb-0">
@@ -1625,4 +1632,3 @@ export function OrdersTab({
     </div>
   );
 }
-

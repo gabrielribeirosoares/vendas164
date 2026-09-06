@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookmarkCheck, Car, CheckCircle2, Copy, ExternalLink, Loader2, MessageCircle, Package, Search, Sparkles, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
@@ -60,8 +60,6 @@ function CustomerDashboardContent() {
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [phonePromptOpen, setPhonePromptOpen] = useState(false);
   const [garageSearchQuery, setGarageSearchQuery] = useState("");
-  const [ordersPage, setOrdersPage] = useState(0);
-  const [waitlistPage, setWaitlistPage] = useState(0);
 
   // Redirect to main domain if accessed from a store subdomain
   useEffect(() => {
@@ -92,11 +90,12 @@ function CustomerDashboardContent() {
     }
   }, [profile]);
 
-  const { data: orders, isLoading: ordersLoading } = useQuery({
+  const ordersQuery = useInfiniteQuery({
     queryKey: ["my-orders", user?.id, profile?.phone],
     enabled: !!user,
     retry: 2,
-    queryFn: async () => {
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
       // Obter telefone para sincronização (do perfil ou direto da tabela se perfil ainda estiver carregando)
       let userPhone = profile?.phone;
       if (!userPhone && user?.id) {
@@ -125,9 +124,10 @@ function CustomerDashboardContent() {
         .from("orders")
         .select("*, products(*), stores(name, slug, whatsapp_number, pix_key, owner_id), order_installments(*)")
         .eq("user_id", user!.id)
-        .order("created_at", { ascending: false })
+        .neq("payment_status", "cancelado").neq("delivery_status", "cancelado").neq("delivery_status", "entregue")
+        .order("created_at", { ascending: false }).order("id", { ascending: false })
         .limit(PAGE_SIZE)
-        .range(ordersPage * PAGE_SIZE, (ordersPage + 1) * PAGE_SIZE - 1);
+        .range(pageParam * PAGE_SIZE, (pageParam + 1) * PAGE_SIZE - 1);
       if (error) throw error;
 
       // Filtrar pedidos que na verdade são reservas de convidados (GUEST) da própria loja do lojista
@@ -138,9 +138,13 @@ function CustomerDashboardContent() {
         return !isGuestForMyStore;
       });
 
-      return realOrders;
+      return { rows: realOrders, hasMore: (data ?? []).length === PAGE_SIZE };
     },
+    getNextPageParam: (lastPage, pages) => lastPage.hasMore ? pages.length : undefined,
   });
+
+  const orders = useMemo(() => ordersQuery.data?.pages.flatMap(page => page.rows) ?? [], [ordersQuery.data]);
+  const ordersLoading = ordersQuery.isLoading;
 
   const { data: garageOrders } = useQuery({
     queryKey: ["my-garage", user?.id, profile?.phone],
@@ -197,21 +201,26 @@ function CustomerDashboardContent() {
     },
   });
 
-  const { data: waitlist } = useQuery({
-    queryKey: ["my-waitlist", user?.id, waitlistPage],
+  const waitlistQuery = useInfiniteQuery({
+    queryKey: ["my-waitlist", user?.id],
     enabled: !!user,
     retry: 2,
-    queryFn: async () => {
-      const { data } = await supabase
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await supabase
         .from("waitlist")
         .select("id, created_at, products(brand, model), stores(name)")
         .eq("user_id", user!.id)
-        .order("created_at", { ascending: false })
+        .order("created_at", { ascending: false }).order("id", { ascending: false })
         .limit(PAGE_SIZE)
-        .range(waitlistPage * PAGE_SIZE, (waitlistPage + 1) * PAGE_SIZE - 1);
+        .range(pageParam * PAGE_SIZE, (pageParam + 1) * PAGE_SIZE - 1);
+      if (error) throw error;
       return data ?? [];
     },
+    getNextPageParam: (lastPage, pages) => lastPage.length === PAGE_SIZE ? pages.length : undefined,
   });
+
+  const waitlist = useMemo(() => waitlistQuery.data?.pages.flat() ?? [], [waitlistQuery.data]);
 
   // Separar pedidos em andamento vs entregues/na garagem
   const active = useMemo(() => (orders ?? []).filter((o: any) => {
@@ -667,12 +676,13 @@ function CustomerDashboardContent() {
                 </CardContent>
               </Card>
             ))}
-            {!ordersLoading && groupedPendingOrders.length === 0 && (
+            {!ordersLoading && !ordersQuery.isError && groupedPendingOrders.length === 0 && (
               <p className="text-sm text-muted-foreground py-8 text-center">Você não possui reservas em andamento no momento.</p>
             )}
-            {(orders ?? []).length >= PAGE_SIZE && (
+            {ordersQuery.isError && <p role="alert" className="text-sm text-destructive">Não foi possível carregar as reservas. <Button variant="link" onClick={() => ordersQuery.refetch()}>Tentar novamente</Button></p>}
+            {ordersQuery.hasNextPage && (
               <div className="flex justify-center pt-4">
-                <Button variant="outline" size="sm" onClick={() => setOrdersPage((p) => p + 1)}>
+                <Button variant="outline" size="sm" disabled={ordersQuery.isFetchingNextPage} onClick={() => ordersQuery.fetchNextPage()}>
                   Carregar mais reservas
                 </Button>
               </div>
@@ -847,12 +857,13 @@ function CustomerDashboardContent() {
                 </CardContent>
               </Card>
             ))}
-            {waitlist && waitlist.length === 0 && (
+            {!waitlistQuery.isLoading && !waitlistQuery.isError && waitlist.length === 0 && (
               <p className="text-sm text-muted-foreground py-6 text-center">Você não está em nenhuma fila.</p>
             )}
-            {(waitlist ?? []).length >= PAGE_SIZE && (
+            {waitlistQuery.isError && <p role="alert" className="text-sm text-destructive">Não foi possível carregar a fila. <Button variant="link" onClick={() => waitlistQuery.refetch()}>Tentar novamente</Button></p>}
+            {waitlistQuery.hasNextPage && (
               <div className="flex justify-center pt-4">
-                <Button variant="outline" size="sm" onClick={() => setWaitlistPage((p) => p + 1)}>
+                <Button variant="outline" size="sm" disabled={waitlistQuery.isFetchingNextPage} onClick={() => waitlistQuery.fetchNextPage()}>
                   Carregar mais
                 </Button>
               </div>

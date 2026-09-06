@@ -1,6 +1,6 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PaymentBadge } from "@/components/StatusBadge";
-import { Package, Copy, MessageCircle, Search, Trophy, Star, Crown, Users, Sparkles, Zap, ArrowDownRight, CheckCircle2, ListOrdered, Calendar, FileSpreadsheet } from 'lucide-react';
+import { Package, Copy, MessageCircle, Search, Trophy, Star, Crown, Users, Sparkles, Zap, CheckCircle2, FileSpreadsheet } from 'lucide-react';
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -65,7 +65,7 @@ function getClientTier(totalSpent: number, orderCount: number) {
 export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: string }) {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTier, setSelectedTier] = useState<string>("all");
+  const [selectedTier] = useState<string>("all");
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [itemSearch, setItemSearch] = useState<string>("");
   const [itemStatusFilter, setItemStatusFilter] = useState<string>("active");
