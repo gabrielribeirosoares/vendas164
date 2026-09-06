@@ -1,4 +1,3 @@
-import { getProductCategory, getProductBadge } from "./storeCustomizations";
 
 const brlFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -8,8 +7,6 @@ export const brl = (value: number | null | undefined) =>
 export function isProntaEntrega(product: any): boolean {
   if (!product) return false;
   if (product.category === "pronta_entrega") return true;
-  if (product.id && getProductCategory(product.id) === "pronta_entrega") return true;
-  if (product.id && getProductBadge(product.id) === "Pronta Entrega") return true;
   
   const hasDownPayment = Number(product.down_payment_amount ?? 0) > 0;
   const hasDeadlineDate = Boolean(product.payment_deadline_date);
@@ -123,7 +120,7 @@ export function getProductInstallmentInfo(product: any, quantity: number = 1) {
  */
 export function getInstallmentOptions(product: any, quantity: number = 1): { value: number; label: string; totalPrice: number }[] {
   let unitCashPrice = Number(product?.price ?? 0);
-  const maxInst = Number(product?.max_installments && Number(product.max_installments) > 0 ? product.max_installments : 12);
+  const maxInst = Math.min(12, Math.max(1, Number(product?.max_installments ?? 1)));
   let instPriceRaw = product?.installment_price ?? product?.price_2x;
   let hasSurchargeFlag = product?.has_installment_surcharge === true;
   

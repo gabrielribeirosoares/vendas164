@@ -171,6 +171,8 @@ function SellerDashboard() {
   const search = Route.useSearch() as { tab?: string };
   const activeTab = search.tab || "produtos";
   const setActiveTab = (tab: string) => navigate({ search: { tab }, replace: true });
+  const [onlyOutOfStock, setOnlyOutOfStock] = useState(false);
+  const [orderFocus, setOrderFocus] = useState<"atrasado" | "envios" | undefined>();
   const [trialDismissed, setTrialDismissed] = useState(false);
 
   // If accessed from a store subdomain (e.g. teste.localhost:8080/vendedor),
@@ -473,10 +475,10 @@ function SellerDashboard() {
           </div>
         </div>
 
-        <SmartNotifications products={products ?? []} orders={orders ?? []} />
+        <SmartNotifications products={products ?? []} orders={orders ?? []} onOpenOrders={filter => { setOrderFocus(filter); setActiveTab("reservas"); }} onOpenProducts={() => { setOnlyOutOfStock(true); setActiveTab("produtos"); }} />
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-10">
-          <TabsList className="hidden md:flex w-full overflow-x-auto justify-start sm:justify-center whitespace-nowrap p-1 max-w-full bg-muted/30">
+        <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="mt-8 md:grid md:grid-cols-[190px_minmax(0,1fr)] md:items-start md:gap-6">
+          <TabsList className="hidden md:flex md:sticky md:top-24 h-auto w-full flex-col items-stretch justify-start gap-1 rounded-xl bg-muted/30 p-2 [&>button]:min-h-11 [&>button]:justify-start">
             <TabsTrigger value="produtos" className="gap-1.5 text-xs sm:text-sm">
               <Package className="size-3.5 text-amber-500" /> Pré-vendas
             </TabsTrigger>
@@ -503,16 +505,16 @@ function SellerDashboard() {
           </TabsList>
 
           <TabsContent value="produtos" className="mt-5">
-            <ProductsTab mode="pre_venda" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} />
+            <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pre_venda" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} />
           </TabsContent>
 
           <TabsContent value="pronta_entrega" className="mt-5">
-            <ProductsTab mode="pronta_entrega" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} />
+            <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pronta_entrega" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} />
           </TabsContent>
 
           <TabsContent value="reservas" className="mt-5 space-y-6">
             <SellerOverview totals={totals} brandData={brandData} />
-            <OrdersTab storeId={store.id} storeColor={store.primary_color} products={products ?? []} orders={orders ?? []} />
+            <OrdersTab focusFilter={orderFocus} onClearFocus={() => setOrderFocus(undefined)} storeId={store.id} storeColor={store.primary_color} products={products ?? []} orders={orders ?? []} />
           </TabsContent>
 
            <TabsContent value="clientes" className="mt-5">

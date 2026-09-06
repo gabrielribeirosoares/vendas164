@@ -1,3 +1,5 @@
+import type { Product } from "@/lib/cart";
+import { StoreProductCard } from "@/components/store/StoreProductCard";
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate, Outlet, useMatchRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
+import { brl, getProductSignalAmount, hasNoSignalRequirement } from "@/lib/format";
 import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 import { useCartStore } from "@/lib/cart";
@@ -144,7 +146,12 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [showFilters, setShowFilters] = useState<boolean>(false);
 
-  const { data, isLoading } = useQuery({
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(12);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => { const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim().slice(0, 200)), 250); return () => clearTimeout(timer); }, [searchQuery]);
+
+  const storeQuery = useQuery({
     queryKey: ["store", slug],
     retry: 2,
     queryFn: async () => {
@@ -155,14 +162,27 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
         .maybeSingle();
       if (error) throw error;
       if (!store) return null;
-      const { data: products } = await supabase
-        .from("products")
-        .select("*")
-        .eq("store_id", store.id)
-        .order("created_at", { ascending: false });
-      return { store, products: products ?? [] };
+      return { store };
     },
   });
+
+  const catalogQuery = useQuery({
+    queryKey: ["catalog", storeQuery.data?.store.id, debouncedSearch, selectedBrand, selectedScale, selectedType, onlyInStock, sortBy, currentPage, itemsPerPage],
+    enabled: !!storeQuery.data?.store.id,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("catalog_page", {
+        _store_id: storeQuery.data!.store.id, _search: debouncedSearch, _brand: selectedBrand,
+        _scale: selectedScale, _type: selectedType, _in_stock: onlyInStock, _sort: sortBy,
+        _page: currentPage, _page_size: itemsPerPage,
+      });
+      if (error) throw error;
+      return data as unknown as { products: Product[]; total: number; brands: string[] };
+    },
+  });
+  const data = storeQuery.data ? { store: storeQuery.data.store, products: catalogQuery.data?.products ?? [] } : null;
+  const isLoading = storeQuery.isLoading;
+  const isError = storeQuery.isError;
+  const refetch = storeQuery.refetch;
 
   const { data: isFollowing } = useQuery({
     queryKey: ["is-following-store", user?.id, data?.store?.id],
@@ -285,7 +305,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
     e.preventDefault();
     e.stopPropagation();
     
-    if (p.stock <= 0) {
+    if (!p.is_open || p.stock <= 0) {
       toast.info("Esgotado! Entre no produto para fila de espera.");
       return;
     }
@@ -294,8 +314,9 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
     const hasNoSignal = hasNoSignalRequirement(p);
     const downPaymentToPay = hasNoSignal ? 0 : signal;
     
-    cart.addItem({
+    try { cart.addItem({
       productId: p.id,
+      pricingProduct: p,
       storeId: p.store_id,
       storeName: store?.name,
       quantity: 1,
@@ -313,6 +334,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
       }
     });
     toast.success("Adicionado ao carrinho!");
+    } catch { toast.error("Não foi possível adicionar. Confira a quantidade (máximo de 100 unidades)."); }
   };
 
   const store = data?.store;
@@ -320,52 +342,10 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
   const isOwner = !!(user && store?.owner_id === user.id);
   const storeStatus = (store as any)?.status || "active";
 
-  const filteredProducts = useMemo(() => {
-    return products.filter((p) => {
-      if (!p.is_open) return false;
-      if (onlyInStock && p.stock <= 0) return false;
-
-      if (selectedType === "pre" && isProntaEntrega(p)) return false;
-      if (selectedType === "pronta" && !isProntaEntrega(p)) return false;
-
-      const matchBrand = selectedBrand === "all" || (p.brand || "Outros").trim() === selectedBrand;
-      const matchScale = selectedScale === "all" || p.scale === selectedScale;
-
-      if (!matchBrand || !matchScale) return false;
-
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const modelMatch = (p.model || "").toLowerCase().includes(q);
-        const brandMatch = (p.brand || "").toLowerCase().includes(q);
-        const descMatch = ((p as any).description || "").toLowerCase().includes(q);
-        if (!modelMatch && !brandMatch && !descMatch) return false;
-      }
-
-      return true;
-    }).sort((a, b) => {
-      if (sortBy === "price_asc") return Number(a.price) - Number(b.price);
-      if (sortBy === "price_desc") return Number(b.price) - Number(a.price);
-      if (sortBy === "recent") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      // Ordem alfabética (Marca A-Z -> Modelo A-Z)
-      const brandCompare = (a.brand || "").localeCompare(b.brand || "");
-      if (brandCompare !== 0) return brandCompare;
-      return (a.model || "").localeCompare(b.model || "");
-    });
-  }, [products, selectedBrand, selectedScale, selectedType, searchQuery, onlyInStock, sortBy]);
-
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [itemsPerPage, setItemsPerPage] = useState<number>(12);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedBrand, selectedScale, selectedType, searchQuery, onlyInStock, sortBy, itemsPerPage]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / itemsPerPage));
-
-  const paginatedProducts = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredProducts.slice(start, start + itemsPerPage);
-  }, [filteredProducts, currentPage, itemsPerPage]);
+  useEffect(() => { setCurrentPage(1); }, [selectedBrand, selectedScale, selectedType, debouncedSearch, onlyInStock, sortBy, itemsPerPage]);
+  const productCount = catalogQuery.data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(productCount / itemsPerPage));
+  const paginatedProducts = products;
 
   // Agrupamento por marca da página atual
   const brandsMap = useMemo(() => {
@@ -378,18 +358,17 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
     return map;
   }, [paginatedProducts]);
 
-  const allAvailableBrands = useMemo(() => {
-    const set = new Set(products.filter((p) => p.is_open).map((p) => (p.brand || "Outros").trim()));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [products]);
+  const allAvailableBrands = catalogQuery.data?.brands ?? [];
 
-  const brandList = useMemo(() => Object.keys(brandsMap).sort((a, b) => a.localeCompare(b)), [brandsMap]);
+  const brandList = Object.keys(brandsMap).sort((a, b) => a.localeCompare(b));
   const filteredBrands = useMemo(
     () => (selectedBrand === "all" ? brandList : brandList.filter((b) => b === selectedBrand)),
     [brandList, selectedBrand]
   );
 
   const hasActiveFilters = searchQuery.trim() !== "" || selectedBrand !== "all" || selectedScale !== "all" || selectedType !== "all" || onlyInStock || sortBy !== "recent";
+
+  if (isError) return <div className="mx-auto max-w-xl p-8 text-center"><h1 className="text-xl font-semibold">Não foi possível carregar a loja</h1><p className="my-4 text-muted-foreground">Verifique sua conexão e tente novamente.</p><Button onClick={() => refetch()}>Tentar novamente</Button></div>;
 
   if (isLoading) {
     return (
@@ -693,18 +672,18 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
           <span>
             Exibindo{" "}
             <strong>
-              {filteredProducts.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}
+              {productCount > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}
             </strong>{" "}
             a{" "}
             <strong>
-              {Math.min(currentPage * itemsPerPage, filteredProducts.length)}
+              {Math.min(currentPage * itemsPerPage, productCount)}
             </strong>{" "}
-            de <strong>{filteredProducts.length}</strong> {filteredProducts.length === 1 ? "miniatura" : "miniaturas"}
+            de <strong>{productCount}</strong> {productCount === 1 ? "miniatura" : "miniaturas"}
             {totalPages > 1 && ` (Página ${currentPage} de ${totalPages})`}
             {searchQuery && ` para "${searchQuery}"`}
           </span>
 
-          {filteredProducts.length > 12 && (
+          {productCount > 12 && (
             <div className="flex items-center gap-2">
               <span>Exibir por página:</span>
               <div className="flex items-center gap-1">
@@ -728,7 +707,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
         </div>
 
         {/* Mensagem de Vazio quando não há miniaturas */}
-        {filteredProducts.length === 0 ? (
+        {catalogQuery.isError ? <div role="alert" className="rounded-xl border p-6 text-center"><p>Não foi possível carregar os produtos.</p><Button variant="outline" className="mt-3" onClick={() => catalogQuery.refetch()}>Tentar novamente</Button></div> : catalogQuery.isFetching ? <div className="grid grid-cols-2 gap-4 lg:grid-cols-3" aria-label="Carregando produtos">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-80 rounded-xl" />)}</div> : productCount === 0 ? (
           <div className="mt-12 rounded-3xl border border-dashed border-border/60 p-12 text-center space-y-3 bg-card/20">
             <Package className="mx-auto size-12 text-muted-foreground/40" />
             <h3 className="text-base font-semibold text-foreground">Nenhuma miniatura encontrada</h3>
@@ -866,140 +845,8 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                       })}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {brandProducts.map((p) => (
-                        <a
-                          key={p.id}
-                          href={getProductUrl(slug ?? "loja", p.slug || p.id)}
-                          className="group"
-                        >
-                          <Card className="flex h-full flex-col overflow-hidden border-border/30 bg-card/60 transition-transform group-hover:-translate-y-1 shadow-sm">
-                            <div className="relative aspect-video w-full overflow-hidden bg-muted">
-                              {/* Badges Flutuantes no Canto Superior Esquerdo */}
-                              <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10 items-start pointer-events-none">
-                                {getProductBadge(p.id) && (
-                                  <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-gradient-to-r from-amber-500 to-orange-600 border border-amber-400/30">
-                                    {getProductBadge(p.id)}
-                                  </span>
-                                )}
-                                {p.stock > 0 && p.stock <= 2 && (
-                                  <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-rose-600/90 border border-rose-400/30">
-                                    Últimas {p.stock} un.
-                                  </span>
-                                )}
-                                {!isProntaEntrega(p) && hasNoSignalRequirement(p) && (
-                                  <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-emerald-600/90 border border-emerald-400/30">
-                                    Sem Sinal
-                                  </span>
-                                )}
-                                {isProntaEntrega(p) && !getProductBadge(p.id) && (
-                                  <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-emerald-600 border border-emerald-400/40">
-                                    ⚡ Pronta Entrega
-                                  </span>
-                                )}
-                              </div>
-                              {p.image_url ? (
-                                <img
-                                  src={p.image_url}
-                                  alt={`${p.brand} ${p.model}`}
-                                  loading="lazy"
-                                  className="h-full w-full object-cover transition-transform group-hover:scale-105 duration-300"
-                                />
-                              ) : (
-                                <div className="flex h-full items-center justify-center text-muted-foreground">
-                                  <Package className="size-8" />
-                                </div>
-                              )}
-                              {/* Badge flutuante de acionamento na foto */}
-                              <button
-                                onClick={(e) => handleQuickAdd(e, p)}
-                                className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur-md transition-transform hover:scale-105 z-10"
-                                style={{ backgroundColor: store.primary_color }}
-                              >
-                                <ShoppingCart className="size-3.5" />
-                                <span>+ Carrinho</span>
-                              </button>
-                            </div>
-
-                            <CardContent className="flex flex-1 flex-col justify-between p-4">
-                              <div>
-                                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                                  {p.brand} · {p.scale}
-                                </p>
-                                <h3 className="mt-1 font-semibold line-clamp-1">{p.model}</h3>
-                              </div>
-
-                              <div className="mt-4 space-y-3">
-                                <div className="flex flex-col gap-1.5">
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <span className="text-[10px] uppercase font-semibold text-muted-foreground block">
-                                        À vista
-                                      </span>
-                                      <span
-                                        className="font-display text-lg font-bold"
-                                        style={{ color: store.primary_color }}
-                                      >
-                                        {brl(Number(p.price))}
-                                      </span>
-                                    </div>
-                                    <Badge variant={p.is_open ? "secondary" : "outline"} className="border-border/30 text-xs">
-                                      {formatStockRemaining(p)}
-                                    </Badge>
-                                  </div>
-
-                                  {(() => {
-                                    const signal = getProductSignalAmount(p);
-                                    if (signal.isSemSinal) {
-                                      return (
-                                        <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                                          <span className="inline-block size-1.5 rounded-full bg-emerald-500" />
-                                          <span>Sem sinal (Pagar na chegada)</span>
-                                        </div>
-                                      );
-                                    }
-                                    return (
-                                      <div className="flex items-center justify-between text-xs rounded-md bg-muted/30 px-2 py-1 border border-border/20">
-                                        <span className="text-muted-foreground">Sinal para reservar:</span>
-                                        <strong className="text-primary font-semibold">{brl(signal.amount)}</strong>
-                                      </div>
-                                    );
-                                  })()}
-
-                                  {(() => {
-                                    const inst = getProductInstallmentInfo(p);
-                                    if (!inst) return null;
-                                    return (
-                                      <p className="text-[11px] text-muted-foreground">
-                                        ou <strong className="text-foreground">{inst.maxInstallments}x de {brl(inst.installmentValue)}</strong>{" "}
-                                        {inst.hasSurcharge ? "" : "sem acréscimo"}
-                                      </p>
-                                    );
-                                  })()}
-                                </div>
-
-                                <Button
-                                  size="sm"
-                                  className="w-full font-semibold gap-1.5"
-                                  style={
-                                    p.is_open && p.stock > 0
-                                      ? { backgroundColor: store.primary_color, color: "#fff" }
-                                      : undefined
-                                  }
-                                  variant={p.is_open && p.stock > 0 ? "default" : "outline"}
-                                >
-                                  <BookmarkCheck className="size-4 shrink-0" />
-                                  {!p.is_open
-                                    ? "Pré-venda fechada"
-                                    : p.stock > 0
-                                      ? "Reservar unidade"
-                                      : "Entrar na fila"}
-                                </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </a>
-                      ))}
+                    <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-4 lg:grid-cols-3">
+                      {brandProducts.map(p => <StoreProductCard key={p.id} product={p} storeSlug={slug ?? "loja"} onAdd={handleQuickAdd} />)}
                     </div>
                   )}
                 </section>

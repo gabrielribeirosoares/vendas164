@@ -171,7 +171,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
   const unitPriceForChosenOption = totalPriceCalculated / Math.max(1, quantity);
   const downPaymentToPay = hasNoSignal ? 0 : signalInfo.amount;
   const remainingBalanceCalculated = Math.max(0, totalPriceCalculated - downPaymentToPay);
-  const installmentValCalculated = selectedInstallment > 1 ? totalPriceCalculated / selectedInstallment : totalPriceCalculated;
+  const installmentValCalculated = selectedInstallment > 1 ? remainingBalanceCalculated / selectedInstallment : remainingBalanceCalculated;
 
   async function handleReserve() {
     if (!product) return;
@@ -184,8 +184,9 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
       return;
     }
     if (product.stock > 0) {
-      cart.addItem({
+      try { cart.addItem({
         productId: product.id,
+        pricingProduct: product,
         storeId: product.store_id,
         storeName: product.stores?.name,
         quantity: quantity,
@@ -204,6 +205,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
         }
       });
       toast.success(quantity > 1 ? `${quantity} unidades adicionadas ao carrinho!` : "Unidade adicionada ao carrinho!");
+      } catch { toast.error("Confira a quantidade e as condições do produto antes de adicionar."); }
     } else {
       setReserving(true);
       try {

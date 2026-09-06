@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Car, ChevronDown, LogOut, Menu, Package, Palette, Store as StoreIcon, User, Zap, CreditCard, Truck, RefreshCw } from "lucide-react";
+import { Car, ChevronDown, LogOut, Menu, Package, Palette, Store as StoreIcon, User, Zap, RefreshCw } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
