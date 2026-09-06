@@ -646,6 +646,45 @@ export function OrdersTab({
     setSelectedOrders(new Set());
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedOrders.size === 0) return;
+    const confirmed = window.confirm(
+      `Tem certeza que deseja excluir permanentemente as ${selectedOrders.size} reservas selecionadas? Esta ação não pode ser desfeita.`
+    );
+    if (!confirmed) return;
+
+    const allIds: string[] = [];
+    const itemsToDelete: GroupedOrderRow[] = [];
+    selectedOrders.forEach((groupId) => {
+      const item = rows.find((r) => r.ids[0] === groupId);
+      if (item) {
+        itemsToDelete.push(item);
+        allIds.push(...item.ids);
+      }
+    });
+
+    if (allIds.length === 0) return;
+
+    for (const item of itemsToDelete) {
+      const { order: o, quantity } = item;
+      const wasCancelled = o.payment_status === "cancelado" || o.delivery_status === "cancelado";
+      if (!wasCancelled) {
+        await adjustStockOnCancel(o.product_id, true, quantity);
+      }
+    }
+
+    await supabase.from("order_installments").delete().in("order_id", allIds);
+    const { error } = await supabase.from("orders").delete().in("id", allIds);
+
+    if (error) {
+      return toast.error("Não foi possível excluir as reservas selecionadas.");
+    }
+
+    toast.success(`${selectedOrders.size} reserva(s) excluída(s) com sucesso!`);
+    setSelectedOrders(new Set());
+    queryClient.invalidateQueries();
+  };
+
   return (
     <div className="space-y-6">
       <Card className="border-border/60 panel relative">
@@ -1557,6 +1596,15 @@ export function OrdersTab({
                   <SelectItem value="entregue">Entregue</SelectItem>
                 </SelectContent>
               </Select>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-8 gap-1.5 text-xs bg-red-600 hover:bg-red-700 text-white font-medium"
+                onClick={handleBulkDelete}
+              >
+                <Trash2 className="size-3.5" />
+                Excluir ({selectedOrders.size})
+              </Button>
             </div>
             <Button variant="ghost" size="icon" className="h-8 w-8 text-background hover:bg-background/20 hover:text-background" onClick={() => setSelectedOrders(new Set())}>
               <XCircle className="size-5" />

@@ -199,6 +199,18 @@ function AuthPageContent() {
         email: user.email,
         phone: cleanPhone,
       });
+
+      // Migrar reservas GUEST pendentes deste cliente automaticamente no cadastro/login
+      if (cleanPhone) {
+        try {
+          await supabase.rpc("migrate_reservations_by_phone", {
+            p_new_user_id: user.id,
+            p_phone: cleanPhone,
+          });
+        } catch (err) {
+          console.warn("Aviso ao migrar reservas no login/cadastro:", err);
+        }
+      }
     }
 
     const dest = search.next ?? (search.produto ? `/produto/${search.produto}` : "/painel");

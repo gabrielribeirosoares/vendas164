@@ -93,18 +93,31 @@ function CustomerDashboardContent() {
   }, [profile]);
 
   const { data: orders, isLoading: ordersLoading } = useQuery({
-    queryKey: ["my-orders", user?.id],
+    queryKey: ["my-orders", user?.id, profile?.phone],
     enabled: !!user,
     retry: 2,
     queryFn: async () => {
+      // Obter telefone para sincronização (do perfil ou direto da tabela se perfil ainda estiver carregando)
+      let userPhone = profile?.phone;
+      if (!userPhone && user?.id) {
+        const { data: p } = await supabase
+          .from("profiles")
+          .select("phone")
+          .eq("id", user.id)
+          .maybeSingle();
+        userPhone = p?.phone;
+      }
+
       // Sincronizar reservas guest anteriores pelo WhatsApp se o cliente tiver telefone
-      if (profile?.phone) {
+      if (userPhone) {
         try {
           await supabase.rpc("migrate_reservations_by_phone", {
             p_new_user_id: user!.id,
-            p_phone: profile.phone,
+            p_phone: userPhone,
           });
-        } catch {}
+        } catch (err) {
+          console.warn("Aviso ao migrar reservas:", err);
+        }
       }
 
       // Buscar ordens atualizadas do usuário (excluindo canceladas)
@@ -116,12 +129,21 @@ function CustomerDashboardContent() {
         .limit(PAGE_SIZE)
         .range(ordersPage * PAGE_SIZE, (ordersPage + 1) * PAGE_SIZE - 1);
       if (error) throw error;
-      return data ?? [];
+
+      // Filtrar pedidos que na verdade são reservas de convidados (GUEST) da própria loja do lojista
+      const realOrders = (data ?? []).filter((o: any) => {
+        const isGuestForMyStore =
+          o.stores?.owner_id === user!.id &&
+          (o.pix_key?.startsWith("GUEST:") || o.pix_key?.startsWith('{"manual_guest":true'));
+        return !isGuestForMyStore;
+      });
+
+      return realOrders;
     },
   });
 
   const { data: garageOrders } = useQuery({
-    queryKey: ["my-garage", user?.id],
+    queryKey: ["my-garage", user?.id, profile?.phone],
     enabled: !!user,
     retry: 2,
     queryFn: async () => {
@@ -132,7 +154,15 @@ function CustomerDashboardContent() {
         .eq("delivery_status", "entregue")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+
+      const realOrders = (data ?? []).filter((o: any) => {
+        const isGuestForMyStore =
+          o.stores?.owner_id === user!.id &&
+          (o.pix_key?.startsWith("GUEST:") || o.pix_key?.startsWith('{"manual_guest":true'));
+        return !isGuestForMyStore;
+      });
+
+      return realOrders;
     },
   });
 
@@ -564,7 +594,10 @@ function CustomerDashboardContent() {
 
                   {/* BLOCO DA CHAVE PIX DA LOJA */}
                   {o.payment_status !== "quitado" && o.payment_status !== "cancelado" && (() => {
-                    const pixKey = o.pix_key || o.stores?.pix_key || o.stores?.whatsapp_number;
+                    const isGuestPayload = (key?: string | null) =>
+                      !key || key.startsWith("GUEST:") || key.startsWith("{");
+                    const rawOrderPix = !isGuestPayload(o.pix_key) ? o.pix_key : null;
+                    const pixKey = rawOrderPix || o.stores?.pix_key || o.stores?.whatsapp_number;
                     if (!pixKey) return null;
                     const isAguardando = o.payment_status === "aguardando_sinal";
                     const signalInfo = getProductSignalAmount(o.products, qty);

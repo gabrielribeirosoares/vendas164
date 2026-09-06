@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +27,10 @@ import {
   Sparkles,
   Users,
   AlertTriangle,
+  Trash2,
+  ShieldCheck,
+  Clock,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -36,19 +40,28 @@ import {
   downloadCSVTemplate,
   parseCSVText,
   processSpreadsheetImport,
+  undoSpreadsheetImport,
   type ParsedSpreadsheetRow,
 } from "@/lib/importSpreadsheet";
+import {
+  recordImportBatch,
+  getLastActiveImport,
+  markImportAsUndone,
+  type ImportBatchRecord,
+} from "@/lib/importHistory";
 
 interface SpreadsheetImporterDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   storeId: string;
+  isModerator?: boolean;
 }
 
 export function SpreadsheetImporterDialog({
   open,
   onOpenChange,
   storeId,
+  isModerator,
 }: SpreadsheetImporterDialogProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -61,7 +74,27 @@ export function SpreadsheetImporterDialog({
     successCount: number;
     errorCount: number;
     errors: string[];
+    createdOrderIds: string[];
+    createdProductIds: string[];
   } | null>(null);
+  const [isUndoing, setIsUndoing] = useState(false);
+  const [isUndone, setIsUndone] = useState(false);
+  const [lastBatch, setLastBatch] = useState<ImportBatchRecord | null>(null);
+
+  // Carregar última importação ativa da loja ao abrir ou atualizar
+  useEffect(() => {
+    if (open && storeId) {
+      setLastBatch(getLastActiveImport(storeId));
+    }
+  }, [open, storeId, isUndone]);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      if (storeId) setLastBatch(getLastActiveImport(storeId));
+    };
+    window.addEventListener("import_history_updated", handleUpdate);
+    return () => window.removeEventListener("import_history_updated", handleUpdate);
+  }, [storeId]);
 
   // Buscar produtos da loja para associação automática
   const { data: storeProducts = [] } = useQuery({
@@ -83,6 +116,7 @@ export function SpreadsheetImporterDialog({
 
     setFileName(file.name);
     setImportSummary(null);
+    setIsUndone(false);
 
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -119,6 +153,7 @@ export function SpreadsheetImporterDialog({
     setIsProcessing(true);
     setProgressCount(0);
     setImportSummary(null);
+    setIsUndone(false);
 
     try {
       const result = await processSpreadsheetImport({
@@ -132,11 +167,25 @@ export function SpreadsheetImporterDialog({
         toast.success(
           `Importação concluída! ${result.successCount} reservas/cadastros criados com sucesso.`
         );
+
+        // Gravar no histórico persistente do navegador
+        if (result.createdOrderIds.length > 0) {
+          const saved = recordImportBatch({
+            storeId,
+            fileName: fileName || "planilha.csv",
+            orderIds: result.createdOrderIds,
+            productIds: result.createdProductIds,
+          });
+          setLastBatch(saved);
+        }
+
         // Atualizar queries do React Query
         queryClient.invalidateQueries({ queryKey: ["seller-orders"] });
+        queryClient.invalidateQueries({ queryKey: ["store-orders"] });
         queryClient.invalidateQueries({ queryKey: ["client-profiles"] });
         queryClient.invalidateQueries({ queryKey: ["customer-store-links"] });
         queryClient.invalidateQueries({ queryKey: ["store-products"] });
+        queryClient.invalidateQueries({ queryKey: ["admin-all-stores"] });
       }
 
       if (result.errorCount > 0) {
@@ -149,11 +198,61 @@ export function SpreadsheetImporterDialog({
     }
   }
 
+  async function handleUndoBatch(batch: { id?: string; orderIds: string[]; productIds?: string[]; orderCount?: number }) {
+    const orderIds = batch.orderIds || [];
+    if (orderIds.length === 0) return;
+
+    const count = orderIds.length;
+    const confirmed = window.confirm(
+      `Tem certeza que deseja desfazer esta importação e excluir permanentemente as ${count} reservas criadas?`
+    );
+    if (!confirmed) return;
+
+    setIsUndoing(true);
+    try {
+      await undoSpreadsheetImport({
+        orderIds,
+        productIds: batch.productIds || [],
+      });
+
+      if (batch.id) {
+        markImportAsUndone(batch.id);
+      }
+      setLastBatch(null);
+      setIsUndone(true);
+      toast.success(`Importação desfeita com sucesso! ${count} reserva(s) foram excluídas.`);
+
+      // Atualizar queries do React Query
+      queryClient.invalidateQueries({ queryKey: ["seller-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["store-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["client-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["customer-store-links"] });
+      queryClient.invalidateQueries({ queryKey: ["store-products"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-all-stores"] });
+    } catch (err: any) {
+      toast.error(`Erro ao desfazer importação: ${err?.message || "Erro desconhecido"}`);
+    } finally {
+      setIsUndoing(false);
+    }
+  }
+
+  async function handleUndoImport() {
+    if (!importSummary || importSummary.createdOrderIds.length === 0) return;
+    await handleUndoBatch({
+      id: lastBatch?.id,
+      orderIds: importSummary.createdOrderIds,
+      productIds: importSummary.createdProductIds,
+      orderCount: importSummary.createdOrderIds.length,
+    });
+  }
+
   function handleReset() {
     setParsedRows([]);
     setFileName("");
     setImportSummary(null);
     setProgressCount(0);
+    setIsUndone(false);
+    setIsUndoing(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -182,6 +281,41 @@ export function SpreadsheetImporterDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-5 py-2">
+          {/* Alerta de importação anterior ativa que pode ser desfeita pelo moderador */}
+          {isModerator && lastBatch && !importSummary && (
+            <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-amber-700 dark:text-amber-400">
+                  <Clock className="w-4 h-4" />
+                  Última Importação Realizada nesta Loja
+                </div>
+                <p className="text-muted-foreground">
+                  Arquivo: <strong className="text-foreground">{lastBatch.fileName}</strong> · <strong className="text-foreground">{lastBatch.orderCount} reservas criadas</strong> em{" "}
+                  {new Date(lastBatch.importedAt).toLocaleString("pt-BR")}.
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="shrink-0 h-8 text-xs gap-1.5 font-semibold"
+                onClick={() => handleUndoBatch(lastBatch)}
+                disabled={isUndoing}
+              >
+                {isUndoing ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Excluindo...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Desfazer e Excluir as {lastBatch.orderCount} reservas
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+
           {/* Passo 1: Download de Modelo e Seleção de Arquivo */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-4 rounded-xl border border-border/80 bg-muted/30 flex flex-col justify-between">
@@ -298,6 +432,47 @@ export function SpreadsheetImporterDialog({
                   {importSummary.errors.map((err, idx) => (
                     <div key={idx}>• {err}</div>
                   ))}
+                </div>
+              )}
+
+              {/* Botão Exclusivo de Moderação para Desfazer Importação */}
+              {isModerator && !isUndone && (importSummary.createdOrderIds?.length ?? 0) > 0 && (
+                <div className="mt-3 p-3.5 rounded-xl border border-destructive/30 bg-destructive/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-destructive">
+                      <ShieldCheck className="w-4 h-4 text-amber-500" />
+                      Painel de Moderação: Desfazer Importação
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Houve algum erro na planilha ou dados duplicados? Você pode apagar todas as reservas geradas nesta importação com 1 clique.
+                    </p>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="shrink-0 h-8 text-xs font-semibold gap-1.5 shadow-sm"
+                    onClick={handleUndoImport}
+                    disabled={isUndoing}
+                  >
+                    {isUndoing ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Excluindo reservas...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Desfazer e Excluir as {importSummary.createdOrderIds.length} reservas
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {isUndone && (
+                <div className="mt-3 p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  Importação desfeita com sucesso! Todas as reservas criadas nesta sessão foram excluídas do banco de dados.
                 </div>
               )}
             </div>

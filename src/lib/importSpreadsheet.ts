@@ -266,6 +266,8 @@ export async function processSpreadsheetImport({
   let successCount = 0;
   let errorCount = 0;
   const errors: string[] = [];
+  const createdOrderIds: string[] = [];
+  const createdProductIds: string[] = [];
 
   // Obter o dono real da loja alvo para atribuir reservas guest ao vendedor correto (não ao admin)
   const { data: targetStore } = await supabase
@@ -324,22 +326,32 @@ export async function processSpreadsheetImport({
         formattedPhone = cleanPhoneDigits.startsWith("55") ? `+${cleanPhoneDigits}` : `+55${cleanPhoneDigits}`;
       }
 
-      // 2. Buscar ou vincular perfil do cliente
+      // 2. Buscar ou vincular perfil do cliente (por telefone exato, últimos 8 dígitos ou e-mail)
       let effectiveUserId = storeOwnerId;
       let isGuest = true;
 
-      // Buscar por telefone no banco de perfis registrados em auth.users
-      const { data: foundProfile } = await supabase
-        .from("profiles")
-        .select("id")
-        .or(`phone.eq.${formattedPhone},phone.eq.${cleanPhoneDigits}`)
-        .maybeSingle();
+      const last8Digits = cleanPhoneDigits.length >= 8 ? cleanPhoneDigits.slice(-8) : "";
+      const profileFilters: string[] = [];
+      if (formattedPhone) profileFilters.push(`phone.eq.${formattedPhone}`);
+      if (cleanPhoneDigits) profileFilters.push(`phone.eq.${cleanPhoneDigits}`);
+      if (last8Digits) profileFilters.push(`phone.ilike.%${last8Digits}%`);
+      if (row.clientEmail && row.clientEmail.includes("@")) profileFilters.push(`email.eq.${row.clientEmail.trim().toLowerCase()}`);
+
+      let foundProfile: { id: string; email?: string | null } | null = null;
+      if (profileFilters.length > 0) {
+        const { data: matchedProfiles } = await supabase
+          .from("profiles")
+          .select("id, email")
+          .or(profileFilters.join(","))
+          .limit(1);
+        foundProfile = matchedProfiles?.[0] || null;
+      }
 
       if (foundProfile) {
         effectiveUserId = foundProfile.id;
         isGuest = false;
-        if (row.clientEmail) {
-          await supabase.from("profiles").update({ email: row.clientEmail }).eq("id", effectiveUserId);
+        if (row.clientEmail && !foundProfile.email) {
+          await supabase.from("profiles").update({ email: row.clientEmail.trim() }).eq("id", effectiveUserId);
         }
       }
 
@@ -382,6 +394,7 @@ export async function processSpreadsheetImport({
 
         if (!prodErr && newProd) {
           productId = newProd.id;
+          createdProductIds.push(newProd.id);
           // Adicionar imediatamente no cache para que as próximas linhas do mesmo modelo usem este mesmo ID
           const key = normalizeModelName(newProd.model);
           if (key) productCache.set(key, newProd);
@@ -405,22 +418,29 @@ export async function processSpreadsheetImport({
         : null;
 
       // 6. Criar Pedido / Reserva no Supabase
-      const { error: orderErr } = await supabase.from("orders").insert({
-        store_id: storeId,
-        user_id: effectiveUserId,
-        product_id: productId,
-        total_price: row.totalPrice,
-        down_payment: row.downPayment,
-        payment_status: row.paymentStatus,
-        delivery_status: row.deliveryStatus,
-        pix_key: pixKeyPayload,
-      });
+      const { data: createdOrder, error: orderErr } = await supabase
+        .from("orders")
+        .insert({
+          store_id: storeId,
+          user_id: effectiveUserId,
+          product_id: productId,
+          total_price: row.totalPrice,
+          down_payment: row.downPayment,
+          payment_status: row.paymentStatus,
+          delivery_status: row.deliveryStatus,
+          pix_key: pixKeyPayload,
+        })
+        .select("id")
+        .maybeSingle();
 
       if (orderErr) {
         errorCount++;
         errors.push(`Linha ${row.rowIndex}: Erro ao criar reserva - ${orderErr.message}`);
       } else {
         successCount++;
+        if (createdOrder?.id) {
+          createdOrderIds.push(createdOrder.id);
+        }
       }
     } catch (err: any) {
       errorCount++;
@@ -432,5 +452,50 @@ export async function processSpreadsheetImport({
     successCount,
     errorCount,
     errors,
+    createdOrderIds,
+    createdProductIds,
   };
+}
+
+/**
+ * Desfaz uma importação excluindo as reservas criadas e, opcionalmente,
+ * produtos novos criados que não tenham nenhuma outra reserva vinculada.
+ */
+export async function undoSpreadsheetImport({
+  orderIds,
+  productIds = [],
+}: {
+  orderIds: string[];
+  productIds?: string[];
+}) {
+  let deletedOrdersCount = 0;
+
+  if (orderIds && orderIds.length > 0) {
+    // 1. Apagar parcelas vinculadas (se houver)
+    await supabase.from("order_installments").delete().in("order_id", orderIds);
+
+    // 2. Apagar as reservas
+    const { error: orderErr } = await supabase.from("orders").delete().in("id", orderIds);
+    if (orderErr) {
+      throw new Error(`Erro ao excluir reservas importadas: ${orderErr.message}`);
+    }
+    deletedOrdersCount = orderIds.length;
+  }
+
+  // 3. Se produtos foram criados nessa importação e não possuem outros pedidos vinculados, excluí-los
+  if (productIds && productIds.length > 0) {
+    const { data: existingOrders } = await supabase
+      .from("orders")
+      .select("product_id")
+      .in("product_id", productIds);
+
+    const productsWithOtherOrders = new Set((existingOrders || []).map((o) => o.product_id));
+    const orphanProductIds = productIds.filter((id) => !productsWithOtherOrders.has(id));
+
+    if (orphanProductIds.length > 0) {
+      await supabase.from("products").delete().in("id", orphanProductIds);
+    }
+  }
+
+  return { deletedOrdersCount };
 }
