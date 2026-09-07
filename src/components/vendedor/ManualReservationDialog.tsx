@@ -1,6 +1,6 @@
 
 import { getInstallmentOptions, getProductSignalAmount, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -159,13 +159,29 @@ export function ManualReservationDialog({
 
   const [manualQuantity, setManualQuantity] = useState<number>(1);
 
+  const sortedProducts = useMemo(() => {
+    return [...products].sort((a, b) => {
+      const brandA = (a.brand || "Outros").trim();
+      const brandB = (b.brand || "Outros").trim();
+      const brandComp = brandA.localeCompare(brandB, "pt-BR", { numeric: true, sensitivity: "base" });
+      if (brandComp !== 0) return brandComp;
+
+      const modelA = (a.model || "").trim();
+      const modelB = (b.model || "").trim();
+      const modelComp = modelA.localeCompare(modelB, "pt-BR", { numeric: true, sensitivity: "base" });
+      if (modelComp !== 0) return modelComp;
+
+      return (a.created_at || "").localeCompare(b.created_at || "");
+    });
+  }, [products]);
+
   useEffect(() => {
     if (preSelectedProduct) {
       setSelectedProductId(preSelectedProduct.id);
-    } else if (products.length > 0 && !selectedProductId) {
-      setSelectedProductId(products[0].id);
+    } else if (sortedProducts.length > 0 && !selectedProductId) {
+      setSelectedProductId(sortedProducts[0].id);
     }
-  }, [preSelectedProduct, products, open]);
+  }, [preSelectedProduct, sortedProducts, open]);
 
   useEffect(() => {
     if (selectedProductId && products.length > 0) {
@@ -369,7 +385,7 @@ export function ManualReservationDialog({
                 <SelectValue placeholder="Selecione a miniatura" className="truncate" />
               </SelectTrigger>
               <SelectContent className="max-w-[calc(100vw-3rem)] max-h-60">
-                {products.map((p) => (
+                {sortedProducts.map((p) => (
                   <SelectItem key={p.id} value={p.id} disabled={p.stock <= 0} className="text-xs sm:text-sm">
                     <span className="truncate block">
                       {p.brand} {p.model} {(p as any).sku ? `[SKU: ${(p as any).sku}] ` : ""}({p.stock} {p.stock === 1 ? "unidade" : "unidades"} em estoque — {brl(Number(p.price))})

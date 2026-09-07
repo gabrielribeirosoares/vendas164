@@ -120,14 +120,34 @@ export function ProductsTab({
       });
     }
 
-    return list;
+    // Ordenação alfabética obrigatória (Marca A-Z -> Modelo A-Z)
+    return [...list].sort((a, b) => {
+      const brandA = (a.brand || "Outros").trim();
+      const brandB = (b.brand || "Outros").trim();
+      const brandComp = brandA.localeCompare(brandB, "pt-BR", { numeric: true, sensitivity: "base" });
+      if (brandComp !== 0) return brandComp;
+
+      const modelA = (a.model || "").trim();
+      const modelB = (b.model || "").trim();
+      const modelComp = modelA.localeCompare(modelB, "pt-BR", { numeric: true, sensitivity: "base" });
+      if (modelComp !== 0) return modelComp;
+
+      const skuA = ((a as any).sku || "").trim();
+      const skuB = ((b as any).sku || "").trim();
+      if (skuA || skuB) {
+        const skuComp = skuA.localeCompare(skuB, "pt-BR", { numeric: true, sensitivity: "base" });
+        if (skuComp !== 0) return skuComp;
+      }
+
+      return (a.created_at || "").localeCompare(b.created_at || "");
+    });
   }, [products, mode, searchQuery, onlyOutOfStock]);
 
   const configuredBrands = useMemo(() => getStoreBrands(store.id), [store.id]);
   const availableBrandOptions = useMemo(() => {
     const set = new Set([...configuredBrands]);
     displayedProducts.forEach((p) => p.brand && set.add(p.brand.trim()));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true, sensitivity: "base" }));
   }, [configuredBrands, displayedProducts]);
 
   const brandsMap: Record<string, Product[]> = {};
@@ -136,7 +156,7 @@ export function ProductsTab({
     if (!brandsMap[brandName]) brandsMap[brandName] = [];
     brandsMap[brandName].push(p);
   }
-  const brandList = Object.keys(brandsMap).sort((a, b) => a.localeCompare(b));
+  const brandList = Object.keys(brandsMap).sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true, sensitivity: "base" }));
 
   const DEFAULT_PAGE_SIZE = 25;
   const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 0]; // 0 = Todos
@@ -168,7 +188,9 @@ export function ProductsTab({
     if (!paginatedBrandsMap[brandName]) paginatedBrandsMap[brandName] = [];
     paginatedBrandsMap[brandName].push(p);
   }
-  const paginatedBrandList = Object.keys(paginatedBrandsMap).sort((a, b) => a.localeCompare(b));
+  const paginatedBrandList = Object.keys(paginatedBrandsMap).sort((a, b) =>
+    a.localeCompare(b, "pt-BR", { numeric: true, sensitivity: "base" })
+  );
 
   function handleReserveUnidade(p: Product) {
     if (!p.is_open) return toast.error("Este item está fechado para reservas.");
