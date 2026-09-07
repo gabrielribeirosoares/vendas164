@@ -123,7 +123,7 @@ export function getProductInstallmentInfo(product: any, quantity: number = 1) {
  */
 export function getInstallmentOptions(product: any, quantity: number = 1): { value: number; label: string; totalPrice: number }[] {
   let unitCashPrice = Number(product?.price ?? 0);
-  const maxInst = Number(product?.max_installments && Number(product.max_installments) > 0 ? product.max_installments : 12);
+  const maxInst = Math.min(12, Math.max(1, Number(product?.max_installments ?? 1)));
   let instPriceRaw = product?.installment_price ?? product?.price_2x;
   let hasSurchargeFlag = product?.has_installment_surcharge === true;
   

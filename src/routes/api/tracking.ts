@@ -32,26 +32,20 @@ const FETCH_TIMEOUT = 3000;
 
 async function fetchWithTimeout(
   url: string,
-  optionsOrHeaders: RequestInit | Record<string, string> = {},
+  headers: Record<string, string> = {},
+  options: RequestInit = {},
 ): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
   try {
-    let init: RequestInit;
-    if ("headers" in optionsOrHeaders || "method" in optionsOrHeaders || "body" in optionsOrHeaders) {
-      init = { ...(optionsOrHeaders as RequestInit), signal: controller.signal };
-    } else {
-      init = { headers: optionsOrHeaders as HeadersInit, signal: controller.signal };
-    }
-    const response = await fetch(url, init);
+    const response = await fetch(url, { ...options, headers, signal: controller.signal });
     return response;
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
-const DEFAULT_MELHOR_ENVIO_TOKEN =
-  "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiYWM4Mzk2NDA3NDJiODhhOTcwMTQyN2EwNjU4M2Y1MmVmZjI5NDRjYTVlYzRlNDgyODI2ZWY2YmIxOTNkMDE5YjRiMmYwMDliMGJkYzczZWEiLCJpYXQiOjE3ODgyMTcxNzUuMzcxMjgzLCJuYmYiOjE3ODgyMTcxNzUuMzcxMjg1LCJleHAiOjE4MTk3NTMxNzUuMzYwODU4LCJzdWIiOiJhMmEzMjk1Yi1hZmY5LTQzMjMtOTg1OS0xYWI0N2JlZDE4ODYiLCJzY29wZXMiOlsiY2FydC1yZWFkIiwiY2FydC13cml0ZSIsImNvbXBhbmllcy1yZWFkIiwiY2FydC13cml0ZSIsImNvdXBvbnMtcmVhZCIgLCJjb3Vwb25zLXdyaXRlIiwibm90aWZpY2F0aW9ucy1yZWFkIiwib3JkZXJzLXJlYWQiLCJwcm9kdWN0cy1yZWFkIiwicHJvZHVjdHMtZGVzdHJveSIsInByb2R1Y3RzLXdyaXRlIiwicHVyY2hhc2VzLXJlYWQiLCJzaGlwcGluZy1jYWxjdWxhdGUiLCJzaGlwcGluZy1jYW5jZWwiLCJzaGlwcGluZy1jaGVja291dCIsInNoaXBwaW5nLWNvbXBhbmllcyIsInNoaXBwaW5nLWdlbmVyYXRlIiwic2hpcHBpbmctcHJldmlldyIsInNoaXBwaW5nLXByaW50Iiwic2hpcHBpbmctc2hhcmUiLCJzaGlwcGluZy10cmFja2luZyIsImVjb21tZXJjZS1zaGlwcGluZyIsInRyYW5zYWN0aW9ucy1yZWFkIiwidXNlcnMtcmVhZCIgLCJ1c2Vycy13cml0ZSIsIndlYmhvb2tzLXJlYWQiLCJ3ZWJob29rcy13cml0ZSIsIndlYmhvb2tzLWRlbGV0ZSIsInRkZWFsZXItd2ViaG9vayJdfQ.l8ybEaSHLVpXvS7wz0AjG-4K_eDaBhyD07qNUW6ZrZ_riUMYcJSzyNimDuxAtRGJl_lCEZULdGp6C39cP-cZS9v8h0yJiTmwmxsGb3SPGtKVenTejfvxmWjIDInrhBtw5NF9vGn88dHvSkcrwtsvH6gfJZinOm3DAvgvOFTG9zVpfF70zCPRkMuZ1R_NAwgNjVJ02TBDh3WDQaw7D8yLoMPCDAI083eYD5Jt05FWHI_5r-Z_m8rGdiHNW7UIuxF-JNsnTI5LGa5HSlndnBePFnRjllnXM2WhqMOs9jBKKyGpCDVHl4EQtEovFexIFszEAccmKabhrwz7hPA952uxAsTfxZDhT6I-ZRlswVavtLorEFu7XvtrlZZ8MPamAnhm3pkJtJ2rGhcaMAKhxglxxUVrPcrdD3wGAeJsZsx05SggKhm5FtE7NwDnER0p0JCIiSw3iMLH7T4Skqk6hdroy8tIniMzPnqGxlEjCjpZ1ngKGis-Uh3b5AF5iQz5Wac0TwT-6aFGBAx9jZLqKr9HWmgMkHdmb0T1rp8Tx5aB9yXGtiRxE9wPnzmpXrqRaWKKbEGZpycRvKCs-92iq5xyE0raeqJ5y4pwe_RwVXjO2L32uVubvIKnYPcEpTc3QgfLR0BNNH2tZCFqSw3JcOa2w-rgTXlUGDBEkbHiXSyKw38";
+const DEFAULT_MELHOR_ENVIO_TOKEN = process.env.MELHOR_ENVIO_TOKEN || "";
 
 export const Route = createFileRoute("/api/tracking")({
   server: {
@@ -59,7 +53,6 @@ export const Route = createFileRoute("/api/tracking")({
       GET: async ({ request }) => {
         const url = new URL(request.url);
         const code = url.searchParams.get("code");
-        const provider = url.searchParams.get("provider") ?? "correios";
         const token = url.searchParams.get("token") || request.headers.get("x-melhor-envio-token") || DEFAULT_MELHOR_ENVIO_TOKEN;
 
         if (!code || code.trim().length < 8) {
@@ -123,13 +116,12 @@ async function trackWithMelhorEnvioApi(code: string, token: string): Promise<Tra
   try {
     const cleanToken = token.trim().replace(/^Bearer\s+/i, "");
     const response = await fetchWithTimeout(apiUrl, {
-      method: "POST",
-      headers: {
         "Authorization": `Bearer ${cleanToken}`,
         "Content-Type": "application/json",
         "Accept": "application/json",
         "User-Agent": "Vendas164 (contato@vendas164.com.br)",
-      },
+      }, {
+      method: "POST",
       body: JSON.stringify({ orders: [code] }),
     });
 
