@@ -378,8 +378,9 @@ export type Database = {
       }
       create_reservation: { Args: { _product_id: string }; Returns: string }
       expire_stale_orders: { Args: never; Returns: number }
+      is_platform_admin: { Args: never; Returns: boolean }
       is_store_owner: { Args: { _store_id: string }; Returns: boolean }
-      migrate_reservations_by_phone: { Args: { p_new_user_id: string; p_phone: string }; Returns: void }
+      migrate_reservations_by_phone: { Args: { p_new_user_id: string; p_phone: string }; Returns: number }
       reservar_miniatura: {
         Args: { p_produto_id: string; p_quantidade: number }
         Returns: boolean

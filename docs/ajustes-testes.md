@@ -11,7 +11,9 @@
 - Carregamento incremental de reservas e fila do cliente. Filtros e paginação da vitrine no banco, sem baixar o catálogo completo.
 - Cards de produto separados em componente, textos maiores e ações independentes dos links. Navegação lateral do vendedor e alertas acionáveis.
 - Diálogo de reserva manual extraído do gerenciador de produtos.
-- Correção do helper de rastreamento que recebia opções POST no parâmetro de headers. Token padrão do Melhor Envio movido para variável do servidor.
+- Correção do helper de rastreamento que recebia opções POST no parâmetro de headers. A rota de API lê o token do Melhor Envio no servidor; a remoção do token legado do módulo do navegador permanece pendente.
+- Administradores passam a ser cadastrados explicitamente em `private.platform_admins`; permissões não dependem mais de trechos do e-mail.
+- Clientes não podem alterar campos financeiros dos próprios pedidos. A migração automática de reservas convidadas só aceita telefone confirmado pelo Supabase Auth.
 
 ## Antes de disponibilizar
 
@@ -26,6 +28,7 @@
    Nenhuma dessas credenciais deve usar prefixo `VITE_`, entrar no Git ou ser enviada em chat.
 5. O proprietário acessa o importador Bling, prepara a autorização, abre o link e retorna o URL completo com `code` e `state`. Tokens antigos do navegador são descartados, não reutilizados.
 6. Validar com duas contas e duas lojas na homologação: carrinho misto, preço alterado, saldo/parcelas, estoque disputado, reserva manual, autorização Bling, renovação de token e rastreamento.
+7. Aplicar `20260907143000_harden_platform_authorization.sql` depois das migrações de checkout e convidados. Contas sem telefone confirmado continuam acessando o sistema, mas a associação automática de reservas por telefone retorna zero; nesses casos, o lojista deve validar a identidade antes de transferir a reserva.
 
 ## Verificação local
 
