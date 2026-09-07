@@ -338,7 +338,9 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
         const modelMatch = (p.model || "").toLowerCase().includes(q);
         const brandMatch = (p.brand || "").toLowerCase().includes(q);
         const descMatch = ((p as any).description || "").toLowerCase().includes(q);
-        if (!modelMatch && !brandMatch && !descMatch) return false;
+        const skuMatch = ((p as any).sku || "").toLowerCase().includes(q);
+        const obsMatch = ((p as any).observation || "").toLowerCase().includes(q);
+        if (!modelMatch && !brandMatch && !descMatch && !skuMatch && !obsMatch) return false;
       }
 
       return true;
@@ -528,7 +530,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar por produto"
+                  placeholder="Buscar por produto ou SKU..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9 pr-8 h-10 text-sm bg-card/60 rounded-lg"
@@ -795,6 +797,11 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                                     <span className="text-[10px] uppercase font-bold text-muted-foreground">
                                       {p.brand} · {p.scale}
                                     </span>
+                                    {(p as any).sku && (
+                                      <span className="font-mono text-[9px] bg-muted/80 text-muted-foreground px-1.5 py-0.2 rounded border border-border/20">
+                                        SKU: {(p as any).sku}
+                                      </span>
+                                    )}
                                     {customBadge && (
                                       <span className="rounded px-1.5 py-0.2 text-[9px] font-bold text-white bg-gradient-to-r from-amber-500 to-orange-600">
                                         {customBadge}
@@ -810,6 +817,12 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                                   <h4 className="font-semibold text-sm line-clamp-1 text-foreground group-hover:text-primary transition-colors">
                                     {p.model}
                                   </h4>
+
+                                  {(p as any).observation && (
+                                    <p className="text-xs text-muted-foreground line-clamp-1 italic">
+                                      {(p as any).observation}
+                                    </p>
+                                  )}
 
                                   <div className="flex items-center gap-2 pt-0.5 flex-wrap text-xs">
                                     <Badge variant={p.is_open ? "secondary" : "outline"} className="text-[10px] px-1.5 py-0">
@@ -923,10 +936,22 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
 
                             <CardContent className="flex flex-1 flex-col justify-between p-4">
                               <div>
-                                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                                  {p.brand} · {p.scale}
-                                </p>
+                                <div className="flex items-center justify-between gap-1 flex-wrap">
+                                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                                    {p.brand} · {p.scale}
+                                  </p>
+                                  {(p as any).sku && (
+                                    <span className="font-mono text-[9px] bg-muted/80 text-muted-foreground px-1.5 py-0.2 rounded border border-border/20">
+                                      SKU: {(p as any).sku}
+                                    </span>
+                                  )}
+                                </div>
                                 <h3 className="mt-1 font-semibold line-clamp-1">{p.model}</h3>
+                                {(p as any).observation && (
+                                  <p className="text-[11px] text-muted-foreground line-clamp-2 mt-1 italic leading-snug">
+                                    {(p as any).observation}
+                                  </p>
+                                )}
                               </div>
 
                               <div className="mt-4 space-y-3">

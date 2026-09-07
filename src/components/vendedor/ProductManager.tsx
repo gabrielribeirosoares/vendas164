@@ -2,7 +2,7 @@ import { BookmarkCheck, CopyPlus, Zap, Sparkles } from "lucide-react";
 import { formatDeadlineHours, getInstallmentOptions, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Plus, Search, Share2, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Search, Share2, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { PhoneInput } from "@/components/PhoneInput";
 import { getCustomerFromCache, saveCustomerToCache } from "@/lib/customerCache";
@@ -11,6 +11,7 @@ import { BlingIntegrationDialog } from "@/components/vendedor/BlingIntegrationDi
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -47,6 +48,8 @@ type Product = Tables<"products">;
 const emptyProduct = {
   brand: "",
   model: "",
+  sku: "",
+  observation: "",
   scale: "1:64",
   price: "",
   cost_price: "",
@@ -86,6 +89,7 @@ export function ProductsTab({
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [manualReservationProduct, setManualReservationProduct] = useState<Product | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedBrand, setSelectedBrand] = useState<string>("all");
   const [isCustomBrand, setIsCustomBrand] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -97,14 +101,26 @@ export function ProductsTab({
     (store.name && (store.name.toLowerCase().includes("gabriel") || store.name.toLowerCase().includes("mf")));
 
   const displayedProducts = useMemo(() => {
+    let list = products;
     if (mode === "pronta_entrega") {
-      return products.filter((p) => isProntaEntrega(p));
+      list = products.filter((p) => isProntaEntrega(p));
+    } else if (mode === "pre_venda") {
+      list = products.filter((p) => !isProntaEntrega(p));
     }
-    if (mode === "pre_venda") {
-      return products.filter((p) => !isProntaEntrega(p));
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter((p) => {
+        const modelMatch = (p.model || "").toLowerCase().includes(q);
+        const brandMatch = (p.brand || "").toLowerCase().includes(q);
+        const skuMatch = ((p as any).sku || "").toLowerCase().includes(q);
+        const obsMatch = ((p as any).observation || "").toLowerCase().includes(q);
+        return modelMatch || brandMatch || skuMatch || obsMatch;
+      });
     }
-    return products;
-  }, [products, mode]);
+
+    return list;
+  }, [products, mode, searchQuery]);
 
   const configuredBrands = useMemo(() => getStoreBrands(store.id), [store.id]);
   const availableBrandOptions = useMemo(() => {
@@ -155,6 +171,8 @@ export function ProductsTab({
       store_id: store.id,
       brand: form.brand.trim(),
       model: form.model.trim(),
+      sku: form.sku?.trim() || null,
+      observation: form.observation?.trim() || null,
       scale: form.scale,
       price: Number(form.price || 0),
       cost_price: form.cost_price ? Number(form.cost_price) : null,
@@ -179,6 +197,13 @@ export function ProductsTab({
     let { error } = await supabase.from("products").insert(payload);
 
     // Fallbacks progressivos para lidar com colunas opcionais ausentes no banco
+    if (error && (error.code === "PGRST204" || error.message?.includes("sku") || error.message?.includes("observation") || (error as any).status === 400)) {
+      delete payload.sku;
+      delete payload.observation;
+      const retry = await supabase.from("products").insert(payload);
+      error = retry.error;
+    }
+
     if (error && (error.code === "PGRST204" || error.message?.includes("initial_stock") || (error as any).status === 400)) {
       delete (payload as any).initial_stock;
       const retry = await supabase.from("products").insert(payload);
@@ -287,6 +312,8 @@ export function ProductsTab({
     setForm({
       brand: p.brand || "",
       model: `${p.model} (Nova Edição)`,
+      sku: (p as any).sku ? `${(p as any).sku}-DUP` : "",
+      observation: (p as any).observation || "",
       scale: p.scale || "1:64",
       price: String(p.price || ""),
       cost_price: (p as any).cost_price ? String((p as any).cost_price) : "",
@@ -423,7 +450,7 @@ export function ProductsTab({
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div className="sm:col-span-2 space-y-1.5">
                   <Label htmlFor="model" className="text-xs font-medium text-muted-foreground">Modelo</Label>
                   <Input
@@ -433,6 +460,19 @@ export function ProductsTab({
                     value={form.model}
                     onChange={(e) => setForm({ ...form, model: e.target.value })}
                     className="bg-muted/20 border-border/30"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sku" className="text-xs font-medium text-muted-foreground">
+                    SKU <span className="text-[10px] font-normal opacity-70">(Código)</span>
+                  </Label>
+                  <Input
+                    id="sku"
+                    placeholder="Ex: HW-001"
+                    maxLength={40}
+                    value={form.sku}
+                    onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                    className="bg-muted/20 border-border/30 font-mono text-xs"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -701,6 +741,20 @@ export function ProductsTab({
                 </div>
               )}
               <div className="space-y-1.5">
+                <Label htmlFor="observation" className="text-xs font-medium text-muted-foreground">
+                  Observações / Detalhes <span className="text-[10px] font-normal opacity-70">(Aparece na vitrine)</span>
+                </Label>
+                <Textarea
+                  id="observation"
+                  placeholder="Ex: Cartela longa, selo Hot Wheels, miniatura nova e lacrada..."
+                  rows={2}
+                  maxLength={500}
+                  value={form.observation}
+                  onChange={(e) => setForm({ ...form, observation: e.target.value })}
+                  className="bg-muted/20 border-border/30 text-xs resize-none"
+                />
+              </div>
+              <div className="space-y-1.5">
                 <Label htmlFor="photo" className="text-xs font-medium text-muted-foreground">Foto da miniatura</Label>
                 <Input
                   id="photo"
@@ -719,8 +773,8 @@ export function ProductsTab({
         </Sheet>
 
       {/* Catálogo em tela cheia */}
-      <div className="space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h3 className="font-bold text-lg tracking-tight flex items-center gap-2">
             {mode === "pronta_entrega" ? (
               <>
@@ -733,32 +787,8 @@ export function ProductsTab({
               <span>Catálogo da Loja ({displayedProducts.length})</span>
             )}
           </h3>
-          <div className="flex flex-wrap items-center gap-2">
-            {brandList.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={selectedBrand === "all" ? "default" : "outline"}
-                  onClick={() => setSelectedBrand("all")}
-                  className="h-7 px-2.5 text-xs rounded-full"
-                >
-                  Todas ({displayedProducts.length})
-                </Button>
-                {brandList.map((b) => (
-                  <Button
-                    key={b}
-                    type="button"
-                    size="sm"
-                    variant={selectedBrand === b ? "default" : "outline"}
-                    onClick={() => setSelectedBrand(b)}
-                    className="h-7 px-2.5 text-xs rounded-full"
-                  >
-                    {b} ({brandsMap[b].length})
-                  </Button>
-                ))}
-              </div>
-            )}
+
+          <div className="flex items-center gap-2 flex-wrap">
             {isBlingEligible && (
               <Button
                 type="button"
@@ -783,6 +813,55 @@ export function ProductsTab({
           </div>
         </div>
 
+        {/* Barra de Busca de Miniaturas (Modelo, Marca ou SKU) e Filtro por Marca */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por modelo, marca ou SKU..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-8 h-9 text-xs sm:text-sm bg-muted/20 border-border/40"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
+                title="Limpar busca"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
+
+          {brandList.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant={selectedBrand === "all" ? "default" : "outline"}
+                onClick={() => setSelectedBrand("all")}
+                className="h-7 px-2.5 text-xs rounded-full"
+              >
+                Todas ({displayedProducts.length})
+              </Button>
+              {brandList.map((b) => (
+                <Button
+                  key={b}
+                  type="button"
+                  size="sm"
+                  variant={selectedBrand === b ? "default" : "outline"}
+                  onClick={() => setSelectedBrand(b)}
+                  className="h-7 px-2.5 text-xs rounded-full"
+                >
+                  {b} ({brandsMap[b].length})
+                </Button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="space-y-5">
           {filteredBrands.map((brand) => {
               const brandProducts = brandsMap[brand];
@@ -800,6 +879,11 @@ export function ProductsTab({
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
                               <span>{p.brand} · {p.scale}</span>
+                              {(p as any).sku && (
+                                <span className="font-mono text-[10px] bg-muted/70 text-muted-foreground px-1.5 py-0.2 rounded border border-border/30">
+                                  SKU: {(p as any).sku}
+                                </span>
+                              )}
                               {isProntaEntrega(p) ? (
                                 <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                                   <Zap className="size-2.5" /> Pronta Entrega
@@ -815,6 +899,11 @@ export function ProductsTab({
                               )}
                             </div>
                             <h3 className="font-semibold mt-0.5">{p.model}</h3>
+                            {(p as any).observation && (
+                              <p className="text-xs text-muted-foreground line-clamp-1 italic mt-0.5">
+                                Obs: {(p as any).observation}
+                              </p>
+                            )}
                             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
                               <span className="text-xs font-semibold text-foreground bg-muted/40 px-2 py-0.5 rounded-md">À vista: {brl(Number(p.price))}</span>
                               {(() => {
@@ -987,6 +1076,8 @@ function EditProductDialog({
   const [form, setForm] = useState({
     brand: "",
     model: "",
+    sku: "",
+    observation: "",
     scale: "1:64",
     price: "",
     cost_price: "",
@@ -1028,6 +1119,8 @@ function EditProductDialog({
       setForm({
         brand: product.brand ?? "",
         model: product.model ?? "",
+        sku: (product as any).sku ?? "",
+        observation: (product as any).observation ?? "",
         scale: product.scale ?? "1:64",
         price: product.price != null ? String(product.price) : "",
         cost_price: (product as any).cost_price != null ? String((product as any).cost_price) : "",
@@ -1088,6 +1181,8 @@ function EditProductDialog({
     const payload: any = {
       brand: form.brand.trim(),
       model: form.model.trim(),
+      sku: form.sku?.trim() || null,
+      observation: form.observation?.trim() || null,
       scale: form.scale,
       price: Number(form.price || 0),
       cost_price: form.cost_price ? Number(form.cost_price) : null,
@@ -1116,6 +1211,13 @@ function EditProductDialog({
       .eq("id", product.id);
 
     // Fallbacks progressivos para lidar com colunas ausentes no banco
+    if (error && (error.code === "PGRST204" || error.message?.includes("sku") || error.message?.includes("observation") || (error as any).status === 400)) {
+      delete payload.sku;
+      delete payload.observation;
+      const retry = await supabase.from("products").update(payload).eq("id", product.id);
+      error = retry.error;
+    }
+
     if (error && (error.code === "PGRST204" || error.message?.includes("initial_stock") || (error as any).status === 400)) {
       delete (payload as any).initial_stock;
       const retry = await supabase.from("products").update(payload).eq("id", product.id);
@@ -1294,7 +1396,7 @@ function EditProductDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <div className="sm:col-span-2 space-y-1.5">
               <Label htmlFor="edit-model" className="text-xs font-medium text-muted-foreground">Modelo</Label>
               <Input
@@ -1304,6 +1406,19 @@ function EditProductDialog({
                 value={form.model}
                 onChange={(e) => setForm({ ...form, model: e.target.value })}
                 className="bg-muted/20 border-border/30"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-sku" className="text-xs font-medium text-muted-foreground">
+                SKU <span className="text-[10px] font-normal opacity-70">(Código)</span>
+              </Label>
+              <Input
+                id="edit-sku"
+                placeholder="Ex: HW-001"
+                maxLength={40}
+                value={form.sku}
+                onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                className="bg-muted/20 border-border/30 font-mono text-xs"
               />
             </div>
             <div className="space-y-1.5">
@@ -1583,6 +1698,21 @@ function EditProductDialog({
               />
               <span className="text-muted-foreground">{form.is_open ? "Aberta" : "Fechada"}</span>
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-observation" className="text-xs font-medium text-muted-foreground">
+              Observações / Detalhes <span className="text-[10px] font-normal opacity-70">(Aparece na vitrine)</span>
+            </Label>
+            <Textarea
+              id="edit-observation"
+              placeholder="Ex: Cartela longa, selo Hot Wheels, miniatura nova e lacrada..."
+              rows={2}
+              maxLength={500}
+              value={form.observation}
+              onChange={(e) => setForm({ ...form, observation: e.target.value })}
+              className="bg-muted/20 border-border/30 text-xs resize-none"
+            />
           </div>
 
           <div className="space-y-1.5">

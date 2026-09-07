@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Clock, Package, Share2, ArrowLeft, Store as StoreIcon, CreditCard, ShoppingBag, Zap } from "lucide-react";
+import { CalendarDays, Clock, Package, Share2, ArrowLeft, Store as StoreIcon, CreditCard, ShoppingBag, Zap, Minus, Plus, Info } from "lucide-react";
 import { toast } from "sonner";
 import { createServerFn } from "@tanstack/react-start";
 import { AppHeader } from "@/components/AppHeader";
@@ -9,8 +9,6 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppFooter } from "@/components/AppFooter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
@@ -308,245 +306,268 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
               <StoreIcon className="size-4" /> {product?.stores?.name}
             </Link>
             <h1 className="mt-2 text-3xl font-bold tracking-tight">{product.model}</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {product.brand} · escala {product.scale}
-            </p>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <span className="text-sm text-muted-foreground">
+                {product.brand} · escala {product.scale}
+              </span>
+              {(product as any).sku && (
+                <span className="font-mono text-xs bg-muted text-foreground px-2 py-0.5 rounded-md border border-border/40 font-semibold">
+                  SKU: {(product as any).sku}
+                </span>
+              )}
+            </div>
 
-            <div className="mt-6 space-y-2">
-              <div className="flex items-baseline gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">À vista:</span>
-                <span className="font-display text-4xl font-bold text-primary">
-                  {brl(installmentOptions[0].totalPrice)}
+            {/* Badges de Status (Limpos e Sem Repetição) */}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {isPronta ? (
+                <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium text-xs gap-1.5 py-1 px-2.5">
+                  <Zap className="size-3.5 fill-current" /> Pronta Entrega — Envio Imediato
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="bg-primary/10 text-primary border border-primary/20 font-medium text-xs gap-1.5 py-1 px-2.5">
+                  <Package className="size-3.5" /> Pré-venda
+                </Badge>
+              )}
+
+              {product.stock === 1 ? (
+                <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium text-xs py-1 px-2.5">
+                  Última unidade restante
+                </Badge>
+              ) : product.stock > 1 ? (
+                <Badge variant="outline" className="border-border/40 text-muted-foreground font-medium text-xs py-1 px-2.5">
+                  {formatStockRemaining(product)}
+                </Badge>
+              ) : (
+                <Badge variant="destructive" className="font-medium text-xs py-1 px-2.5">
+                  Esgotado
+                </Badge>
+              )}
+
+              {!product.is_open && (
+                <Badge variant="destructive" className="font-medium text-xs py-1 px-2.5">
+                  Fechado
+                </Badge>
+              )}
+            </div>
+
+            {/* Preço e Parcelamento */}
+            <div className="mt-5 space-y-2">
+              <div className="flex items-baseline gap-2.5 flex-wrap">
+                <span className="font-display text-3xl sm:text-4xl font-extrabold text-primary">
+                  {brl(unitPriceForChosenOption * quantity)}
                 </span>
                 {quantity > 1 && (
-                  <span className="text-xs text-muted-foreground">({quantity}x {brl(installmentOptions[0].totalPrice / quantity)})</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({quantity}x {brl(unitPriceForChosenOption)})
+                  </span>
+                )}
+                {selectedInstallment === 1 && installmentOptions.length > 1 && (
+                  <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                    À vista
+                  </span>
                 )}
               </div>
+
               {(() => {
                 const inst = getProductInstallmentInfo(product, quantity);
                 if (!inst) return null;
                 return (
-                  <div className="flex flex-wrap items-center gap-2 pt-0.5 text-sm text-muted-foreground">
-                    <span className="text-xs font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-md border border-amber-500/20">
-                      Ou em até {inst.maxInstallments}x de {brl(inst.installmentValue * quantity)}
-                    </span>
-                    <span>{inst.hasSurcharge ? `(Total parcelado: ${brl(inst.totalPrice * quantity)})` : "(sem acréscimo)"}</span>
-                  </div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Ou em até <strong className="text-foreground font-medium">{inst.maxInstallments}x de {brl(inst.installmentValue * quantity)}</strong>{" "}
+                    {inst.hasSurcharge ? (
+                      <span className="text-muted-foreground/80">({brl(inst.totalPrice * quantity)} total parcelado)</span>
+                    ) : (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">(sem acréscimo)</span>
+                    )}
+                  </p>
                 );
               })()}
 
-              {/* Destaque das condições de Sinal e Saldo */}
-              {isPronta ? (
-                <div className="pt-2">
-                  <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                    <Zap className="size-4 fill-current" />
-                    <span>Pronta Entrega — Envio imediato após confirmação do pagamento</span>
-                  </div>
-                </div>
-              ) : !hasNoSignal ? (
-                <div className="flex flex-wrap items-center gap-2.5 pt-2">
-                  <div className="rounded-xl border border-primary/20 bg-primary/5 px-3.5 py-2">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">Sinal para garantir:</span>
-                    <span className="text-lg font-bold text-primary">{brl(downPaymentToPay)}</span>
-                    {quantity > 1 && <span className="text-[11px] text-muted-foreground ml-1 font-normal">({quantity}x {brl(downPaymentToPay / quantity)})</span>}
-                  </div>
-                  <div className="rounded-xl border border-border/30 bg-muted/20 px-3.5 py-2">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">Saldo na chegada:</span>
-                    <span className="text-lg font-bold text-foreground">{brl(remainingBalanceCalculated)}</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="pt-2">
-                  <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                    <span className="size-2 rounded-full bg-emerald-500" />
-                    <span>Sem sinal — Pagamento total na chegada da miniatura</span>
-                  </div>
+              {/* Destaque exclusivo para Pré-venda (Sinal, Saldo e Prazos) */}
+              {!isPronta && (
+                <div className="mt-3 pt-3 border-t border-border/20">
+                  {!hasNoSignal ? (
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">Sinal para garantir:</span>
+                        <span className="text-base sm:text-lg font-bold text-primary mt-0.5 block">{brl(downPaymentToPay)}</span>
+                        {(product as any).payment_deadline_date ? (
+                          <span className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
+                            <Clock className="size-3 text-primary shrink-0" />
+                            Até {new Date((product as any).payment_deadline_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                          </span>
+                        ) : product.payment_deadline_hours ? (
+                          <span className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
+                            <Clock className="size-3 text-primary shrink-0" />
+                            Prazo: {formatDeadlineHours(product.payment_deadline_hours)}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="rounded-xl border border-border/30 bg-muted/20 p-3">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">Saldo na chegada:</span>
+                        <span className="text-base sm:text-lg font-bold text-foreground mt-0.5 block">{brl(remainingBalanceCalculated)}</span>
+                        {product.release_date && (
+                          <span className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
+                            <CalendarDays className="size-3 text-primary shrink-0" />
+                            Previsão: {new Date(product.release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 flex flex-wrap items-center justify-between gap-2 text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+                      <div className="flex items-center gap-2">
+                        <span className="size-2 rounded-full bg-emerald-500 shrink-0" />
+                        <span>Sem sinal prévio · Pagamento integral na chegada da miniatura</span>
+                      </div>
+                      {product.release_date && (
+                        <span className="text-[11px] text-muted-foreground">
+                          Previsão: {new Date(product.release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Badge variant={product.is_open ? "secondary" : "outline"} className="border-border/30">
-                {isPronta
-                  ? product.is_open ? "Disponível para compra" : "Indisponível"
-                  : product.is_open ? "Pré-venda aberta" : "Pré-venda fechada"}
-              </Badge>
-              <Badge variant="outline" className="border-border/30">
-                {formatStockRemaining(product)}
-              </Badge>
-              {isPronta ? (
-                <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-                  ⚡ Envio Imediato
-                </Badge>
-              ) : hasNoSignal ? (
-                <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-                  Sem sinal
-                </Badge>
-              ) : null}
-            </div>
+            {/* Observações da Miniatura (Clean & Inline) */}
+            {(product as any).observation && (
+              <div className="mt-4 rounded-xl border border-border/40 bg-muted/20 px-3.5 py-2.5 flex items-start gap-2.5 text-xs sm:text-sm">
+                <Info className="size-4 text-primary shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <span className="font-semibold text-foreground">Observações:</span>{" "}
+                  <span className="text-muted-foreground whitespace-pre-line">{(product as any).observation}</span>
+                </div>
+              </div>
+            )}
 
-            {/* Controles de Quantidade e Parcelamento */}
-            {product.is_open && product.stock > 0 && isEligibleToBuyWaitlist && (
-              <Card className="mt-6 border-border/30 bg-muted/15">
-                <CardContent className="space-y-4 p-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Seletor de Quantidade */}
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold flex items-center gap-1.5 text-muted-foreground">
-                        <ShoppingBag className="size-3.5 text-primary" /> Quantidade
-                      </Label>
-                      <Select
-                        value={String(quantity)}
-                        onValueChange={(val) => setQuantity(Number(val))}
-                      >
-                        <SelectTrigger className="bg-background border-border/30">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: Math.min(product.stock, 10) }, (_, i) => i + 1).map((qty) => (
-                            <SelectItem key={qty} value={String(qty)}>
-                              {qty} {qty === 1 ? "unidade" : "unidades"}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+            {/* Ações de Compra e Quantidade */}
+            {product.is_open && product.stock > 0 && isEligibleToBuyWaitlist ? (
+              <div className="mt-6 space-y-4 pt-4 border-t border-border/30">
+                {/* Controles inline de Quantidade e Forma de Pagamento */}
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Seletor de Quantidade compacto */}
+                  {product.stock > 1 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-muted-foreground">Qtd:</span>
+                      <div className="flex items-center border border-border/40 rounded-xl bg-muted/20 p-0.5">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-lg"
+                          onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                          disabled={quantity <= 1}
+                        >
+                          <Minus className="size-3.5" />
+                        </Button>
+                        <span className="w-8 text-center font-bold text-xs sm:text-sm">{quantity}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-lg"
+                          onClick={() => setQuantity(Math.min(product.stock, 10, quantity + 1))}
+                          disabled={quantity >= Math.min(product.stock, 10)}
+                        >
+                          <Plus className="size-3.5" />
+                        </Button>
+                      </div>
                     </div>
+                  )}
 
-                    {/* Seletor de Parcelamento */}
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold flex items-center gap-1.5 text-muted-foreground">
-                        <CreditCard className="size-3.5 text-primary" /> Forma de Pagamento
-                      </Label>
+                  {/* Opção de Parcelamento (se houver opções) */}
+                  {installmentOptions.length > 1 && (
+                    <div className="flex-1 min-w-[200px]">
                       <Select
                         value={String(selectedInstallment)}
                         onValueChange={(val) => setSelectedInstallment(Number(val))}
                       >
-                        <SelectTrigger className="bg-background border-border/30">
+                        <SelectTrigger className="h-9 rounded-xl bg-muted/20 border-border/40 text-xs">
+                          <CreditCard className="size-3.5 text-muted-foreground mr-1.5 shrink-0" />
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           {installmentOptions.map((opt) => (
-                            <SelectItem key={opt.value} value={String(opt.value)}>
+                            <SelectItem key={opt.value} value={String(opt.value)} className="text-xs">
                               {opt.value === 1
                                 ? `À vista — ${brl(opt.totalPrice)}`
-                                : `${opt.value}x de ${brl(opt.totalPrice / opt.value)}`}
+                                : `${opt.value}x de ${brl(opt.totalPrice / opt.value)} (Total: ${brl(opt.totalPrice)})`}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
+                  )}
+                </div>
 
-                  {/* Resumo Atualizado do Pedido */}
-                  <div className="rounded-lg bg-background/80 p-4 border border-border/20 text-xs space-y-2">
-                    <div className="flex justify-between items-center text-muted-foreground">
-                      <span>Total ({quantity} {quantity === 1 ? "unidade" : "unidades"}):</span>
-                      <span className="font-semibold text-foreground text-sm">{brl(totalPriceCalculated)}</span>
-                    </div>
-                    {selectedInstallment > 1 && (
-                      <div className="flex justify-between items-center text-muted-foreground">
-                        <span>Plano escolhido:</span>
-                        <span className="font-medium text-foreground">{selectedInstallment}x de {brl(installmentValCalculated)}</span>
-                      </div>
-                    )}
-                    <div className="border-t border-border/20 pt-2 flex justify-between items-center">
-                      {isPronta ? (
-                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                          Pagamento total direto no carrinho
-                        </span>
-                      ) : hasNoSignal ? (
-                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                          Sem sinal agora (Pague na chegada)
-                        </span>
-                      ) : (
-                        <>
-                          <span className="font-semibold text-primary">Sinal a pagar agora:</span>
-                          <span className="font-bold text-primary text-sm">{brl(downPaymentToPay)}</span>
-                        </>
-                      )}
-                    </div>
-                    {!isPronta && !hasNoSignal && (
-                      <div className="flex justify-between items-center text-muted-foreground text-[11px]">
-                        <span>Saldo a pagar na chegada:</span>
-                        <span className="font-medium text-foreground">{brl(remainingBalanceCalculated)}</span>
-                      </div>
-                    )}
+                {/* Resumo compacto apenas se quantity > 1 ou se parcelado */}
+                {(quantity > 1 || selectedInstallment > 1) && (
+                  <div className="rounded-lg bg-muted/20 px-3 py-2 border border-border/20 text-xs flex justify-between items-center text-muted-foreground">
+                    <span>Subtotal ({quantity} {quantity === 1 ? "unidade" : "unidades"}):</span>
+                    <span className="font-bold text-foreground">
+                      {selectedInstallment > 1 ? `${selectedInstallment}x de ${brl(installmentValCalculated)} (${brl(totalPriceCalculated)})` : brl(totalPriceCalculated)}
+                    </span>
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                )}
 
-            {isPronta ? (
-              <Card className="mt-6 border-emerald-500/20 bg-emerald-500/5">
-                <CardContent className="space-y-3 p-5 text-sm">
-                  <p className="flex items-center gap-2.5 text-emerald-600 dark:text-emerald-400 font-semibold">
-                    <Zap className="size-4 fill-current" />
-                    Item a Pronta Entrega — Disponível em estoque físico para envio imediato.
-                  </p>
-                  <p className="flex items-center gap-2.5 text-muted-foreground text-xs">
-                    <Package className="size-4 text-primary" />
-                    Pagamento integral direto sem necessidade de sinal prévio ou espera de lançamento.
-                  </p>
-                </CardContent>
-              </Card>
+                {/* Botões de Ação */}
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <Button
+                    size="lg"
+                    className="flex-1 h-11 font-bold shadow-md rounded-xl text-white transition-all text-sm"
+                    onClick={handleReserve}
+                    style={{ backgroundColor: product.stores?.primary_color }}
+                    disabled={reserving}
+                  >
+                    <ShoppingBag className="size-4 mr-2" />
+                    {isPronta
+                      ? quantity > 1 ? `Comprar ${quantity} unidades` : "Adicionar ao Carrinho"
+                      : quantity > 1 ? `Reservar ${quantity} unidades` : "Adicionar ao Carrinho"}
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={share}
+                    className="h-11 rounded-xl border-border/40 text-muted-foreground hover:text-foreground text-sm"
+                  >
+                    <Share2 className="size-4 mr-1.5" /> Compartilhar
+                  </Button>
+                </div>
+              </div>
             ) : (
-              <Card className="mt-6 border-border/30 bg-muted/10">
-                <CardContent className="space-y-3 p-5 text-sm">
-                  <p className="flex items-center gap-2.5 text-muted-foreground">
-                    <Clock className="size-4 text-primary" />
-                    {hasNoSignal ? (
-                      <span className="font-semibold text-foreground">Sem necessidade de sinal (reserva garantida)</span>
-                    ) : (product as any).payment_deadline_date ? (
-                      <span>Data limite para pagar o sinal: <strong className="text-foreground">{new Date((product as any).payment_deadline_date + "T00:00:00").toLocaleDateString("pt-BR")}</strong></span>
-                    ) : (
-                      <span>Prazo para pagar o sinal: {formatDeadlineHours(product.payment_deadline_hours)} após a reserva</span>
-                    )}
-                  </p>
-                  <p className="flex items-center gap-2.5 text-muted-foreground">
-                    <CalendarDays className="size-4 text-primary" />
-                    Previsão de chegada:{" "}
-                    {product.release_date
-                      ? new Date(product.release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })
-                      : "a definir"}
-                  </p>
-                </CardContent>
-              </Card>
+              <div className="mt-6 flex flex-col sm:flex-row gap-2.5 pt-4 border-t border-border/30">
+                <Button
+                  size="lg"
+                  className="flex-1 h-11 font-bold shadow-md rounded-xl text-white transition-all text-sm"
+                  onClick={handleReserve}
+                  disabled={
+                    !product.is_open ||
+                    reserving ||
+                    (product.stock > 0 && !isEligibleToBuyWaitlist) ||
+                    (product.stock === 0 && isOnWaitlist)
+                  }
+                  style={product.is_open && product.stock > 0 ? { backgroundColor: product.stores?.primary_color } : undefined}
+                >
+                  {!product.is_open
+                    ? isPronta ? "Item indisponível" : "Pré-venda fechada"
+                    : product.stock > 0
+                      ? "Estoque reservado p/ fila"
+                      : isOnWaitlist
+                        ? `Você é o ${userWaitlistIndex + 1}º na fila`
+                        : "Entrar na fila de espera"}
+                </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={share}
+                  className="h-11 rounded-xl border-border/40 text-muted-foreground hover:text-foreground text-sm"
+                >
+                  <Share2 className="size-4 mr-1.5" /> Compartilhar
+                </Button>
+              </div>
             )}
-
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <Button
-                size="lg"
-                className="flex-1 font-bold shadow-md transition-all text-white"
-                onClick={handleReserve}
-                style={product.stock > 0 && product.is_open && isEligibleToBuyWaitlist ? { backgroundColor: product.stores?.primary_color } : undefined}
-                disabled={
-                  !product.is_open || 
-                  reserving || 
-                  (product.stock > 0 && !isEligibleToBuyWaitlist) || 
-                  (product.stock === 0 && isOnWaitlist)
-                }
-              >
-                {!product.is_open
-                  ? isPronta ? "Item indisponível" : "Pré-venda fechada"
-                  : product.stock > 0
-                    ? isEligibleToBuyWaitlist
-                      ? (
-                          <div className="flex items-center justify-center gap-2">
-                            <ShoppingBag className="size-5" />
-                            {isPronta
-                              ? quantity > 1 ? `Comprar ${quantity} un. (Carrinho)` : "Adicionar ao Carrinho"
-                              : quantity > 1 ? `Adicionar ${quantity} ao Carrinho` : "Adicionar ao Carrinho"}
-                          </div>
-                        )
-                      : "Estoque reservado p/ fila"
-                    : isOnWaitlist
-                      ? `Você é o ${userWaitlistIndex + 1}º na fila`
-                      : "Entrar na fila de espera"}
-              </Button>
-              <Button size="lg" variant="secondary" onClick={share} className="border-border/30">
-                <Share2 className="size-4" /> Compartilhar
-              </Button>
-            </div>
           </div>
         </div>
       </main>

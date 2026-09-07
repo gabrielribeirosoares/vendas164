@@ -172,6 +172,8 @@ export type Database = {
           bulk_installment_price?: number | null
           store_id: string
           slug: string | null
+          sku?: string | null
+          observation?: string | null
         }
         Insert: {
           brand: string
@@ -197,6 +199,8 @@ export type Database = {
           bulk_installment_price?: number | null
           store_id: string
           slug?: string | null
+          sku?: string | null
+          observation?: string | null
         }
         Update: {
           brand?: string
@@ -222,6 +226,8 @@ export type Database = {
           bulk_installment_price?: number | null
           store_id?: string
           slug?: string | null
+          sku?: string | null
+          observation?: string | null
         }
         Relationships: [
           {

@@ -367,6 +367,7 @@ export function OrdersTab({
       const clientPhone = (o.profiles?.phone || "").toLowerCase();
       const prodModel = (o.products?.model || "").toLowerCase();
       const prodBrand = (o.products?.brand || "").toLowerCase();
+      const prodSku = ((o.products as any)?.sku || "").toLowerCase();
       const orderId = (o.id || "").toLowerCase();
       const trackingCode = (o.tracking_code || "").toLowerCase();
 
@@ -376,6 +377,7 @@ export function OrdersTab({
         clientPhone.includes(q) ||
         prodModel.includes(q) ||
         prodBrand.includes(q) ||
+        prodSku.includes(q) ||
         orderId.includes(q) ||
         (cleanQ.length > 0 && orderId.includes(cleanQ)) ||
         trackingCode.includes(q)
@@ -762,7 +764,7 @@ export function OrdersTab({
             <div className="relative w-full sm:flex-1 sm:min-w-[240px]">
               <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por cliente, Nº do pedido (#id), WhatsApp, miniatura..."
+                placeholder="Buscar por cliente, Nº do pedido (#id), WhatsApp, miniatura ou SKU..."
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
