@@ -1334,24 +1334,24 @@ export function OrdersTab({
           )}
         </div>
 
-        {/* VISÃO PARA DESKTOP (TABELA COMPLETA) */}
-        <div className="hidden md:block overflow-x-auto print:overflow-visible">
-          <Table className="print:w-full">
+        {/* VISÃO PARA DESKTOP (TABELA COMPLETA SEM ROLAGEM HORIZONTAL) */}
+        <div className="hidden md:block overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden print:overflow-visible">
+          <Table className="w-full text-xs print:w-full">
             <TableHeader>
               <TableRow className="print:border-b-2">
-                <TableHead className="w-10 no-print">
+                <TableHead className="w-8 px-2 text-center no-print">
                   <Checkbox 
                     checked={rows.length > 0 && selectedOrders.size === rows.length} 
                     onCheckedChange={toggleAllSelection} 
                   />
                 </TableHead>
-                <TableHead className="min-w-[140px] max-w-[200px] whitespace-normal">Cliente</TableHead>
-                <TableHead className="min-w-[240px] max-w-[380px] whitespace-normal">Miniatura</TableHead>
-                <TableHead className="whitespace-nowrap">Total</TableHead>
-                <TableHead className="whitespace-nowrap">Sinal (un.)</TableHead>
-                <TableHead className="whitespace-nowrap">Saldo</TableHead>
-                <TableHead className="min-w-[155px] whitespace-normal">Status & Rastreio</TableHead>
-                <TableHead className="whitespace-nowrap">Prazo</TableHead>
+                <TableHead className="w-[130px] min-w-[110px] max-w-[140px] px-2 whitespace-normal">Cliente</TableHead>
+                <TableHead className="min-w-[170px] max-w-[250px] px-2 whitespace-normal">Miniatura</TableHead>
+                <TableHead className="w-[75px] px-2 text-right whitespace-nowrap">Total</TableHead>
+                <TableHead className="w-[95px] px-2 text-center whitespace-nowrap">Sinal (un.)</TableHead>
+                <TableHead className="w-[85px] px-2 text-right whitespace-nowrap">Saldo</TableHead>
+                <TableHead className="w-[165px] min-w-[155px] max-w-[175px] px-2 whitespace-normal">Status & Rastreio</TableHead>
+                <TableHead className="w-[75px] px-2 text-center whitespace-nowrap">Prazo</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1380,16 +1380,16 @@ export function OrdersTab({
 
                 return (
                   <TableRow key={groupId} data-state={selectedOrders.has(groupId) ? "selected" : undefined} className="print:break-inside-avoid">
-                    <TableCell className="no-print align-top py-3">
+                    <TableCell className="no-print align-top py-2.5 px-2 text-center">
                       <Checkbox 
                         checked={selectedOrders.has(groupId)} 
                         onCheckedChange={() => toggleSelection(groupId)} 
                       />
                     </TableCell>
-                    <TableCell className="min-w-[140px] max-w-[200px] align-top py-3">
-                      <p className="font-medium whitespace-normal break-words leading-snug">{displayName}</p>
+                    <TableCell className="w-[130px] min-w-[110px] max-w-[140px] align-top py-2.5 px-2">
+                      <p className="font-semibold text-xs whitespace-normal break-words leading-tight">{displayName}</p>
                       {o.profiles?.email && !guestMeta && (
-                        <p className="text-[11px] text-muted-foreground break-all">{o.profiles.email}</p>
+                        <p className="text-[10px] text-muted-foreground break-all leading-tight mt-0.5">{o.profiles.email}</p>
                       )}
                       <div className="mt-1 no-print">
                         <OrderWhatsAppDropdown
@@ -1400,11 +1400,11 @@ export function OrdersTab({
                           variant="badge"
                         />
                       </div>
-                      <p className="text-[10px] text-muted-foreground/50 font-mono mt-1">#{groupId.slice(0, 8)}</p>
+                      <p className="text-[9px] text-muted-foreground/50 font-mono mt-0.5">#{groupId.slice(0, 8)}</p>
                     </TableCell>
-                    <TableCell className="min-w-[240px] max-w-[380px] align-top py-3">
-                      <div className="flex items-start gap-3">
-                        <div className="size-11 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50 mt-0.5">
+                    <TableCell className="min-w-[170px] max-w-[250px] align-top py-2.5 px-2">
+                      <div className="flex items-start gap-2">
+                        <div className="size-9 shrink-0 overflow-hidden rounded-md bg-muted border border-border/50 mt-0.5">
                           {o.products?.image_url ? (
                             <img
                               src={o.products.image_url}
@@ -1414,54 +1414,54 @@ export function OrdersTab({
                             />
                           ) : (
                             <div className="flex h-full items-center justify-center text-muted-foreground">
-                              <Package className="size-5" />
+                              <Package className="size-4" />
                             </div>
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-sm whitespace-normal break-words leading-snug">
+                          <p className="font-semibold text-xs whitespace-normal break-words leading-tight">
                             {o.products?.model || "Miniatura"}
                           </p>
-                          <div className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 flex-wrap mt-0.5">
+                          <div className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1 flex-wrap mt-0.5">
                             <span>{o.products?.brand}</span>
                             {isProntaEntrega(o.products) ? (
-                              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[9px] px-1 py-0 h-4 gap-0.5">
-                                <Zap className="size-2.5 fill-current text-emerald-500" /> Pronta Entrega
+                              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[8px] px-1 py-0 h-3.5 gap-0.5">
+                                <Zap className="size-2 fill-current text-emerald-500" /> Pronta
                               </Badge>
                             ) : (
-                              <Badge variant="outline" className="text-muted-foreground border-border/80 text-[9px] px-1 py-0 h-4 gap-0.5">
-                                <Package className="size-2.5" /> Pré-venda
+                              <Badge variant="outline" className="text-muted-foreground border-border/80 text-[8px] px-1 py-0 h-3.5 gap-0.5">
+                                <Package className="size-2" /> Pré-venda
                               </Badge>
                             )}
                             {quantity > 1 && (
-                              <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[10px] px-1.5 py-0 border-primary/20">
+                              <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-[9px] px-1 py-0 border-primary/20">
                                 {quantity}x
                               </Badge>
                             )}
                           </div>
                           {(o.products as any)?.sku && (
-                            <div className="mt-1">
-                              <span className="inline-block text-[10px] font-mono text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded border border-border/40">
+                            <div className="mt-0.5">
+                              <span className="inline-block text-[9px] font-mono text-muted-foreground bg-muted/60 px-1 py-0.2 rounded border border-border/40">
                                 SKU: {(o.products as any).sku}
                               </span>
                             </div>
                           )}
                           {(o.products as any)?.observation && (
-                            <p className="text-xs text-muted-foreground/90 whitespace-pre-wrap break-words mt-1 italic">
+                            <p className="text-[10px] text-muted-foreground/85 whitespace-pre-wrap break-words italic mt-0.5">
                               Obs: {(o.products as any).observation}
                             </p>
                           )}
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="align-top py-3 whitespace-nowrap">
-                      {brl(Number(o.total_price) * quantity)}
-                      {quantity > 1 && <span className="block text-[10px] text-muted-foreground font-mono">({quantity}x {brl(Number(o.total_price))})</span>}
+                    <TableCell className="w-[75px] align-top py-2.5 px-2 text-right whitespace-nowrap">
+                      <span className="font-semibold text-xs">{brl(Number(o.total_price) * quantity)}</span>
+                      {quantity > 1 && <span className="block text-[9px] text-muted-foreground font-mono">({quantity}x {brl(Number(o.total_price))})</span>}
                     </TableCell>
-                    <TableCell className="align-top py-3">
-                      <div className="flex items-center gap-1.5 no-print">
+                    <TableCell className="w-[95px] align-top py-2.5 px-2 text-center">
+                      <div className="flex items-center justify-center gap-1 no-print">
                         <Input
-                          className="h-8 w-24"
+                          className="h-7 w-14 text-xs font-mono px-1 text-center"
                           type="number"
                           min="0"
                           step="0.01"
@@ -1471,6 +1471,7 @@ export function OrdersTab({
                         <Button
                           size="sm"
                           variant="secondary"
+                          className="h-7 px-1.5 text-xs font-semibold"
                           onClick={() =>
                             updateGroup(ids, { down_payment: Number(drafts[groupId] ?? o.down_payment) })
                           }
@@ -1482,154 +1483,158 @@ export function OrdersTab({
                         {brl(Number(o.down_payment))} (un.)
                       </div>
                     </TableCell>
-                  <TableCell className="font-medium text-primary align-top pt-4">
-                    <div className="flex flex-col gap-2 items-start">
-                      <span>
-                        {(() => {
-                          const total = Number(o.total_price) * quantity;
-                          const sinal = Number(o.down_payment) * quantity;
-                          const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid");
-                          const totalPaidInsts = paidInsts.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-                          const saldo = Math.max(0, total - sinal - totalPaidInsts);
-                          return brl(saldo);
-                        })()}
-                      </span>
-                      <OrderInstallmentsDialog
-                          orderId={o.id}
-                          totalPrice={o.total_price * quantity}
-                          installmentCount={o.installment_count}
-                          customerName={guestMeta?.name || o.profiles?.name || "Cliente"}
-                          productName={`${o.products?.brand || ''} ${o.products?.model || ''}`}
-                        />
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1.5 min-w-[155px]">
-                      <PaymentBadge status={currentPaymentStatus} />
-                      <Select
-                        value={currentPaymentStatus}
-                        onValueChange={(v) => handlePaymentStatusChange(item, v)}
-                      >
-                        <SelectTrigger className="h-7 text-xs w-36">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="pronta_entrega">Pronta Entrega</SelectItem>
-                          <SelectItem value="sem_sinal">Sem sinal / Pagar na chegada</SelectItem>
-                          <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
-                          <SelectItem value="sinal_pago">Sinal pago</SelectItem>
-                          <SelectItem value="quitado">Quitado</SelectItem>
-                          <SelectItem value="cancelado">Cancelado</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={o.delivery_status}
-                        onValueChange={(v) => handleDeliveryStatusChange(item, v)}
-                      >
-                        <SelectTrigger className="h-7 text-xs w-36">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="pendente">Pendente</SelectItem>
-                          <SelectItem value="em_transito">Em trânsito</SelectItem>
-                          <SelectItem value="entregue">Entregue</SelectItem>
-                          <SelectItem value="cancelado">Cancelado</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {/* Campo de Rastreio integrado */}
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <Input
-                          className="h-7 text-[11px] font-mono px-2 w-28"
-                          placeholder="Cód. Rastreio"
-                          value={trackingDrafts[groupId] ?? o.tracking_code ?? ""}
-                          onChange={(e) => setTrackingDrafts({ ...trackingDrafts, [groupId]: e.target.value })}
-                        />
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="h-7 px-2 text-[11px] font-semibold"
-                          title="Salvar rastreio"
-                          onClick={() => handleTrackingSave(ids, trackingDrafts[groupId] ?? o.tracking_code ?? "")}
-                        >
-                          OK
-                        </Button>
-                        {o.tracking_code && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 w-7 p-0 text-primary hover:bg-primary/10"
-                              title="Atualizar rastreio automaticamente"
-                              onClick={() => handleTrackingUpdate(o.id, o.tracking_code!, o.delivery_status)}
-                              disabled={trackingUpdating.has(o.id)}
-                            >
-                              {trackingUpdating.has(o.id) ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              ) : (
-                                <RefreshCw className="size-3.5" />
-                              )}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 w-7 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                              title="Abrir no site oficial dos Correios"
-                              asChild
-                            >
-                              <a
-                                href={`https://rastreamento.correios.com.br/app/index.php?codigo=${encodeURIComponent(o.tracking_code)}`}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                <ExternalLink className="size-3.5" />
-                              </a>
-                            </Button>
-                          </>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-                          title="Excluir reserva"
-                          onClick={() => handleDeleteGroup(item)}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
-                      </div>
-                      {o.tracking_code && (
-                        <a
-                          href={`https://rastreamento.correios.com.br/app/index.php?codigo=${encodeURIComponent(o.tracking_code)}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline font-mono"
-                          title="Rastrear nos Correios"
-                        >
-                          <span>Rastrear Correios</span>
-                          <ExternalLink className="size-2.5" />
-                        </a>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {currentPaymentStatus === "aguardando_sinal" && o.reservation_expires_at ? (
-                      <Countdown expiresAt={o.reservation_expires_at} />
-                    ) : (currentPaymentStatus === "sem_sinal" || currentPaymentStatus === "pagar_na_chegada") && (o.products as any)?.release_date ? (
-                      <div className="flex flex-col text-xs">
-                        <span className="font-semibold text-purple-600 dark:text-purple-400">Na chegada</span>
-                        <span className="text-muted-foreground font-mono">
-                          {new Date((o.products as any).release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}
+                    <TableCell className="w-[85px] align-top py-2.5 px-2 text-right">
+                      <div className="flex flex-col gap-1 items-end">
+                        <span className="font-bold text-xs text-primary whitespace-nowrap">
+                          {(() => {
+                            const total = Number(o.total_price) * quantity;
+                            const sinal = Number(o.down_payment) * quantity;
+                            const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid");
+                            const totalPaidInsts = paidInsts.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
+                            const saldo = Math.max(0, total - sinal - totalPaidInsts);
+                            return brl(saldo);
+                          })()}
                         </span>
+                        <div className="no-print">
+                          <OrderInstallmentsDialog
+                            orderId={o.id}
+                            totalPrice={o.total_price * quantity}
+                            installmentCount={o.installment_count}
+                            customerName={guestMeta?.name || o.profiles?.name || "Cliente"}
+                            productName={`${o.products?.brand || ''} ${o.products?.model || ''}`}
+                          />
+                        </div>
                       </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+                    </TableCell>
+                    <TableCell className="w-[165px] min-w-[155px] max-w-[175px] align-top py-2.5 px-2">
+                      <div className="flex flex-col gap-1.5 w-full">
+                        <PaymentBadge status={currentPaymentStatus} />
+                        <div className="no-print flex flex-col gap-1">
+                          <Select
+                            value={currentPaymentStatus}
+                            onValueChange={(v) => handlePaymentStatusChange(item, v)}
+                          >
+                            <SelectTrigger className="h-6 text-[11px] w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pronta_entrega">Pronta Entrega</SelectItem>
+                              <SelectItem value="sem_sinal">Sem sinal / Pagar na chegada</SelectItem>
+                              <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
+                              <SelectItem value="sinal_pago">Sinal pago</SelectItem>
+                              <SelectItem value="quitado">Quitado</SelectItem>
+                              <SelectItem value="cancelado">Cancelado</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={o.delivery_status}
+                            onValueChange={(v) => handleDeliveryStatusChange(item, v)}
+                          >
+                            <SelectTrigger className="h-6 text-[11px] w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pendente">Pendente</SelectItem>
+                              <SelectItem value="em_transito">Em trânsito</SelectItem>
+                              <SelectItem value="entregue">Entregue</SelectItem>
+                              <SelectItem value="cancelado">Cancelado</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {/* Campo de Rastreio integrado */}
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <Input
+                              className="h-6 text-[10px] font-mono px-1.5 flex-1 min-w-0"
+                              placeholder="Cód. Rastreio"
+                              value={trackingDrafts[groupId] ?? o.tracking_code ?? ""}
+                              onChange={(e) => setTrackingDrafts({ ...trackingDrafts, [groupId]: e.target.value })}
+                            />
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="h-6 px-1.5 text-[10px] font-semibold shrink-0"
+                              title="Salvar rastreio"
+                              onClick={() => handleTrackingSave(ids, trackingDrafts[groupId] ?? o.tracking_code ?? "")}
+                            >
+                              OK
+                            </Button>
+                            {o.tracking_code && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 p-0 text-primary hover:bg-primary/10 shrink-0"
+                                  title="Atualizar rastreio automaticamente"
+                                  onClick={() => handleTrackingUpdate(o.id, o.tracking_code!, o.delivery_status)}
+                                  disabled={trackingUpdating.has(o.id)}
+                                >
+                                  {trackingUpdating.has(o.id) ? (
+                                    <Loader2 className="size-3 animate-spin" />
+                                  ) : (
+                                    <RefreshCw className="size-3" />
+                                  )}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10 shrink-0"
+                                  title="Abrir no site oficial dos Correios"
+                                  asChild
+                                >
+                                  <a
+                                    href={`https://rastreamento.correios.com.br/app/index.php?codigo=${encodeURIComponent(o.tracking_code)}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    <ExternalLink className="size-3" />
+                                  </a>
+                                </Button>
+                              </>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                              title="Excluir reserva"
+                              onClick={() => handleDeleteGroup(item)}
+                            >
+                              <Trash2 className="size-3" />
+                            </Button>
+                          </div>
+                        </div>
+                        {o.tracking_code && (
+                          <a
+                            href={`https://rastreamento.correios.com.br/app/index.php?codigo=${encodeURIComponent(o.tracking_code)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline font-mono"
+                            title="Rastrear nos Correios"
+                          >
+                            <span className="truncate max-w-[130px]">{o.tracking_code}</span>
+                            <ExternalLink className="size-2.5 shrink-0" />
+                          </a>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="w-[75px] align-top py-2.5 px-2 text-center">
+                      {currentPaymentStatus === "aguardando_sinal" && o.reservation_expires_at ? (
+                        <Countdown expiresAt={o.reservation_expires_at} />
+                      ) : (currentPaymentStatus === "sem_sinal" || currentPaymentStatus === "pagar_na_chegada") && (o.products as any)?.release_date ? (
+                        <div className="flex flex-col text-[11px]">
+                          <span className="font-semibold text-purple-600 dark:text-purple-400">Na chegada</span>
+                          <span className="text-muted-foreground font-mono text-[10px]">
+                            {new Date((o.products as any).release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
                     Nenhuma reserva ainda.
                   </TableCell>
                 </TableRow>
@@ -1640,58 +1645,57 @@ export function OrdersTab({
         </>
         )}
         {/* BARRA DE PAGINAÇÃO COMPLETA & SELEÇÃO DE ITENS POR PÁGINA */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border/60 p-4 text-xs sm:text-sm bg-muted/10 no-print">
-          <div className="flex items-center gap-3 text-muted-foreground flex-wrap">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border/60 px-4 py-3 text-xs bg-muted/10 no-print">
+          <div className="flex items-center gap-2 text-muted-foreground flex-wrap justify-center sm:justify-start">
             <span>
-              Mostrando <strong className="text-foreground">{startRow}</strong> a{" "}
-              <strong className="text-foreground">{endRow}</strong> de{" "}
-              <strong className="text-foreground">{totalReservations}</strong> {totalReservations === 1 ? "reserva" : "reservas"}
-              {!isAllPages && pages > 1 && ` (Página ${safePage + 1} de ${pages})`}
+              Mostrando <strong className="text-foreground">{startRow}</strong>–<strong className="text-foreground">{endRow}</strong> de{" "}
+              <strong className="text-foreground">{totalReservations}</strong>
+              {!isAllPages && pages > 1 && ` (Pág. ${safePage + 1}/${pages})`}
             </span>
-            <div className="flex items-center gap-1.5 pl-2 border-l border-border/60">
-              <span className="text-xs">Exibir por página:</span>
-              <div className="flex items-center gap-1">
-                {PAGE_SIZE_OPTIONS.map((opt) => (
-                  <Button
-                    key={opt}
-                    size="sm"
-                    variant={pageSize === opt ? "default" : "outline"}
-                    className={`h-7 px-2 text-xs font-semibold ${
-                      pageSize === opt ? "shadow-xs" : "bg-background/80"
-                    }`}
-                    onClick={() => {
-                      setPageSize(opt);
-                      setPage(0);
-                    }}
-                  >
-                    {opt === 0 ? "Todos" : opt}
-                  </Button>
-                ))}
-              </div>
+            <span className="text-border/80">|</span>
+            <div className="flex items-center gap-1">
+              <span className="text-[11px]">Por pág:</span>
+              {PAGE_SIZE_OPTIONS.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => {
+                    setPageSize(opt);
+                    setPage(0);
+                  }}
+                  className={`px-1.5 py-0.5 rounded text-[11px] font-semibold transition-all ${
+                    pageSize === opt
+                      ? "bg-primary text-primary-foreground shadow-xs"
+                      : "bg-muted/40 hover:bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {opt === 0 ? "Todos" : opt}
+                </button>
+              ))}
             </div>
           </div>
 
           {!isAllPages && pages > 1 && (
-            <div className="flex items-center gap-1 flex-wrap justify-center">
+            <div className="flex items-center gap-1 flex-nowrap">
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 w-8 p-0"
+                className="h-7 w-7 p-0"
                 disabled={safePage === 0}
                 onClick={() => setPage(0)}
                 title="Primeira página"
               >
-                <ChevronsLeft className="size-4" />
+                <ChevronsLeft className="size-3.5" />
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 px-2.5 text-xs gap-1"
+                className="h-7 px-2 text-xs gap-0.5"
                 disabled={safePage === 0}
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
               >
-                <ChevronLeft className="size-3.5" />
-                <span className="hidden sm:inline">Anterior</span>
+                <ChevronLeft className="size-3" />
+                <span className="hidden sm:inline">Ant.</span>
               </Button>
 
               {/* Botões numerados com elipses inteligentes */}
@@ -1708,7 +1712,7 @@ export function OrdersTab({
                       key={pageNum}
                       size="sm"
                       variant={isCurrent ? "default" : "outline"}
-                      className={`h-8 w-8 p-0 text-xs font-semibold ${
+                      className={`h-7 w-7 p-0 text-xs font-semibold ${
                         isCurrent ? "shadow-xs scale-105" : "bg-background/80"
                       }`}
                       onClick={() => setPage(i)}
@@ -1719,7 +1723,7 @@ export function OrdersTab({
                 }
                 if (pageNum === safePage - 1 || pageNum === safePage + 3) {
                   return (
-                    <span key={pageNum} className="text-muted-foreground px-1 text-xs">
+                    <span key={pageNum} className="text-muted-foreground px-0.5 text-xs">
                       ...
                     </span>
                   );
@@ -1730,22 +1734,22 @@ export function OrdersTab({
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 px-2.5 text-xs gap-1"
+                className="h-7 px-2 text-xs gap-0.5"
                 disabled={safePage >= pages - 1}
                 onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}
               >
-                <span className="hidden sm:inline">Próxima</span>
-                <ChevronRight className="size-3.5" />
+                <span className="hidden sm:inline">Próx.</span>
+                <ChevronRight className="size-3" />
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 w-8 p-0"
+                className="h-7 w-7 p-0"
                 disabled={safePage >= pages - 1}
                 onClick={() => setPage(pages - 1)}
                 title="Última página"
               >
-                <ChevronsRight className="size-4" />
+                <ChevronsRight className="size-3.5" />
               </Button>
             </div>
           )}
