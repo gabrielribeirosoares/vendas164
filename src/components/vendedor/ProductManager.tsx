@@ -3,7 +3,7 @@ import { BookmarkCheck, CopyPlus, Zap, Sparkles } from "lucide-react";
 import { formatDeadlineHours, getProductInstallmentInfo, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Plus, Search, Share2, Trash2, X } from "lucide-react";
+import { Loader2, Pencil, Plus, Search, Share2, Trash2, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { toast } from "sonner";
 import { getProductBadge, saveProductBadge, saveProductCategory, PRESET_BADGES } from "@/lib/storeCustomizations";
 import { BlingIntegrationDialog } from "@/components/vendedor/BlingIntegrationDialog";
@@ -137,7 +137,38 @@ export function ProductsTab({
     brandsMap[brandName].push(p);
   }
   const brandList = Object.keys(brandsMap).sort((a, b) => a.localeCompare(b));
-  const filteredBrands = selectedBrand === "all" ? brandList : brandList.filter((b) => b === selectedBrand);
+
+  const DEFAULT_PAGE_SIZE = 25;
+  const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 0]; // 0 = Todos
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(0);
+  }, [searchQuery, selectedBrand, mode, onlyOutOfStock, pageSize]);
+
+  const brandFilteredProducts = useMemo(() => {
+    if (selectedBrand === "all") return displayedProducts;
+    return displayedProducts.filter((p) => (p.brand || "Outros").trim() === selectedBrand);
+  }, [displayedProducts, selectedBrand]);
+
+  const totalProducts = brandFilteredProducts.length;
+  const isAllPages = pageSize === 0;
+  const pages = isAllPages ? 1 : Math.max(1, Math.ceil(totalProducts / pageSize));
+  const safePage = Math.min(page, Math.max(0, pages - 1));
+  const startRow = totalProducts > 0 ? (isAllPages ? 1 : safePage * pageSize + 1) : 0;
+  const endRow = isAllPages ? totalProducts : Math.min(totalProducts, (safePage + 1) * pageSize);
+  const paginatedProducts = isAllPages
+    ? brandFilteredProducts
+    : brandFilteredProducts.slice(safePage * pageSize, (safePage + 1) * pageSize);
+
+  const paginatedBrandsMap: Record<string, Product[]> = {};
+  for (const p of paginatedProducts) {
+    const brandName = (p.brand || "Outros").trim();
+    if (!paginatedBrandsMap[brandName]) paginatedBrandsMap[brandName] = [];
+    paginatedBrandsMap[brandName].push(p);
+  }
+  const paginatedBrandList = Object.keys(paginatedBrandsMap).sort((a, b) => a.localeCompare(b));
 
   function handleReserveUnidade(p: Product) {
     if (!p.is_open) return toast.error("Este item está fechado para reservas.");
@@ -872,11 +903,45 @@ export function ProductsTab({
               ))}
             </div>
           )}
+
+          {/* Resumo de resultados no topo */}
+          {totalProducts > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-muted-foreground pt-1 border-t border-border/40">
+              <span>
+                Exibindo <strong>{startRow}</strong> a <strong>{endRow}</strong> de <strong>{totalProducts}</strong> {totalProducts === 1 ? "miniatura" : "miniaturas"}
+                {!isAllPages && pages > 1 && ` (Página ${safePage + 1} de ${pages})`}
+              </span>
+              {totalProducts > 10 && (
+                <div className="flex items-center gap-1.5">
+                  <span>Exibir por página:</span>
+                  <div className="flex items-center gap-1">
+                    {PAGE_SIZE_OPTIONS.map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => {
+                          setPageSize(opt);
+                          setPage(0);
+                        }}
+                        className={`px-2 py-0.5 rounded text-xs font-semibold transition-all ${
+                          pageSize === opt
+                            ? "bg-primary text-primary-foreground shadow-xs"
+                            : "bg-muted/40 hover:bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {opt === 0 ? "Todos" : opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="space-y-5">
-          {filteredBrands.map((brand) => {
-              const brandProducts = brandsMap[brand];
+          {paginatedBrandList.map((brand) => {
+              const brandProducts = paginatedBrandsMap[brand];
               return (
                 <div key={brand} className="space-y-3">
                   <div className="flex items-center gap-2 border-b border-border/20 pb-2">
@@ -910,9 +975,9 @@ export function ProductsTab({
                                 }</span>
                               )}
                             </div>
-                            <h3 className="font-semibold mt-0.5">{p.model}</h3>
+                            <h3 className="font-semibold mt-0.5 whitespace-normal break-words leading-snug">{p.model}</h3>
                             {(p as any).observation && (
-                              <p className="text-xs text-muted-foreground line-clamp-1 italic mt-0.5">
+                              <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words italic mt-0.5">
                                 Obs: {(p as any).observation}
                               </p>
                             )}
@@ -1034,6 +1099,135 @@ export function ProductsTab({
               </p>
             )}
           </div>
+
+          {/* BARRA DE PAGINAÇÃO COMPLETA & SELEÇÃO DE ITENS POR PÁGINA */}
+          {totalProducts > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border border-border/60 p-4 text-xs sm:text-sm bg-muted/10 rounded-2xl">
+              <div className="flex items-center gap-3 text-muted-foreground flex-wrap">
+                <span>
+                  Mostrando <strong className="text-foreground">{startRow}</strong> a{" "}
+                  <strong className="text-foreground">{endRow}</strong> de{" "}
+                  <strong className="text-foreground">{totalProducts}</strong> {totalProducts === 1 ? "miniatura" : "miniaturas"}
+                  {!isAllPages && pages > 1 && ` (Página ${safePage + 1} de ${pages})`}
+                </span>
+                <div className="flex items-center gap-1.5 pl-2 border-l border-border/60">
+                  <span className="text-xs">Exibir por página:</span>
+                  <div className="flex items-center gap-1">
+                    {PAGE_SIZE_OPTIONS.map((opt) => (
+                      <Button
+                        key={opt}
+                        size="sm"
+                        variant={pageSize === opt ? "default" : "outline"}
+                        className={`h-7 px-2 text-xs font-semibold ${
+                          pageSize === opt ? "shadow-xs" : "bg-background/80"
+                        }`}
+                        onClick={() => {
+                          setPageSize(opt);
+                          setPage(0);
+                        }}
+                      >
+                        {opt === 0 ? "Todos" : opt}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {!isAllPages && pages > 1 && (
+                <div className="flex items-center gap-1 flex-wrap justify-center">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 w-8 p-0"
+                    disabled={safePage === 0}
+                    onClick={() => {
+                      setPage(0);
+                      window.scrollTo({ top: 300, behavior: "smooth" });
+                    }}
+                    title="Primeira página"
+                  >
+                    <ChevronsLeft className="size-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2.5 text-xs gap-1"
+                    disabled={safePage === 0}
+                    onClick={() => {
+                      setPage((p) => Math.max(0, p - 1));
+                      window.scrollTo({ top: 300, behavior: "smooth" });
+                    }}
+                  >
+                    <ChevronLeft className="size-3.5" />
+                    <span className="hidden sm:inline">Anterior</span>
+                  </Button>
+
+                  {/* Botões numerados com elipses inteligentes */}
+                  {Array.from({ length: pages }).map((_, i) => {
+                    const pageNum = i + 1;
+                    const isCurrent = safePage === i;
+                    if (
+                      pageNum === 1 ||
+                      pageNum === pages ||
+                      (pageNum >= safePage && pageNum <= safePage + 2)
+                    ) {
+                      return (
+                        <Button
+                          key={pageNum}
+                          size="sm"
+                          variant={isCurrent ? "default" : "outline"}
+                          className={`h-8 w-8 p-0 text-xs font-semibold ${
+                            isCurrent ? "shadow-xs scale-105" : "bg-background/80"
+                          }`}
+                          onClick={() => {
+                            setPage(i);
+                            window.scrollTo({ top: 300, behavior: "smooth" });
+                          }}
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    }
+                    if (pageNum === safePage - 1 || pageNum === safePage + 3) {
+                      return (
+                        <span key={pageNum} className="text-muted-foreground px-1 text-xs">
+                          ...
+                        </span>
+                      );
+                    }
+                    return null;
+                  })}
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2.5 text-xs gap-1"
+                    disabled={safePage >= pages - 1}
+                    onClick={() => {
+                      setPage((p) => Math.min(pages - 1, p + 1));
+                      window.scrollTo({ top: 300, behavior: "smooth" });
+                    }}
+                  >
+                    <span className="hidden sm:inline">Próxima</span>
+                    <ChevronRight className="size-3.5" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 w-8 p-0"
+                    disabled={safePage >= pages - 1}
+                    onClick={() => {
+                      setPage(pages - 1);
+                      window.scrollTo({ top: 300, behavior: "smooth" });
+                    }}
+                    title="Última página"
+                  >
+                    <ChevronsRight className="size-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
       <EditProductDialog
