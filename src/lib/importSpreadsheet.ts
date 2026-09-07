@@ -7,6 +7,7 @@ export interface ParsedSpreadsheetRow {
   clientEmail?: string;
   productModel: string;
   productBrand?: string;
+  quantity: number;
   totalPrice: number;
   downPayment: number;
   paymentStatus: string;
@@ -26,6 +27,7 @@ export function downloadCSVTemplate() {
     "Email",
     "Modelo",
     "Marca",
+    "Quantidade",
     "Valor Total",
     "Sinal Pago",
     "Status Pagamento",
@@ -39,6 +41,7 @@ export function downloadCSVTemplate() {
       "joao@email.com",
       "Nissan Skyline GT-R R34",
       "Kaido House",
+      "1",
       "189.90",
       "50.00",
       "sinal_pago",
@@ -50,9 +53,10 @@ export function downloadCSVTemplate() {
       "maria@email.com",
       "Porsche 911 GT3 RS",
       "Mini GT",
-      "149.00",
-      "0",
-      "aguardando_sinal",
+      "2",
+      "298.00",
+      "60.00",
+      "sinal_pago",
       "pendente",
     ],
   ];
@@ -134,6 +138,7 @@ export function parseCSVText(
   const idxEmail = getColIndex(["email", "e-mail", "mail"]);
   const idxModel = getColIndex(["modelo", "model", "produto", "miniatura"]);
   const idxBrand = getColIndex(["marca", "brand", "fabricante"]);
+  const idxQty = getColIndex(["quantidade", "qtd", "quant", "qty", "unidades", "unidade"]);
   const idxTotalPrice = getColIndex(["valor total", "valor", "preco", "preço", "total"]);
   const idxDownPayment = getColIndex(["sinal pago", "sinal", "entrada"]);
   const idxPayStatus = getColIndex(["status pagamento", "pagamento", "payment"]);
@@ -156,6 +161,10 @@ export function parseCSVText(
     const productModel = idxModel >= 0 ? cols[idxModel] || "" : "";
     const productBrand = idxBrand >= 0 ? cols[idxBrand] || "" : "";
     
+    const rawQty = idxQty >= 0 ? cols[idxQty] || "1" : "1";
+    let quantity = parseInt(String(rawQty).replace(/\D/g, "") || "1", 10);
+    if (isNaN(quantity) || quantity < 1) quantity = 1;
+
     const rawPrice = idxTotalPrice >= 0 ? cols[idxTotalPrice] || "0" : "0";
     const rawSignal = idxDownPayment >= 0 ? cols[idxDownPayment] || "0" : "0";
 
@@ -230,6 +239,7 @@ export function parseCSVText(
       clientEmail,
       productModel: productModel || "Miniatura",
       productBrand: productBrand || "Geral",
+      quantity,
       totalPrice,
       downPayment,
       paymentStatus,
@@ -370,6 +380,10 @@ export async function processSpreadsheetImport({
         ? Array.from(productCache.values()).find((p) => p.id === productId)
         : null;
 
+      const qty = Math.max(1, row.quantity || 1);
+      const unitPrice = Math.round((row.totalPrice / qty) * 100) / 100;
+      const unitDownPayment = Math.round((row.downPayment / qty) * 100) / 100;
+
       if (!matchedProd) {
         matchedProd = findProductInCache(row.productModel);
       }
@@ -377,14 +391,14 @@ export async function processSpreadsheetImport({
       if (matchedProd) {
         productId = matchedProd.id;
       } else {
-        // O produto NÃO existe na loja. Criar apenas uma vez!
+        // O produto NÃO existe na loja. Criar apenas uma vez com preço unitário!
         const { data: newProd, error: prodErr } = await supabase
           .from("products")
           .insert({
             store_id: storeId,
             model: row.productModel,
             brand: row.productBrand || "Importado",
-            price: row.totalPrice,
+            price: unitPrice,
             stock: 0,
             is_open: true,
             scale: "1:64",
@@ -412,35 +426,40 @@ export async function processSpreadsheetImport({
         continue;
       }
 
-      // 5. Se for cliente convidado (não registrado), salvar os dados em pix_key no padrão GUEST
+      // 5. Se for cliente convidado (não registrado), salvar os dados em pix_key no padrão GUEST com a quantidade
       const pixKeyPayload = isGuest
-        ? `GUEST:${JSON.stringify({ name: row.clientName, phone: formattedPhone, email: row.clientEmail || null })}`
+        ? `GUEST:${JSON.stringify({ name: row.clientName, phone: formattedPhone, email: row.clientEmail || null, quantity: qty })}`
         : null;
 
-      // 6. Criar Pedido / Reserva no Supabase
-      const { data: createdOrder, error: orderErr } = await supabase
-        .from("orders")
-        .insert({
-          store_id: storeId,
-          user_id: effectiveUserId,
-          product_id: productId,
-          total_price: row.totalPrice,
-          down_payment: row.downPayment,
-          payment_status: row.paymentStatus,
-          delivery_status: row.deliveryStatus,
-          pix_key: pixKeyPayload,
-        })
-        .select("id")
-        .maybeSingle();
+      // 6. Criar Pedido(s) / Reserva(s) no Supabase conforme a quantidade
+      let rowFailed = false;
+      for (let q = 0; q < qty; q++) {
+        const { data: createdOrder, error: orderErr } = await supabase
+          .from("orders")
+          .insert({
+            store_id: storeId,
+            user_id: effectiveUserId,
+            product_id: productId,
+            total_price: unitPrice,
+            down_payment: unitDownPayment,
+            payment_status: row.paymentStatus,
+            delivery_status: row.deliveryStatus,
+            pix_key: pixKeyPayload,
+          })
+          .select("id")
+          .maybeSingle();
 
-      if (orderErr) {
-        errorCount++;
-        errors.push(`Linha ${row.rowIndex}: Erro ao criar reserva - ${orderErr.message}`);
-      } else {
-        successCount++;
-        if (createdOrder?.id) {
+        if (orderErr) {
+          rowFailed = true;
+          errorCount++;
+          errors.push(`Linha ${row.rowIndex} (unidade ${q + 1}/${qty}): Erro ao criar reserva - ${orderErr.message}`);
+        } else if (createdOrder?.id) {
           createdOrderIds.push(createdOrder.id);
         }
+      }
+
+      if (!rowFailed) {
+        successCount++;
       }
     } catch (err: any) {
       errorCount++;
@@ -458,8 +477,21 @@ export async function processSpreadsheetImport({
 }
 
 /**
+ * Utilitário para fatiar arrays em lotes seguros para URLs do Supabase PostgREST
+ * Evita o erro HTTP 400 Bad Request / 414 URI Too Long ao passar centenas de UUIDs.
+ */
+function chunkArray<T>(items: T[], size: number = 40): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/**
  * Desfaz uma importação excluindo as reservas criadas e, opcionalmente,
  * produtos novos criados que não tenham nenhuma outra reserva vinculada.
+ * Processa em lotes (chunks) de até 40 itens para não estourar o limite de URL da API.
  */
 export async function undoSpreadsheetImport({
   orderIds,
@@ -471,29 +503,48 @@ export async function undoSpreadsheetImport({
   let deletedOrdersCount = 0;
 
   if (orderIds && orderIds.length > 0) {
-    // 1. Apagar parcelas vinculadas (se houver)
-    await supabase.from("order_installments").delete().in("order_id", orderIds);
+    const orderChunks = chunkArray(orderIds, 40);
 
-    // 2. Apagar as reservas
-    const { error: orderErr } = await supabase.from("orders").delete().in("id", orderIds);
-    if (orderErr) {
-      throw new Error(`Erro ao excluir reservas importadas: ${orderErr.message}`);
+    // 1. Apagar parcelas vinculadas em lotes seguros
+    for (const chunk of orderChunks) {
+      try {
+        await supabase.from("order_installments").delete().in("order_id", chunk);
+      } catch {
+        // Continua mesmo se não houver parcelas
+      }
     }
-    deletedOrdersCount = orderIds.length;
+
+    // 2. Apagar as reservas em lotes seguros
+    for (const chunk of orderChunks) {
+      const { error: orderErr } = await supabase.from("orders").delete().in("id", chunk);
+      if (orderErr) {
+        throw new Error(`Erro ao excluir reservas importadas: ${orderErr.message}`);
+      }
+      deletedOrdersCount += chunk.length;
+    }
   }
 
-  // 3. Se produtos foram criados nessa importação e não possuem outros pedidos vinculados, excluí-los
+  // 3. Se produtos foram criados nessa importação e não possuem outros pedidos vinculados, excluí-los em lotes seguros
   if (productIds && productIds.length > 0) {
-    const { data: existingOrders } = await supabase
-      .from("orders")
-      .select("product_id")
-      .in("product_id", productIds);
+    const prodChunks = chunkArray(productIds, 40);
+    const productsWithOtherOrders = new Set<string>();
 
-    const productsWithOtherOrders = new Set((existingOrders || []).map((o) => o.product_id));
+    for (const chunk of prodChunks) {
+      const { data: existingOrders } = await supabase
+        .from("orders")
+        .select("product_id")
+        .in("product_id", chunk);
+
+      (existingOrders || []).forEach((o) => productsWithOtherOrders.add(o.product_id));
+    }
+
     const orphanProductIds = productIds.filter((id) => !productsWithOtherOrders.has(id));
 
     if (orphanProductIds.length > 0) {
-      await supabase.from("products").delete().in("id", orphanProductIds);
+      const orphanChunks = chunkArray(orphanProductIds, 40);
+      for (const chunk of orphanChunks) {
+        await supabase.from("products").delete().in("id", chunk);
+      }
     }
   }
 

@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { brl, isProntaEntrega, whatsappLink } from '@/lib/format';
-import { trackOrder, getTrackingStatusLabel, shouldUpdateDeliveryStatus } from '@/lib/trackingService';
+import { trackOrder } from '@/lib/trackingService';
 import { toast } from 'sonner';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw, FileSpreadsheet } from 'lucide-react';
@@ -386,7 +386,21 @@ export function OrdersTab({
   type GroupedOrderRow = { order: OrderRow; quantity: number; ids: string[] };
 
   const groupedOrders = useMemo(() => {
-    return filteredOrders.map(o => ({ order: o, quantity: 1, ids: [o.id] } as GroupedOrderRow));
+    const map = new Map<string, GroupedOrderRow>();
+    filteredOrders.forEach((o) => {
+      // Agrupar pedidos do mesmo cliente, produto, status e criados na mesma leva
+      const dateKey = o.created_at ? o.created_at.slice(0, 16) : "";
+      const groupKey = `${o.user_id}_${o.product_id}_${o.payment_status}_${o.delivery_status}_${o.pix_key || ""}_${dateKey}`;
+
+      const existing = map.get(groupKey);
+      if (existing) {
+        existing.quantity += 1;
+        existing.ids.push(o.id);
+      } else {
+        map.set(groupKey, { order: o, quantity: 1, ids: [o.id] });
+      }
+    });
+    return Array.from(map.values());
   }, [filteredOrders]);
 
   const pages = Math.max(1, Math.ceil(groupedOrders.length / PAGE_SIZE));
@@ -421,9 +435,12 @@ export function OrdersTab({
     ids: string[],
     patch: Partial<Pick<Tables<"orders">, "down_payment" | "payment_status" | "delivery_status" | "reservation_expires_at">>,
   ) {
-    const { error } = await supabase.from("orders").update(patch).in("id", ids);
-
-    if (error) return toast.error("Não foi possível atualizar a reserva.");
+    const chunkSize = 40;
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const { error } = await supabase.from("orders").update(patch).in("id", chunk);
+      if (error) return toast.error("Não foi possível atualizar a reserva.");
+    }
     queryClient.invalidateQueries();
   }
 
@@ -630,16 +647,27 @@ export function OrdersTab({
       if (item) allIds.push(...item.ids);
     });
 
+    const chunkSize = 40;
     if (statusType === "payment") {
       await updateGroup(allIds, { payment_status: newStatus });
       if (newStatus === "cancelado") {
-        await supabase.from("order_installments").delete().in("order_id", allIds);
+        for (let i = 0; i < allIds.length; i += chunkSize) {
+          const chunk = allIds.slice(i, i + chunkSize);
+          try {
+            await supabase.from("order_installments").delete().in("order_id", chunk);
+          } catch {}
+        }
       }
       toast.success(`${selectedOrders.size} reserva(s) atualizada(s)!`);
     } else {
       await updateGroup(allIds, { delivery_status: newStatus });
       if (newStatus === "cancelado") {
-        await supabase.from("order_installments").delete().in("order_id", allIds);
+        for (let i = 0; i < allIds.length; i += chunkSize) {
+          const chunk = allIds.slice(i, i + chunkSize);
+          try {
+            await supabase.from("order_installments").delete().in("order_id", chunk);
+          } catch {}
+        }
       }
       toast.success(`${selectedOrders.size} reserva(s) atualizada(s)!`);
     }
@@ -673,11 +701,16 @@ export function OrdersTab({
       }
     }
 
-    await supabase.from("order_installments").delete().in("order_id", allIds);
-    const { error } = await supabase.from("orders").delete().in("id", allIds);
-
-    if (error) {
-      return toast.error("Não foi possível excluir as reservas selecionadas.");
+    const chunkSize = 40;
+    for (let i = 0; i < allIds.length; i += chunkSize) {
+      const chunk = allIds.slice(i, i + chunkSize);
+      try {
+        await supabase.from("order_installments").delete().in("order_id", chunk);
+      } catch {}
+      const { error } = await supabase.from("orders").delete().in("id", chunk);
+      if (error) {
+        return toast.error("Não foi possível excluir as reservas selecionadas.");
+      }
     }
 
     toast.success(`${selectedOrders.size} reserva(s) excluída(s) com sucesso!`);

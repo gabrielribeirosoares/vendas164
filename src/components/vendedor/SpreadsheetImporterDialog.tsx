@@ -30,7 +30,6 @@ import {
   Trash2,
   ShieldCheck,
   Clock,
-  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -498,6 +497,7 @@ export function SpreadsheetImporterDialog({
                       <TableHead>Cliente</TableHead>
                       <TableHead>Contato</TableHead>
                       <TableHead>Modelo / Marca</TableHead>
+                      <TableHead className="w-16 text-center">Qtd</TableHead>
                       <TableHead>Valor Total</TableHead>
                       <TableHead>Sinal</TableHead>
                       <TableHead>Status Pag.</TableHead>
@@ -519,8 +519,18 @@ export function SpreadsheetImporterDialog({
                           <div className="font-medium">{row.productModel}</div>
                           <div className="text-[10px] text-muted-foreground">{row.productBrand}</div>
                         </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="secondary" className="font-bold text-xs px-2 py-0.5">
+                            {row.quantity}x
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-xs font-semibold">
                           {brl(row.totalPrice)}
+                          {row.quantity > 1 && (
+                            <span className="block text-[10px] text-muted-foreground font-mono">
+                              ({brl(row.totalPrice / row.quantity)} cada)
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {brl(row.downPayment)}
