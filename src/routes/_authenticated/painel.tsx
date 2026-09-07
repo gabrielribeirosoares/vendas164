@@ -494,7 +494,7 @@ function CustomerDashboardContent() {
                                 const installments = o.order_installments || [];
                                 const paidInsts = installments.filter((i: any) => i.status === "paid");
                                 const totalPaidInsts = paidInsts.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-                                const signalPaid = (o.payment_status === "sinal_pago" || o.payment_status === "quitado") ? Number(o.down_payment || 0) : 0;
+                                const signalPaid = (o.payment_status === "sinal_pago" || o.payment_status === "quitado") ? Number(o.down_payment || 0) * qty : 0;
                                 const totalPaid = totalPaidInsts + signalPaid;
                                 const totalOrder = Number(o.total_price) * qty;
                                 const progress = totalOrder > 0 ? Math.min(100, Math.round((totalPaid / totalOrder) * 100)) : 0;
@@ -518,7 +518,9 @@ function CustomerDashboardContent() {
                               <div className="flex justify-start lg:justify-end">
                                 <OrderInstallmentsDialog
                                   orderId={o.id}
-                                  totalPrice={o.total_price * qty}
+                                  quantity={qty}
+                                  downPayment={Number(o.down_payment)}
+                                  totalPrice={Number(o.total_price) * qty}
                                   installmentCount={o.installment_count}
                                   customerName={profile?.name || "Você"}
                                   productName={`${o.products?.brand || ''} ${o.products?.model || ''}`}

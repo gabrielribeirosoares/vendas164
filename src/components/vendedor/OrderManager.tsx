@@ -1249,7 +1249,10 @@ export function OrdersTab({
                                 <div className="mt-2 flex justify-end">
                                   <OrderInstallmentsDialog
                                       orderId={o.id}
-                                      totalPrice={o.total_price * quantity}
+                                      orderIds={ids}
+                                      quantity={quantity}
+                                      downPayment={Number(o.down_payment)}
+                                      totalPrice={Number(o.total_price) * quantity}
                                       installmentCount={o.installment_count}
                                       customerName={guestMeta?.name || o.profiles?.name || "Cliente"}
                                       productName={`${o.products?.brand || ''} ${o.products?.model || ''}`}
@@ -1498,7 +1501,10 @@ export function OrdersTab({
                         <div className="no-print">
                           <OrderInstallmentsDialog
                             orderId={o.id}
-                            totalPrice={o.total_price * quantity}
+                            orderIds={ids}
+                            quantity={quantity}
+                            downPayment={Number(o.down_payment)}
+                            totalPrice={Number(o.total_price) * quantity}
                             installmentCount={o.installment_count}
                             customerName={guestMeta?.name || o.profiles?.name || "Cliente"}
                             productName={`${o.products?.brand || ''} ${o.products?.model || ''}`}

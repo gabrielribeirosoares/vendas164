@@ -28,6 +28,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 interface OrderInstallmentsDialogProps {
   orderId: string;
+  orderIds?: string[];
+  quantity?: number;
+  downPayment?: number;
   totalPrice: number;
   installmentCount: number | null;
   customerName: string;
@@ -37,6 +40,9 @@ interface OrderInstallmentsDialogProps {
 
 export function OrderInstallmentsDialog({
   orderId,
+  orderIds,
+  quantity = 1,
+  downPayment,
   totalPrice,
   installmentCount,
   customerName,
@@ -49,6 +55,9 @@ export function OrderInstallmentsDialog({
   const [newPaymentDate, setNewPaymentDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [newPaymentStatus, setNewPaymentStatus] = useState<"paid" | "pending">("paid");
   const [activeTab, setActiveTab] = useState<string>("flexible");
+
+  const qty = Math.max(1, quantity || 1);
+  const targetIds = orderIds && orderIds.length > 0 ? orderIds : [orderId];
 
   const queryClient = useQueryClient();
 
@@ -66,18 +75,19 @@ export function OrderInstallmentsDialog({
     }
   });
 
-  const expectedSignal = getProductSignalAmount(orderMeta?.products, 1).amount;
-  const actualSignal = Number(orderMeta?.down_payment || 0);
+  const expectedSignal = getProductSignalAmount(orderMeta?.products, qty).amount;
+  const unitSignal = orderMeta?.down_payment != null ? Number(orderMeta.down_payment) : Number(downPayment || 0);
+  const actualSignal = unitSignal * qty;
   const signalToDeduct = Math.max(expectedSignal, actualSignal);
 
   const { data: installments, isLoading } = useQuery({
-    queryKey: ["order_installments", orderId, signalToDeduct],
+    queryKey: ["order_installments", orderId, signalToDeduct, targetIds.join(",")],
     enabled: open,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("order_installments")
         .select("*")
-        .eq("order_id", orderId)
+        .in("order_id", targetIds)
         .order("installment_number", { ascending: true });
       
       if (error) throw error;
@@ -128,8 +138,9 @@ export function OrderInstallmentsDialog({
     mutationFn: async () => {
       const count = customCount;
       const orderData = orderMeta;
-      const expectedSig = getProductSignalAmount(orderData?.products, 1).amount;
-      const actualSig = Number(orderData?.down_payment || 0);
+      const expectedSig = getProductSignalAmount(orderData?.products, qty).amount;
+      const unitSig = orderData?.down_payment != null ? Number(orderData.down_payment) : Number(downPayment || 0);
+      const actualSig = unitSig * qty;
       const sigToDeduct = Math.max(expectedSig, actualSig);
       
       const amountToParcel = Math.max(0, totalPrice - sigToDeduct);
@@ -138,7 +149,7 @@ export function OrderInstallmentsDialog({
       const defaultDay = (orderData?.stores as any)?.default_installment_due_day;
       
       // Limpa parcelas anteriores primeiro para recriar
-      await supabase.from("order_installments").delete().eq("order_id", orderId);
+      await supabase.from("order_installments").delete().in("order_id", targetIds);
 
       const now = new Date();
       const newInstallments = Array.from({ length: count }).map((_, i) => {
@@ -209,7 +220,7 @@ export function OrderInstallmentsDialog({
 
       // Se o novo pagamento quitar completamente o pedido, atualiza o status do pedido
       if (newPaymentStatus === "paid" && (totalPaid + val) >= (totalPrice - 0.01)) {
-        await supabase.from("orders").update({ payment_status: "quitado" }).eq("id", orderId);
+        await supabase.from("orders").update({ payment_status: "quitado" }).in("id", targetIds);
       }
     },
     onSuccess: () => {
@@ -259,7 +270,7 @@ export function OrderInstallmentsDialog({
   // Limpar todos os lançamentos
   const clearAllInstallments = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("order_installments").delete().eq("order_id", orderId);
+      const { error } = await supabase.from("order_installments").delete().in("order_id", targetIds);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -274,7 +285,7 @@ export function OrderInstallmentsDialog({
   // Marcar pedido como Quitado
   const markOrderQuitado = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("orders").update({ payment_status: "quitado" }).eq("id", orderId);
+      const { error } = await supabase.from("orders").update({ payment_status: "quitado" }).in("id", targetIds);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -287,8 +298,10 @@ export function OrderInstallmentsDialog({
   });
 
   function invalidateAll() {
-    queryClient.invalidateQueries({ queryKey: ["order_installments", orderId] });
-    queryClient.invalidateQueries({ queryKey: ["order_meta", orderId] });
+    targetIds.forEach((id) => {
+      queryClient.invalidateQueries({ queryKey: ["order_installments", id] });
+      queryClient.invalidateQueries({ queryKey: ["order_meta", id] });
+    });
     queryClient.invalidateQueries({ queryKey: ["store-orders"] });
     queryClient.invalidateQueries({ queryKey: ["my-orders"] });
     queryClient.invalidateQueries({ queryKey: ["all_installments"] });
@@ -313,6 +326,7 @@ export function OrderInstallmentsDialog({
           </div>
           <p className="text-xs text-muted-foreground line-clamp-1">
             <span className="font-semibold text-foreground">{customerName}</span> &bull; {productName}
+            {qty > 1 && <span className="ml-1.5 font-bold text-primary">({qty} unidades)</span>}
           </p>
         </DialogHeader>
 
@@ -335,7 +349,14 @@ export function OrderInstallmentsDialog({
                   {actualSignal > 0 ? (
                     <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                       <span className="text-[11px] text-emerald-600 dark:text-emerald-400 block">Sinal Pago</span>
-                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{brl(actualSignal)}</span>
+                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                        {brl(actualSignal)}
+                        {qty > 1 && (
+                          <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                            ({qty}x {brl(unitSignal)})
+                          </span>
+                        )}
+                      </span>
                     </div>
                   ) : (
                     <div className="p-2 rounded-lg bg-background/60 border border-border/40">
