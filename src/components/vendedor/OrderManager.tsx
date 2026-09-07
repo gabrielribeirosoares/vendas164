@@ -5,7 +5,7 @@ import { brl, isProntaEntrega, whatsappLink } from '@/lib/format';
 import { trackOrder } from '@/lib/trackingService';
 import { toast } from 'sonner';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw, FileSpreadsheet, Printer, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw, FileSpreadsheet, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -862,17 +862,6 @@ export function OrdersTab({
               >
                 <Download className="size-3.5 text-primary" />
                 <span>Exportar Relatório Financeiro</span>
-              </Button>
-
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => window.print()}
-                className="h-9 text-xs gap-1.5 border-border/80 hover:bg-primary/5 no-print"
-                title="Imprimir relatório das reservas com quebra de página"
-              >
-                <Printer className="size-3.5 text-primary" />
-                <span>Imprimir / PDF</span>
               </Button>
             </div>
           </div>
@@ -1762,16 +1751,6 @@ export function OrdersTab({
         </div>
       </CardContent>
 
-      <style dangerouslySetInnerHTML={{ __html: `
-        @media print {
-          @page { margin: 10mm; }
-          body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background: #fff !important; color: #000 !important; }
-          header, nav, footer, .no-print, [data-floating-action] { display: none !important; }
-          .print-break-inside-avoid { break-inside: avoid !important; page-break-inside: avoid !important; }
-          thead { display: table-header-group !important; }
-          tr { break-inside: avoid !important; page-break-inside: avoid !important; }
-        }
-      `}} />
       {storeId && (
         <ManualReservationDialog
           storeId={storeId}
