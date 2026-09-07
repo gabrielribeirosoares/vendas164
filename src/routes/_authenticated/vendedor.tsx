@@ -227,21 +227,15 @@ function SellerDashboard() {
   }, [store?.name, activeTab]);
 
 
-  const { data: profile } = useQuery({
-    queryKey: ["my-profile-admin", user?.id],
+  const { data: isAdmin = false } = useQuery({
+    queryKey: ["is-platform-admin", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("*").eq("id", user!.id).maybeSingle();
-      return data;
+      const { data, error } = await supabase.rpc("is_platform_admin");
+      if (error) throw error;
+      return data === true;
     },
   });
-
-  // Verificar se o usuário atual é SuperAdmin (gabrielribeirosoares@hotmail.com)
-  const isAdmin =
-    (profile as any)?.is_admin === true ||
-    user?.id === "5fb17599-28a0-4c1c-92cf-38176f7d57a2" ||
-    user?.email?.toLowerCase() === "gabrielribeirosoares@hotmail.com" ||
-    user?.email?.includes("triade");
 
   const { data: products } = useQuery({
     queryKey: ["store-products", store?.id],
