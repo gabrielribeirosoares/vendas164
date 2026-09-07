@@ -11,7 +11,7 @@
 - Carregamento incremental de reservas e fila do cliente. Filtros e paginação da vitrine no banco, sem baixar o catálogo completo.
 - Cards de produto separados em componente, textos maiores e ações independentes dos links. Navegação lateral do vendedor e alertas acionáveis.
 - Diálogo de reserva manual extraído do gerenciador de produtos.
-- Correção do helper de rastreamento que recebia opções POST no parâmetro de headers. A rota de API lê o token do Melhor Envio no servidor; a remoção do token legado do módulo do navegador permanece pendente.
+- Correção do helper de rastreamento que recebia opções POST no parâmetro de headers. O token do Melhor Envio foi removido do módulo do navegador, dos parâmetros da URL e do `localStorage`; a rota autenticada usa apenas a variável do servidor e valida a propriedade da loja.
 - Administradores passam a ser cadastrados explicitamente em `private.platform_admins`; permissões não dependem mais de trechos do e-mail.
 - Clientes não podem alterar campos financeiros dos próprios pedidos. A migração automática de reservas convidadas só aceita telefone confirmado pelo Supabase Auth.
 
@@ -52,3 +52,4 @@ O navegador remoto não conseguiu acessar o servidor local; a aparência em desk
 - Os gerenciadores de clientes e pedidos ainda podem ser divididos em componentes menores. Esta alteração extrai o formulário manual e o card público, sem reescrever todos os módulos.
 - A confirmação de pagamento continua sendo operacional; não foi adicionada conciliação bancária automática.
 - A RPC de expiração e as rotinas antigas de cancelamento não foram redesenhadas nesta alteração. Devem passar por uma revisão própria de concorrência e auditoria.
+- A consulta de permissão administrativa agora exibe um alerta acionável quando o Supabase não responde, sem confundir erro de infraestrutura com ausência de permissão.

@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 
 type RawTrackingEvent = {
   date?: string;
@@ -45,7 +47,12 @@ async function fetchWithTimeout(
   }
 }
 
-const DEFAULT_MELHOR_ENVIO_TOKEN = process.env.MELHOR_ENVIO_TOKEN || "";
+function jsonError(message: string, status: number): Response {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 export const Route = createFileRoute("/api/tracking")({
   server: {
@@ -53,7 +60,44 @@ export const Route = createFileRoute("/api/tracking")({
       GET: async ({ request }) => {
         const url = new URL(request.url);
         const code = url.searchParams.get("code");
-        const token = url.searchParams.get("token") || request.headers.get("x-melhor-envio-token") || DEFAULT_MELHOR_ENVIO_TOKEN;
+        const storeId = url.searchParams.get("storeId");
+        const authHeader = request.headers.get("authorization");
+
+        if (!authHeader?.startsWith("Bearer ")) {
+          return jsonError("Unauthorized", 401);
+        }
+
+        if (!storeId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(storeId)) {
+          return jsonError("Invalid store", 400);
+        }
+
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+        if (!supabaseUrl || !publishableKey) {
+          console.error("[TrackingAPI] Missing Supabase server configuration");
+          return jsonError("Tracking service unavailable", 503);
+        }
+
+        const accessToken = authHeader.slice("Bearer ".length);
+        const authClient = createClient<Database>(supabaseUrl, publishableKey, {
+          global: { headers: { Authorization: authHeader } },
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(accessToken);
+        const userId = claimsData?.claims?.sub;
+        if (claimsError || !userId) {
+          return jsonError("Unauthorized", 401);
+        }
+
+        const { data: ownedStore, error: storeError } = await authClient
+          .from("stores")
+          .select("id")
+          .eq("id", storeId)
+          .eq("owner_id", userId)
+          .maybeSingle();
+        if (storeError || !ownedStore) {
+          return jsonError("Forbidden", 403);
+        }
 
         if (!code || code.trim().length < 8) {
           return new Response(JSON.stringify({ error: "Invalid tracking code" }), {
@@ -66,10 +110,11 @@ export const Route = createFileRoute("/api/tracking")({
 
         let result: TrackingResult | null = null;
 
-        // Se houver token do Melhor Envio, tentar primeiro a API oficial do Melhor Envio
-        if (token) {
+        // O token nunca vem do navegador; apenas da configuração do servidor.
+        const melhorEnvioToken = process.env.MELHOR_ENVIO_TOKEN || "";
+        if (melhorEnvioToken) {
           try {
-            result = await trackWithMelhorEnvioApi(normalizedCode, token);
+            result = await trackWithMelhorEnvioApi(normalizedCode, melhorEnvioToken);
           } catch (e) {
             console.error("[MelhorEnvioAPI] Error:", e);
           }
