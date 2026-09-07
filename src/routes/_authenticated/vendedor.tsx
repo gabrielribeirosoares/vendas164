@@ -29,6 +29,7 @@ import { PhoneInput } from "@/components/PhoneInput";
 import { getCustomerFromCache } from "@/lib/customerCache";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -227,7 +228,12 @@ function SellerDashboard() {
   }, [store?.name, activeTab]);
 
 
-  const { data: isAdmin = false } = useQuery({
+  const {
+    data: isAdmin = false,
+    isError: isAdminCheckError,
+    isFetching: isAdminChecking,
+    refetch: retryAdminCheck,
+  } = useQuery({
     queryKey: ["is-platform-admin", user?.id],
     enabled: !!user,
     queryFn: async () => {
@@ -389,6 +395,28 @@ function SellerDashboard() {
     <div className="min-h-screen">
       <AppHeader store={store} />
       <main className="mx-auto max-w-6xl px-4 py-10">
+        {isAdminCheckError && (
+          <Alert variant="destructive" className="mb-6">
+            <ShieldAlert className="size-4" />
+            <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+              <span>
+                Não foi possível verificar suas permissões administrativas. As funções comuns da loja continuam disponíveis.
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={isAdminChecking}
+                onClick={() => void retryAdminCheck()}
+                className="gap-2"
+              >
+                <RefreshCw className={`size-4 ${isAdminChecking ? "animate-spin" : ""}`} />
+                Tentar novamente
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Banner de Boas-Vindas / Trial Liberado (Apenas se estiver em Trial) */}
         {showTrialBanner && (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-background to-primary/10 p-4 shadow-sm relative">

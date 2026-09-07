@@ -246,10 +246,14 @@ export function OrdersTab({
 
   async function handleTrackingUpdate(orderId: string, code: string, currentStatus?: string) {
     if (!code?.trim()) return;
+    if (!storeId) {
+      toast.error("Não foi possível identificar a loja para consultar o rastreio.");
+      return;
+    }
     const normalizedCode = code.toUpperCase().trim();
     setTrackingUpdating((prev) => new Set([...prev, orderId]));
     try {
-      const result = await trackOrder(normalizedCode);
+      const result = await trackOrder(normalizedCode, storeId);
       if (result && result.status !== "not_found") {
         if (result.status === "delivered") {
           const { error } = await supabase
@@ -289,6 +293,8 @@ export function OrdersTab({
           },
         });
       }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível consultar o rastreio.");
     } finally {
       setTrackingUpdating((prev) => {
         const next = new Set(prev);

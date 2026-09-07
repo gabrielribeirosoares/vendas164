@@ -111,7 +111,15 @@ export function TrackingIntegration({ storeId }: TrackingIntegrationProps) {
 
     for (let i = 0; i < ordersWithTracking.length; i += BATCH_SIZE) {
       const batch = ordersWithTracking.slice(i, i + BATCH_SIZE).map((o) => o.tracking_code!);
-      const batchResults = await trackMultipleOrders(batch, storeId);
+      let batchResults: Map<string, TrackingResult>;
+      try {
+        batchResults = await trackMultipleOrders(batch, storeId);
+      } catch (error) {
+        setProgress(null);
+        setLoading(false);
+        toast.error(error instanceof Error ? error.message : "Não foi possível atualizar os rastreios.");
+        return;
+      }
 
       for (const [code, result] of batchResults.entries()) {
         newResults.set(code, result);
