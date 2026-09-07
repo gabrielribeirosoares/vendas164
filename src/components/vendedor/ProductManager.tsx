@@ -813,36 +813,37 @@ export function ProductsTab({
           </div>
         </div>
 
-        {/* Barra de Busca de Miniaturas (Modelo, Marca ou SKU) e Filtro por Marca */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+        {/* Barra de Busca de Miniaturas (Modelo, Marca, SKU ou Observação) */}
+        <div className="space-y-3 pt-1">
+          <div className="relative w-full sm:max-w-md">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por modelo, marca ou SKU..."
+              placeholder="Buscar por modelo, marca, SKU ou observação..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-8 h-9 text-xs sm:text-sm bg-muted/20 border-border/40"
+              className="pl-10 pr-9 h-10 text-sm bg-muted/20 border-border/40 w-full rounded-xl"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded-full hover:bg-muted/40 transition-colors"
                 title="Limpar busca"
               >
-                <X className="size-3.5" />
+                <X className="size-4" />
               </button>
             )}
           </div>
 
+          {/* Filtro por Marca */}
           {brandList.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
               <Button
                 type="button"
                 size="sm"
                 variant={selectedBrand === "all" ? "default" : "outline"}
                 onClick={() => setSelectedBrand("all")}
-                className="h-7 px-2.5 text-xs rounded-full"
+                className="h-7 px-3 text-xs rounded-full font-medium"
               >
                 Todas ({displayedProducts.length})
               </Button>
@@ -853,7 +854,7 @@ export function ProductsTab({
                   size="sm"
                   variant={selectedBrand === b ? "default" : "outline"}
                   onClick={() => setSelectedBrand(b)}
-                  className="h-7 px-2.5 text-xs rounded-full"
+                  className="h-7 px-3 text-xs rounded-full font-medium"
                 >
                   {b} ({brandsMap[b].length})
                 </Button>
