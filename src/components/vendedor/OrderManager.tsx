@@ -1,11 +1,11 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { brl, isProntaEntrega, whatsappLink } from '@/lib/format';
 import { trackOrder } from '@/lib/trackingService';
 import { toast } from 'sonner';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw, FileSpreadsheet } from 'lucide-react';
+import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw, FileSpreadsheet, Printer, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -25,7 +25,8 @@ import { SpreadsheetImporterDialog } from '@/components/vendedor/SpreadsheetImpo
 import type { Tables } from '@/integrations/supabase/types';
 
 export type Product = Tables<'products'>;
-const PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 0]; // 0 = Todos
 
 export type OrderRow = Tables<"orders"> & {
   products: Tables<"products"> | null;
@@ -221,6 +222,7 @@ export function OrdersTab({
 }) {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
   const [searchQuery, setSearchQuery] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -229,6 +231,10 @@ export function OrdersTab({
   const [categoryFilter, setCategoryFilter] = useState<"todos" | "pre_venda" | "pronta_entrega">("todos");
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setPage(0);
+  }, [pageSize, searchQuery, paymentFilter, deliveryFilter, categoryFilter, startDate, endDate, focusFilter]);
 
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -411,8 +417,13 @@ export function OrdersTab({
     return Array.from(map.values());
   }, [filteredOrders]);
 
-  const pages = Math.max(1, Math.ceil(groupedOrders.length / PAGE_SIZE));
-  const rows = groupedOrders.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const totalReservations = groupedOrders.length;
+  const isAllPages = pageSize === 0;
+  const pages = isAllPages ? 1 : Math.max(1, Math.ceil(totalReservations / pageSize));
+  const safePage = Math.min(page, Math.max(0, pages - 1));
+  const startRow = totalReservations > 0 ? (isAllPages ? 1 : safePage * pageSize + 1) : 0;
+  const endRow = isAllPages ? totalReservations : Math.min(totalReservations, (safePage + 1) * pageSize);
+  const rows = isAllPages ? groupedOrders : groupedOrders.slice(safePage * pageSize, (safePage + 1) * pageSize);
 
   async function adjustStockOnCancel(productId: string, isCancelling: boolean, quantity: number) {
     if (!productId) return;
@@ -847,10 +858,21 @@ export function OrdersTab({
                   URL.revokeObjectURL(url);
                   toast.success("Relatório financeiro por competência exportado com sucesso!");
                 }}
-                className="h-9 text-xs gap-1.5 border-border/80"
+                className="h-9 text-xs gap-1.5 border-border/80 no-print"
               >
                 <Download className="size-3.5 text-primary" />
                 <span>Exportar Relatório Financeiro</span>
+              </Button>
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => window.print()}
+                className="h-9 text-xs gap-1.5 border-border/80 hover:bg-primary/5 no-print"
+                title="Imprimir relatório das reservas com quebra de página"
+              >
+                <Printer className="size-3.5 text-primary" />
+                <span>Imprimir / PDF</span>
               </Button>
             </div>
           </div>
@@ -975,8 +997,20 @@ export function OrdersTab({
                                   </Badge>
                                 )}
                               </div>
-                              <p className="text-xs font-semibold leading-tight line-clamp-2">{o.products?.model || "Miniatura"}</p>
-                              <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{displayName}</p>
+                              <p className="text-xs font-semibold leading-snug whitespace-normal break-words">{o.products?.model || "Miniatura"}</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5 whitespace-normal break-words leading-tight">{displayName}</p>
+                              {(o.products as any)?.sku && (
+                                <div className="mt-0.5">
+                                  <span className="inline-block text-[9px] font-mono text-muted-foreground bg-muted/60 px-1 py-0.2 rounded border border-border/40">
+                                    SKU: {(o.products as any).sku}
+                                  </span>
+                                </div>
+                              )}
+                              {(o.products as any)?.observation && (
+                                <p className="text-[10px] text-muted-foreground/85 italic whitespace-pre-wrap break-words mt-0.5">
+                                  Obs: {(o.products as any).observation}
+                                </p>
+                              )}
                             </div>
                           </div>
                           <div className="flex justify-between items-center mt-2 border-t border-border/40 pt-2">
@@ -1052,12 +1086,12 @@ export function OrdersTab({
                         <div className="rounded-2xl border border-border/70 bg-card p-4 space-y-3.5 shadow-sm">
                         {/* Cliente e WhatsApp */}
                         <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-3">
-                            <Checkbox checked={selectedOrders.has(groupId)} onCheckedChange={() => toggleSelection(groupId)} />
-                            <div>
-                              <p className="font-semibold text-base">{displayName}</p>
+                          <div className="flex items-start gap-3 min-w-0 flex-1">
+                            <Checkbox checked={selectedOrders.has(groupId)} onCheckedChange={() => toggleSelection(groupId)} className="mt-1 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-base whitespace-normal break-words leading-snug">{displayName}</p>
                               {o.profiles?.email && !guestMeta && (
-                                <p className="text-xs text-muted-foreground">{o.profiles.email}</p>
+                                <p className="text-xs text-muted-foreground break-all">{o.profiles.email}</p>
                               )}
                               <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{groupId.slice(0, 8)}</p>
                             </div>
@@ -1072,8 +1106,8 @@ export function OrdersTab({
                         </div>
 
                         {/* Produto / Miniatura */}
-                        <div className="flex items-center gap-3 rounded-xl bg-muted/30 p-2.5 border border-border/40">
-                          <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50">
+                        <div className="flex items-start gap-3 rounded-xl bg-muted/30 p-2.5 border border-border/40">
+                          <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50 mt-0.5">
                             {o.products?.image_url ? (
                               <img
                                 src={o.products.image_url}
@@ -1105,9 +1139,21 @@ export function OrdersTab({
                                 </Badge>
                               )}
                             </div>
-                            <p className="font-semibold text-sm truncate flex items-center gap-1">
+                            <p className="font-semibold text-sm whitespace-normal break-words leading-snug mt-0.5">
                               {o.products?.model || "Miniatura"}
                             </p>
+                            {(o.products as any)?.sku && (
+                              <div className="mt-1">
+                                <span className="inline-block text-[10px] font-mono text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded border border-border/40">
+                                  SKU: {(o.products as any).sku}
+                                </span>
+                              </div>
+                            )}
+                            {(o.products as any)?.observation && (
+                              <p className="text-xs text-muted-foreground/90 whitespace-pre-wrap break-words mt-1 italic">
+                                Obs: {(o.products as any).observation}
+                              </p>
+                            )}
                           </div>
                         </div>
 
@@ -1289,23 +1335,23 @@ export function OrdersTab({
         </div>
 
         {/* VISÃO PARA DESKTOP (TABELA COMPLETA) */}
-        <div className="hidden md:block overflow-x-auto">
-          <Table>
+        <div className="hidden md:block overflow-x-auto print:overflow-visible">
+          <Table className="print:w-full">
             <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
+              <TableRow className="print:border-b-2">
+                <TableHead className="w-10 no-print">
                   <Checkbox 
                     checked={rows.length > 0 && selectedOrders.size === rows.length} 
                     onCheckedChange={toggleAllSelection} 
                   />
                 </TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Miniatura</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Sinal (un.)</TableHead>
-                <TableHead>Saldo</TableHead>
-                <TableHead>Status & Rastreio</TableHead>
-                <TableHead>Prazo</TableHead>
+                <TableHead className="min-w-[140px] max-w-[200px] whitespace-normal">Cliente</TableHead>
+                <TableHead className="min-w-[240px] max-w-[380px] whitespace-normal">Miniatura</TableHead>
+                <TableHead className="whitespace-nowrap">Total</TableHead>
+                <TableHead className="whitespace-nowrap">Sinal (un.)</TableHead>
+                <TableHead className="whitespace-nowrap">Saldo</TableHead>
+                <TableHead className="min-w-[155px] whitespace-normal">Status & Rastreio</TableHead>
+                <TableHead className="whitespace-nowrap">Prazo</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1333,19 +1379,19 @@ export function OrdersTab({
                 const currentPaymentStatus = o.payment_status;
 
                 return (
-                  <TableRow key={groupId} data-state={selectedOrders.has(groupId) ? "selected" : undefined}>
-                    <TableCell>
+                  <TableRow key={groupId} data-state={selectedOrders.has(groupId) ? "selected" : undefined} className="print:break-inside-avoid">
+                    <TableCell className="no-print align-top py-3">
                       <Checkbox 
                         checked={selectedOrders.has(groupId)} 
                         onCheckedChange={() => toggleSelection(groupId)} 
                       />
                     </TableCell>
-                    <TableCell className="min-w-[150px]">
-                      <p className="font-medium">{displayName}</p>
+                    <TableCell className="min-w-[140px] max-w-[200px] align-top py-3">
+                      <p className="font-medium whitespace-normal break-words leading-snug">{displayName}</p>
                       {o.profiles?.email && !guestMeta && (
-                        <p className="text-[11px] text-muted-foreground">{o.profiles.email}</p>
+                        <p className="text-[11px] text-muted-foreground break-all">{o.profiles.email}</p>
                       )}
-                      <div className="mt-1">
+                      <div className="mt-1 no-print">
                         <OrderWhatsAppDropdown
                           order={o}
                           quantity={quantity}
@@ -1356,9 +1402,9 @@ export function OrdersTab({
                       </div>
                       <p className="text-[10px] text-muted-foreground/50 font-mono mt-1">#{groupId.slice(0, 8)}</p>
                     </TableCell>
-                    <TableCell className="min-w-[250px] max-w-[400px]">
-                      <div className="flex items-center gap-3">
-                        <div className="size-11 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50">
+                    <TableCell className="min-w-[240px] max-w-[380px] align-top py-3">
+                      <div className="flex items-start gap-3">
+                        <div className="size-11 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50 mt-0.5">
                           {o.products?.image_url ? (
                             <img
                               src={o.products.image_url}
@@ -1372,11 +1418,11 @@ export function OrdersTab({
                             </div>
                           )}
                         </div>
-                        <div>
-                          <p className="font-semibold text-sm flex items-center gap-1">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-sm whitespace-normal break-words leading-snug">
                             {o.products?.model || "Miniatura"}
                           </p>
-                          <div className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 flex-wrap">
+                          <div className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 flex-wrap mt-0.5">
                             <span>{o.products?.brand}</span>
                             {isProntaEntrega(o.products) ? (
                               <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[9px] px-1 py-0 h-4 gap-0.5">
@@ -1393,15 +1439,27 @@ export function OrdersTab({
                               </Badge>
                             )}
                           </div>
+                          {(o.products as any)?.sku && (
+                            <div className="mt-1">
+                              <span className="inline-block text-[10px] font-mono text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded border border-border/40">
+                                SKU: {(o.products as any).sku}
+                              </span>
+                            </div>
+                          )}
+                          {(o.products as any)?.observation && (
+                            <p className="text-xs text-muted-foreground/90 whitespace-pre-wrap break-words mt-1 italic">
+                              Obs: {(o.products as any).observation}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="align-top py-3 whitespace-nowrap">
                       {brl(Number(o.total_price) * quantity)}
                       {quantity > 1 && <span className="block text-[10px] text-muted-foreground font-mono">({quantity}x {brl(Number(o.total_price))})</span>}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
+                    <TableCell className="align-top py-3">
+                      <div className="flex items-center gap-1.5 no-print">
                         <Input
                           className="h-8 w-24"
                           type="number"
@@ -1410,17 +1468,20 @@ export function OrdersTab({
                           value={drafts[groupId] ?? String(o.down_payment)}
                           onChange={(e) => setDrafts({ ...drafts, [groupId]: e.target.value })}
                         />
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() =>
-                          updateGroup(ids, { down_payment: Number(drafts[groupId] ?? o.down_payment) })
-                        }
-                      >
-                        OK
-                      </Button>
-                    </div>
-                  </TableCell>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() =>
+                            updateGroup(ids, { down_payment: Number(drafts[groupId] ?? o.down_payment) })
+                          }
+                        >
+                          OK
+                        </Button>
+                      </div>
+                      <div className="hidden print:block text-xs font-medium">
+                        {brl(Number(o.down_payment))} (un.)
+                      </div>
+                    </TableCell>
                   <TableCell className="font-medium text-primary align-top pt-4">
                     <div className="flex flex-col gap-2 items-start">
                       <span>
@@ -1578,30 +1639,129 @@ export function OrdersTab({
         </div>
         </>
         )}
-        <div className="flex items-center justify-between border-t border-border/60 p-3 text-sm">
-          <span className="text-muted-foreground">
-            Página {page + 1} de {pages}
-          </span>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={page === 0}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              Anterior
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={page >= pages - 1}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Próxima
-            </Button>
+        {/* BARRA DE PAGINAÇÃO COMPLETA & SELEÇÃO DE ITENS POR PÁGINA */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border/60 p-4 text-xs sm:text-sm bg-muted/10 no-print">
+          <div className="flex items-center gap-3 text-muted-foreground flex-wrap">
+            <span>
+              Mostrando <strong className="text-foreground">{startRow}</strong> a{" "}
+              <strong className="text-foreground">{endRow}</strong> de{" "}
+              <strong className="text-foreground">{totalReservations}</strong> {totalReservations === 1 ? "reserva" : "reservas"}
+              {!isAllPages && pages > 1 && ` (Página ${safePage + 1} de ${pages})`}
+            </span>
+            <div className="flex items-center gap-1.5 pl-2 border-l border-border/60">
+              <span className="text-xs">Exibir por página:</span>
+              <div className="flex items-center gap-1">
+                {PAGE_SIZE_OPTIONS.map((opt) => (
+                  <Button
+                    key={opt}
+                    size="sm"
+                    variant={pageSize === opt ? "default" : "outline"}
+                    className={`h-7 px-2 text-xs font-semibold ${
+                      pageSize === opt ? "shadow-xs" : "bg-background/80"
+                    }`}
+                    onClick={() => {
+                      setPageSize(opt);
+                      setPage(0);
+                    }}
+                  >
+                    {opt === 0 ? "Todos" : opt}
+                  </Button>
+                ))}
+              </div>
+            </div>
           </div>
+
+          {!isAllPages && pages > 1 && (
+            <div className="flex items-center gap-1 flex-wrap justify-center">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 w-8 p-0"
+                disabled={safePage === 0}
+                onClick={() => setPage(0)}
+                title="Primeira página"
+              >
+                <ChevronsLeft className="size-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-2.5 text-xs gap-1"
+                disabled={safePage === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                <ChevronLeft className="size-3.5" />
+                <span className="hidden sm:inline">Anterior</span>
+              </Button>
+
+              {/* Botões numerados com elipses inteligentes */}
+              {Array.from({ length: pages }).map((_, i) => {
+                const pageNum = i + 1;
+                const isCurrent = safePage === i;
+                if (
+                  pageNum === 1 ||
+                  pageNum === pages ||
+                  (pageNum >= safePage && pageNum <= safePage + 2)
+                ) {
+                  return (
+                    <Button
+                      key={pageNum}
+                      size="sm"
+                      variant={isCurrent ? "default" : "outline"}
+                      className={`h-8 w-8 p-0 text-xs font-semibold ${
+                        isCurrent ? "shadow-xs scale-105" : "bg-background/80"
+                      }`}
+                      onClick={() => setPage(i)}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                }
+                if (pageNum === safePage - 1 || pageNum === safePage + 3) {
+                  return (
+                    <span key={pageNum} className="text-muted-foreground px-1 text-xs">
+                      ...
+                    </span>
+                  );
+                }
+                return null;
+              })}
+
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-2.5 text-xs gap-1"
+                disabled={safePage >= pages - 1}
+                onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}
+              >
+                <span className="hidden sm:inline">Próxima</span>
+                <ChevronRight className="size-3.5" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 w-8 p-0"
+                disabled={safePage >= pages - 1}
+                onClick={() => setPage(pages - 1)}
+                title="Última página"
+              >
+                <ChevronsRight className="size-4" />
+              </Button>
+            </div>
+          )}
         </div>
       </CardContent>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          @page { margin: 10mm; }
+          body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background: #fff !important; color: #000 !important; }
+          header, nav, footer, .no-print, [data-floating-action] { display: none !important; }
+          .print-break-inside-avoid { break-inside: avoid !important; page-break-inside: avoid !important; }
+          thead { display: table-header-group !important; }
+          tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+        }
+      `}} />
       {storeId && (
         <ManualReservationDialog
           storeId={storeId}
