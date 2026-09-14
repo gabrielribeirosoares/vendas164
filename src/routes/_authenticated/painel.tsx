@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { AppFooter } from "@/components/AppFooter";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { InterfaceState } from "@/components/InterfaceState";
 import { PhoneInput } from "@/components/PhoneInput";
 import { Countdown } from "@/components/Countdown";
 import { DeliveryBadge, PaymentBadge } from "@/components/StatusBadge";
@@ -289,7 +290,7 @@ function CustomerDashboardContent() {
     return (
       <div className="min-h-screen">
         <AppHeader />
-        <main className="mx-auto max-w-6xl px-4 py-10">
+        <main role="status" aria-label="Carregando suas reservas" className="mx-auto max-w-6xl px-4 py-10">
           <Skeleton className="h-8 w-48 mb-6" />
           <div className="grid gap-4 sm:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -679,9 +680,26 @@ function CustomerDashboardContent() {
               </Card>
             ))}
             {!ordersLoading && !ordersQuery.isError && groupedPendingOrders.length === 0 && (
-              <p className="text-sm text-muted-foreground py-8 text-center">Você não possui reservas em andamento no momento.</p>
+              <InterfaceState
+                compact
+                icon={Package}
+                title="Nenhuma reserva em andamento"
+                description="Suas próximas reservas aparecerão aqui com valores, prazos e atualizações de entrega."
+              />
             )}
-            {ordersQuery.isError && <p role="alert" className="text-sm text-destructive">Não foi possível carregar as reservas. <Button variant="link" onClick={() => ordersQuery.refetch()}>Tentar novamente</Button></p>}
+            {ordersQuery.isError && (
+              <InterfaceState
+                compact
+                variant="error"
+                title="Não foi possível carregar as reservas"
+                description="Verifique sua conexão e tente novamente."
+                action={
+                  <Button size="sm" variant="outline" onClick={() => ordersQuery.refetch()}>
+                    Tentar novamente
+                  </Button>
+                }
+              />
+            )}
             {ordersQuery.hasNextPage && (
               <div className="flex justify-center pt-4">
                 <Button variant="outline" size="sm" disabled={ordersQuery.isFetchingNextPage} onClick={() => ordersQuery.fetchNextPage()}>
@@ -706,19 +724,23 @@ function CustomerDashboardContent() {
             )}
             
             {groupedDeliveredOrders.length === 0 ? (
-              <Card className="border-border/30 bg-muted/15 mt-4">
-                <CardContent className="p-8 text-center space-y-3">
-                  <Car className="mx-auto size-10 text-muted-foreground/60" />
-                  <h3 className="font-bold text-base text-foreground">
-                    {deliveredOrders.length > 0 ? "Nenhuma miniatura encontrada" : "Sua garagem está vazia"}
-                  </h3>
-                  <p className="text-xs text-muted-foreground max-w-sm mx-auto leading-relaxed">
-                    {deliveredOrders.length > 0 
-                      ? "Tente buscar por outro termo."
-                      : "Assim que suas reservas forem quitadas ou entregues pelo lojista, as miniaturas aparecerão automaticamente aqui na sua Garagem Colecionável!"}
-                  </p>
-                </CardContent>
-              </Card>
+              <InterfaceState
+                className="mt-4"
+                icon={Car}
+                title={deliveredOrders.length > 0 ? "Nenhuma miniatura encontrada" : "Sua garagem está vazia"}
+                description={
+                  deliveredOrders.length > 0
+                    ? "Tente buscar por outro modelo, marca, loja ou número do pedido."
+                    : "Quando suas reservas forem quitadas ou entregues, elas aparecerão automaticamente na sua garagem."
+                }
+                action={
+                  deliveredOrders.length > 0 ? (
+                    <Button size="sm" variant="outline" onClick={() => setGarageSearchQuery("")}>
+                      Limpar busca
+                    </Button>
+                  ) : undefined
+                }
+              />
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {groupedDeliveredOrders.map((item) => {
@@ -860,9 +882,26 @@ function CustomerDashboardContent() {
               </Card>
             ))}
             {!waitlistQuery.isLoading && !waitlistQuery.isError && waitlist.length === 0 && (
-              <p className="text-sm text-muted-foreground py-6 text-center">Você não está em nenhuma fila.</p>
+              <InterfaceState
+                compact
+                icon={BookmarkCheck}
+                title="Você não está em nenhuma fila"
+                description="Quando você entrar na fila de uma miniatura esgotada, poderá acompanhar sua posição aqui."
+              />
             )}
-            {waitlistQuery.isError && <p role="alert" className="text-sm text-destructive">Não foi possível carregar a fila. <Button variant="link" onClick={() => waitlistQuery.refetch()}>Tentar novamente</Button></p>}
+            {waitlistQuery.isError && (
+              <InterfaceState
+                compact
+                variant="error"
+                title="Não foi possível carregar a fila"
+                description="Verifique sua conexão e tente novamente."
+                action={
+                  <Button size="sm" variant="outline" onClick={() => waitlistQuery.refetch()}>
+                    Tentar novamente
+                  </Button>
+                }
+              />
+            )}
             {waitlistQuery.hasNextPage && (
               <div className="flex justify-center pt-4">
                 <Button variant="outline" size="sm" disabled={waitlistQuery.isFetchingNextPage} onClick={() => waitlistQuery.fetchNextPage()}>
