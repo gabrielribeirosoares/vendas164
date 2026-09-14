@@ -263,7 +263,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
   return (
     <div className="min-h-screen">
       <AppHeader />
-      <main className="mx-auto max-w-5xl px-4 py-10">
+      <main className="mx-auto max-w-5xl px-4 py-6 sm:py-10">
         <div className="mb-6">
           <Button variant="ghost" size="sm" asChild className="-ml-3 text-muted-foreground hover:text-foreground">
             <a href={getStoreFullUrl(product?.stores?.slug || slug)}>
@@ -272,14 +272,14 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
             </a>
           </Button>
         </div>
-        <div className="grid gap-8 md:grid-cols-2">
-          <div className="overflow-hidden rounded-3xl border border-border/30 bg-card/60">
-            <div className="aspect-square w-full bg-muted relative">
+        <div className="grid gap-6 md:grid-cols-2 lg:gap-10">
+          <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm sm:rounded-3xl">
+            <div className="relative aspect-square w-full bg-gradient-to-br from-muted/80 to-muted/30">
               {product.image_url ? (
                 <img
                   src={product.image_url}
                   alt={`${product.brand} ${product.model}`}
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-contain p-3 sm:p-5"
                   loading="lazy"
                 />
               ) : (
@@ -287,17 +287,10 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
                   <Package className="size-12" />
                 </div>
               )}
-              {isPronta && (
-                <div className="absolute top-4 left-4 z-10">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-bold text-white shadow-lg bg-emerald-600 border border-emerald-400/40 backdrop-blur-md">
-                    <Zap className="size-3.5 fill-current" /> Pronta Entrega
-                  </span>
-                </div>
-              )}
             </div>
           </div>
 
-          <div>
+          <div className="min-w-0 md:sticky md:top-24 md:self-start">
             <Link
               to="/loja/$slug"
               params={{ slug: product?.stores?.slug ?? "" }}
@@ -305,7 +298,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
             >
               <StoreIcon className="size-4" /> {product?.stores?.name}
             </Link>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight">{product.model}</h1>
+            <h1 className="mt-2 text-2xl font-bold leading-tight tracking-tight sm:text-3xl">{product.model}</h1>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               <span className="text-sm text-muted-foreground">
                 {product.brand} · escala {product.scale}
@@ -362,7 +355,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
                   </span>
                 )}
                 {selectedInstallment === 1 && installmentOptions.length > 1 && (
-                  <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                     À vista
                   </span>
                 )}
@@ -389,25 +382,25 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
                   {!hasNoSignal ? (
                     <div className="grid grid-cols-2 gap-2.5">
                       <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">Sinal para garantir:</span>
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Sinal para garantir:</span>
                         <span className="text-base sm:text-lg font-bold text-primary mt-0.5 block">{brl(downPaymentToPay)}</span>
                         {(product as any).payment_deadline_date ? (
-                          <span className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
+                          <span className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                             <Clock className="size-3 text-primary shrink-0" />
                             Até {new Date((product as any).payment_deadline_date + "T00:00:00").toLocaleDateString("pt-BR")}
                           </span>
                         ) : product.payment_deadline_hours ? (
-                          <span className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
+                          <span className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                             <Clock className="size-3 text-primary shrink-0" />
                             Prazo: {formatDeadlineHours(product.payment_deadline_hours)}
                           </span>
                         ) : null}
                       </div>
                       <div className="rounded-xl border border-border/30 bg-muted/20 p-3">
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">Saldo na chegada:</span>
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Saldo na chegada:</span>
                         <span className="text-base sm:text-lg font-bold text-foreground mt-0.5 block">{brl(remainingBalanceCalculated)}</span>
                         {product.release_date && (
-                          <span className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
+                          <span className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                             <CalendarDays className="size-3 text-primary shrink-0" />
                             Previsão: {new Date(product.release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}
                           </span>
@@ -421,7 +414,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
                         <span>Sem sinal prévio · Pagamento integral na chegada da miniatura</span>
                       </div>
                       {product.release_date && (
-                        <span className="text-[11px] text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                           Previsão: {new Date(product.release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}
                         </span>
                       )}
@@ -431,7 +424,16 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
               )}
             </div>
 
-            {/* Observações da Miniatura (Clean & Inline) */}
+            {(product as any).description && (
+              <section className="mt-5 rounded-2xl border border-border/40 bg-card/60 p-4">
+                <h2 className="text-sm font-semibold text-foreground">Sobre a miniatura</h2>
+                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-muted-foreground">
+                  {(product as any).description}
+                </p>
+              </section>
+            )}
+
+            {/* Observações da Miniatura */}
             {(product as any).observation && (
               <div className="mt-4 rounded-xl border border-border/40 bg-muted/20 px-3.5 py-2.5 flex items-start gap-2.5 text-xs sm:text-sm">
                 <Info className="size-4 text-primary shrink-0 mt-0.5" />
@@ -456,7 +458,8 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 rounded-lg"
+                          className="h-11 w-11 rounded-lg"
+                          aria-label="Diminuir quantidade"
                           onClick={() => setQuantity(Math.max(1, quantity - 1))}
                           disabled={quantity <= 1}
                         >
@@ -467,7 +470,8 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 rounded-lg"
+                          className="h-11 w-11 rounded-lg"
+                          aria-label="Aumentar quantidade"
                           onClick={() => setQuantity(Math.min(product.stock, 10, quantity + 1))}
                           disabled={quantity >= Math.min(product.stock, 10)}
                         >
@@ -484,7 +488,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
                         value={String(selectedInstallment)}
                         onValueChange={(val) => setSelectedInstallment(Number(val))}
                       >
-                        <SelectTrigger className="h-9 rounded-xl bg-muted/20 border-border/40 text-xs">
+                        <SelectTrigger className="h-11 rounded-xl bg-muted/20 border-border/40 text-sm">
                           <CreditCard className="size-3.5 text-muted-foreground mr-1.5 shrink-0" />
                           <SelectValue />
                         </SelectTrigger>
@@ -502,21 +506,47 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
                   )}
                 </div>
 
-                {/* Resumo compacto apenas se quantity > 1 ou se parcelado */}
-                {(quantity > 1 || selectedInstallment > 1) && (
-                  <div className="rounded-lg bg-muted/20 px-3 py-2 border border-border/20 text-xs flex justify-between items-center text-muted-foreground">
-                    <span>Subtotal ({quantity} {quantity === 1 ? "unidade" : "unidades"}):</span>
-                    <span className="font-bold text-foreground">
-                      {selectedInstallment > 1 ? `${selectedInstallment}x de ${brl(installmentValCalculated)} (${brl(totalPriceCalculated)})` : brl(totalPriceCalculated)}
+                {/* Resumo do pedido sempre visível antes da ação principal */}
+                <div className="rounded-xl border border-border/40 bg-muted/20 p-3.5 text-sm">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="font-semibold text-foreground">Resumo do pedido</span>
+                    <span className="text-xs text-muted-foreground">
+                      {quantity} {quantity === 1 ? "unidade" : "unidades"}
                     </span>
                   </div>
-                )}
+                  <div className="space-y-1.5 text-xs text-muted-foreground">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Total</span>
+                      <strong className="text-sm font-bold text-foreground">{brl(totalPriceCalculated)}</strong>
+                    </div>
+                    {!isPronta && !hasNoSignal && (
+                      <>
+                        <div className="flex items-center justify-between gap-3">
+                          <span>Sinal para reservar</span>
+                          <strong className="font-semibold text-primary">{brl(downPaymentToPay)}</strong>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span>Saldo na chegada</span>
+                          <strong className="font-semibold text-foreground">{brl(remainingBalanceCalculated)}</strong>
+                        </div>
+                      </>
+                    )}
+                    {selectedInstallment > 1 && (
+                      <div className="flex items-center justify-between gap-3 border-t border-border/30 pt-1.5">
+                        <span>Forma selecionada</span>
+                        <strong className="text-right font-semibold text-foreground">
+                          {selectedInstallment}x de {brl(installmentValCalculated)}
+                        </strong>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 {/* Botões de Ação */}
-                <div className="flex flex-col sm:flex-row gap-2.5">
+                <div className="sticky bottom-2 z-20 -mx-1 flex flex-col gap-2.5 rounded-2xl border border-border/50 bg-background/95 p-2 shadow-lg backdrop-blur sm:flex-row md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:shadow-none">
                   <Button
                     size="lg"
-                    className="flex-1 h-11 font-bold shadow-md rounded-xl text-white transition-all text-sm"
+                    className="min-h-12 flex-1 rounded-xl text-sm font-bold text-white shadow-md transition-all"
                     onClick={handleReserve}
                     style={{ backgroundColor: product.stores?.primary_color }}
                     disabled={reserving}
@@ -530,17 +560,17 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
                     size="lg"
                     variant="outline"
                     onClick={share}
-                    className="h-11 rounded-xl border-border/40 text-muted-foreground hover:text-foreground text-sm"
+                    className="min-h-12 rounded-xl border-border/40 text-sm text-muted-foreground hover:text-foreground"
                   >
                     <Share2 className="size-4 mr-1.5" /> Compartilhar
                   </Button>
                 </div>
               </div>
             ) : (
-              <div className="mt-6 flex flex-col sm:flex-row gap-2.5 pt-4 border-t border-border/30">
+              <div className="sticky bottom-2 z-20 -mx-1 mt-6 flex flex-col gap-2.5 rounded-2xl border border-border/50 bg-background/95 p-2 pt-2 shadow-lg backdrop-blur sm:flex-row md:static md:mx-0 md:border-0 md:border-t md:border-border/30 md:bg-transparent md:p-0 md:pt-4 md:shadow-none">
                 <Button
                   size="lg"
-                  className="flex-1 h-11 font-bold shadow-md rounded-xl text-white transition-all text-sm"
+                  className="min-h-12 flex-1 rounded-xl text-sm font-bold text-white shadow-md transition-all"
                   onClick={handleReserve}
                   disabled={
                     !product.is_open ||
@@ -562,7 +592,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
                   size="lg"
                   variant="outline"
                   onClick={share}
-                  className="h-11 rounded-xl border-border/40 text-muted-foreground hover:text-foreground text-sm"
+                  className="min-h-12 rounded-xl border-border/40 text-sm text-muted-foreground hover:text-foreground"
                 >
                   <Share2 className="size-4 mr-1.5" /> Compartilhar
                 </Button>
