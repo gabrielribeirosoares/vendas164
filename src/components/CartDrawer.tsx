@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useCartStore } from '@/lib/cart';
 import { checkoutCart, reservationErrorMessage } from '@/lib/reservations';
 import { brl } from '@/lib/format';
@@ -38,20 +38,27 @@ export function CartDrawer() {
   const stores = [...new Set(cart.items.map(item => item.storeId))];
   const unitCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
 
-  async function refreshPrices() {
+  async function refreshPrices(options: { silent?: boolean } = {}) {
     setRefreshing(true);
     try {
       const { data, error } = await supabase.from('products').select('*').in('id', cart.items.map(i => i.productId));
       if (error) throw error;
       cart.refreshPrices(data ?? []);
       setErrorMessage('');
-      toast.success('Valores atualizados. Confira o resumo antes de confirmar.');
+      if (!options.silent) {
+        toast.success('Valores atualizados. Confira o resumo antes de confirmar.');
+      }
     } catch (error) {
       setErrorMessage(reservationErrorMessage(error));
     } finally {
       setRefreshing(false);
     }
   }
+
+  useEffect(() => {
+    if (!isOpen || cart.items.length === 0) return;
+    void refreshPrices({ silent: true });
+  }, [isOpen]);
 
   async function handleCheckout() {
     if (checkoutLock.current || busy || cart.items.length === 0) return;
@@ -86,7 +93,7 @@ export function CartDrawer() {
   }
 
   return (
-    <Sheet open={isOpen} onOpenChange={open => { if (!busy) setIsOpen(open); }}>
+    <Sheet open={isOpen} onOpenChange={open => { if (open || !reserving) setIsOpen(open); }}>
       <SheetTrigger asChild>
         <Button variant="outline" size="icon" className="relative shrink-0" aria-label={`Abrir carrinho, ${unitCount} unidades`}>
           <ShoppingBag className="size-4" aria-hidden />
@@ -180,7 +187,7 @@ export function CartDrawer() {
                               variant="ghost"
                               size="icon"
                               className="size-11 rounded-xl"
-                              disabled={busy || item.quantity <= 1 || !item.pricingProduct}
+                              disabled={busy || item.quantity <= 1}
                               aria-label={`Diminuir quantidade de ${item.productSnapshot.model}`}
                               onClick={() => {
                                 cart.updateQuantity(item.id, item.quantity - 1);
@@ -194,7 +201,7 @@ export function CartDrawer() {
                               variant="ghost"
                               size="icon"
                               className="size-11 rounded-xl"
-                              disabled={busy || !item.pricingProduct || item.quantity >= Math.min(100, item.pricingProduct?.stock ?? 100)}
+                              disabled={busy || item.quantity >= Math.min(100, item.pricingProduct?.stock ?? 100)}
                               aria-label={`Aumentar quantidade de ${item.productSnapshot.model}`}
                               onClick={() => {
                                 cart.updateQuantity(item.id, item.quantity + 1);
@@ -239,14 +246,14 @@ export function CartDrawer() {
             {errorMessage && (
               <div role="alert" aria-live="assertive" className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
                 <p>{errorMessage}</p>
-                <Button variant="outline" size="sm" disabled={busy} onClick={refreshPrices} className="mt-2 gap-2 border-destructive/30">
+                <Button variant="outline" size="sm" disabled={busy} onClick={() => void refreshPrices()} className="mt-2 gap-2 border-destructive/30">
                   <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
                   Atualizar e tentar novamente
                 </Button>
               </div>
             )}
             <div className="flex items-center justify-between gap-2">
-              <Button variant="ghost" size="sm" disabled={busy} onClick={refreshPrices} className="gap-2">
+              <Button variant="ghost" size="sm" disabled={busy} onClick={() => void refreshPrices()} className="gap-2">
                 <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
                 Atualizar valores
               </Button>
