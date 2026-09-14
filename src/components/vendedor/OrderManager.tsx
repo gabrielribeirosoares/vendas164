@@ -14,7 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { PaymentBadge } from '@/components/StatusBadge';
+import { DeliveryBadge, PaymentBadge } from '@/components/StatusBadge';
 import { Countdown } from '@/components/Countdown';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { prepararDadosExportacaoFinanceira } from '@/lib/exportFinanceiro';
@@ -1207,6 +1207,7 @@ export function OrdersTab({
                             <div className="space-y-3 rounded-xl border border-border/40 p-3">
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <PaymentBadge status={currentPaymentStatus} />
+                                <DeliveryBadge status={o.delivery_status} />
                                 {currentPaymentStatus === "aguardando_sinal" && o.reservation_expires_at ? (
                                   <Countdown expiresAt={o.reservation_expires_at} />
                                 ) : (currentPaymentStatus === "sem_sinal" || currentPaymentStatus === "pagar_na_chegada") && (o.products as any)?.release_date ? (
@@ -1245,6 +1246,7 @@ export function OrdersTab({
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="pendente">Pendente</SelectItem>
+                                      <SelectItem value="enviado">Enviado</SelectItem>
                                       <SelectItem value="em_transito">Em trânsito</SelectItem>
                                       <SelectItem value="entregue">Entregue</SelectItem>
                                       <SelectItem value="cancelado">Cancelado</SelectItem>
@@ -1519,6 +1521,7 @@ export function OrdersTab({
                     <TableCell className="w-[165px] min-w-[155px] max-w-[175px] align-top py-2.5 px-2">
                       <div className="flex flex-col gap-1.5 w-full">
                         <PaymentBadge status={currentPaymentStatus} />
+                                <DeliveryBadge status={o.delivery_status} />
                         <div className="no-print flex flex-col gap-1">
                           <Select
                             value={currentPaymentStatus}
@@ -1545,7 +1548,8 @@ export function OrdersTab({
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="pendente">Pendente</SelectItem>
-                              <SelectItem value="em_transito">Em trânsito</SelectItem>
+                              <SelectItem value="enviado">Enviado</SelectItem>
+                                      <SelectItem value="em_transito">Em trânsito</SelectItem>
                               <SelectItem value="entregue">Entregue</SelectItem>
                               <SelectItem value="cancelado">Cancelado</SelectItem>
                             </SelectContent>
@@ -1803,7 +1807,8 @@ export function OrdersTab({
                   <SelectValue placeholder="Status Envio..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="em_transito">Em trânsito</SelectItem>
+                  <SelectItem value="enviado">Enviado</SelectItem>
+                                      <SelectItem value="em_transito">Em trânsito</SelectItem>
                   <SelectItem value="entregue">Entregue</SelectItem>
                 </SelectContent>
               </Select>
