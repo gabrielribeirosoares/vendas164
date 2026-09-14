@@ -16,7 +16,7 @@ test("store card keeps readable labels and separate interactive elements", () =>
   assert.match(card, /min-h-11/);
   assert.match(card, /aria-label=/);
   assert.doesNotMatch(card, /text-\[(?:9|10|11)px\]/);
-  assert.doesNotMatch(card, /<a[^>]*>[\s\S]*<Button[\s\S]*<\/a>/);
+  assert.doesNotMatch(route, /<a\s+key={p.id}[\s\S]{0,120}<Card/);
 });
 
 test("store card exposes the key purchase information", () => {
