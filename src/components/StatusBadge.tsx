@@ -1,29 +1,120 @@
+import type { LucideIcon } from "lucide-react";
+import {
+  CircleCheck,
+  CircleDashed,
+  CircleX,
+  Clock3,
+  PackageCheck,
+  Truck,
+  WalletCards,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { deliveryLabels, paymentLabels } from "@/lib/format";
 
-const paymentStyles: Record<string, string> = {
-  aguardando_sinal: "bg-warning/15 text-warning border-warning/40 shadow-[0_0_12px_-3px_rgba(234,179,8,0.4)]",
-  sem_sinal: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/40 shadow-[0_0_12px_-3px_rgba(59,130,246,0.4)]",
-  pagar_na_chegada: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/40 shadow-[0_0_12px_-3px_rgba(168,85,247,0.4)]",
-  pronta_entrega: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 shadow-[0_0_12px_-3px_rgba(16,185,129,0.4)]",
-  sinal_pago: "bg-primary/15 text-primary border-primary/40 shadow-[0_0_12px_-3px_rgba(249,115,22,0.4)]",
-  quitado: "bg-success/15 text-success border-success/40 shadow-[0_0_12px_-3px_rgba(34,197,94,0.4)]",
-  cancelado: "bg-destructive/15 text-destructive border-destructive/40 shadow-[0_0_12px_-3px_rgba(239,68,68,0.4)]",
+type StatusAppearance = {
+  icon: LucideIcon;
+  className: string;
 };
+
+const paymentStyles: Record<string, StatusAppearance> = {
+  aguardando_sinal: {
+    icon: Clock3,
+    className: "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  },
+  sem_sinal: {
+    icon: Clock3,
+    className: "border-violet-500/35 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  },
+  pagar_na_chegada: {
+    icon: Clock3,
+    className: "border-violet-500/35 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  },
+  pronta_entrega: {
+    icon: WalletCards,
+    className: "border-sky-500/35 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+  },
+  sinal_pago: {
+    icon: WalletCards,
+    className: "border-blue-500/35 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  },
+  quitado: {
+    icon: CircleCheck,
+    className: "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  },
+  cancelado: {
+    icon: CircleX,
+    className: "border-destructive/35 bg-destructive/10 text-destructive",
+  },
+};
+
+const deliveryStyles: Record<string, StatusAppearance> = {
+  pendente: {
+    icon: CircleDashed,
+    className: "border-slate-400/35 bg-slate-500/10 text-slate-600 dark:text-slate-300",
+  },
+  enviado: {
+    icon: Truck,
+    className: "border-blue-500/35 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  },
+  em_transito: {
+    icon: Truck,
+    className: "border-blue-500/35 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  },
+  entregue: {
+    icon: PackageCheck,
+    className: "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  },
+  cancelado: {
+    icon: CircleX,
+    className: "border-destructive/35 bg-destructive/10 text-destructive",
+  },
+};
+
+const fallbackStyle: StatusAppearance = {
+  icon: CircleDashed,
+  className: "border-border/60 bg-muted/50 text-muted-foreground",
+};
+
+function StatusBadge({
+  label,
+  appearance,
+}: {
+  label: string;
+  appearance?: StatusAppearance;
+}) {
+  const resolved = appearance ?? fallbackStyle;
+  const Icon = resolved.icon;
+
+  return (
+    <Badge
+      variant="outline"
+      aria-label={`Status: ${label}`}
+      className={cn(
+        "inline-flex min-h-6 max-w-full items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold leading-tight shadow-none",
+        resolved.className,
+      )}
+    >
+      <Icon className="size-3 shrink-0" aria-hidden="true" />
+      <span className="whitespace-normal">{label}</span>
+    </Badge>
+  );
+}
 
 export function PaymentBadge({ status }: { status: string }) {
   return (
-    <Badge variant="outline" className={cn("border text-[11px] font-bold tracking-wide", paymentStyles[status])}>
-      {paymentLabels[status] ?? status}
-    </Badge>
+    <StatusBadge
+      label={paymentLabels[status] ?? status}
+      appearance={paymentStyles[status]}
+    />
   );
 }
 
 export function DeliveryBadge({ status }: { status: string }) {
   return (
-    <Badge variant="outline" className="border-border/30 text-muted-foreground text-[11px]">
-      {deliveryLabels[status] ?? status}
-    </Badge>
+    <StatusBadge
+      label={deliveryLabels[status] ?? status}
+      appearance={deliveryStyles[status]}
+    />
   );
 }

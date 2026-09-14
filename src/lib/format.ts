@@ -55,6 +55,7 @@ export const paymentLabels: Record<string, string> = {
 
 export const deliveryLabels: Record<string, string> = {
   pendente: "Pendente",
+  enviado: "Enviado",
   em_transito: "Em trânsito",
   entregue: "Entregue",
   cancelado: "Cancelado",
