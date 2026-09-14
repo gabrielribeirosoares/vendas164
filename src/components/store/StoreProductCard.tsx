@@ -1,26 +1,34 @@
-import type { MouseEvent } from 'react';
-import type { Product } from '@/lib/cart';
-import { brl, getProductSignalAmount, isProntaEntrega } from '@/lib/format';
-import { getProductUrl } from '@/lib/subdomain';
-import { Button } from '@/components/ui/button';
-import { Package, ShoppingCart } from 'lucide-react';
+import type { MouseEvent } from "react";
+import type { Product } from "@/lib/cart";
+import { brl, getProductInstallmentInfo, getProductSignalAmount, isProntaEntrega } from "@/lib/format";
+import { getProductUrl } from "@/lib/subdomain";
+import { Button } from "@/components/ui/button";
+import { Package, ShoppingCart } from "lucide-react";
+
+interface StoreProductCardProps {
+  product: Product;
+  storeSlug: string;
+  primaryColor?: string | null;
+  customBadge?: string | null;
+  onAdd: (event: MouseEvent, product: Product) => void;
+}
 
 export function StoreProductCard({
   product,
   storeSlug,
+  primaryColor,
+  customBadge,
   onAdd,
-}: {
-  product: Product;
-  storeSlug: string;
-  onAdd: (event: MouseEvent, product: Product) => void;
-}) {
+}: StoreProductCardProps) {
   const available = product.is_open && product.stock > 0;
   const ready = isProntaEntrega(product);
   const signal = getProductSignalAmount(product);
+  const installment = getProductInstallmentInfo(product);
   const url = getProductUrl(storeSlug, product.slug || product.id);
+  const metadata = [product.brand, product.scale].filter(Boolean).join(" · ");
 
   return (
-    <article className="group flex h-full flex-col overflow-hidden rounded-2xl border bg-card shadow-sm transition-shadow hover:shadow-md">
+    <article className="group flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-border/50 bg-card shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md focus-within:border-primary/40 sm:rounded-2xl">
       <a
         href={url}
         className="relative block aspect-[4/3] overflow-hidden bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
@@ -29,72 +37,102 @@ export function StoreProductCard({
         {product.image_url ? (
           <img
             src={product.image_url}
-            alt={product.model}
+            alt={`${product.brand} ${product.model}`}
             loading="lazy"
             width="480"
             height="360"
-            className="size-full object-contain p-3 transition-transform duration-300 motion-safe:group-hover:scale-105"
+            className="size-full object-contain p-2 transition-transform duration-300 motion-safe:group-hover:scale-105 sm:p-3"
           />
         ) : (
           <div className="flex size-full items-center justify-center">
-            <Package className="size-10 text-muted-foreground" />
+            <Package className="size-9 text-muted-foreground sm:size-10" />
           </div>
         )}
-        <span className="absolute left-3 top-3 rounded-md border bg-background/95 px-2 py-1 text-xs font-medium">
-          {ready ? 'Pronta entrega' : 'Pré-venda'}
+
+        <span
+          className={`absolute left-2 top-2 max-w-[calc(100%-1rem)] truncate rounded-full px-2 py-1 text-xs font-semibold text-white shadow-sm sm:left-3 sm:top-3 ${
+            ready ? "bg-emerald-600" : "bg-amber-600"
+          }`}
+        >
+          {ready ? "Pronta entrega" : "Pré-venda"}
         </span>
       </a>
 
-      <div className="flex flex-1 flex-col gap-3 p-4">
-        <div>
-          <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
-            <span>{product.brand} · {product.scale}</span>
-            {product.sku && (
-              <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded border text-foreground/80 font-medium">
-                SKU: {product.sku}
-              </span>
-            )}
-          </div>
-          <h3 className="mt-1 min-h-10 text-sm font-semibold leading-5 sm:text-base">
-            <a href={url} className="line-clamp-2 hover:underline">
+      <div className="flex flex-1 flex-col gap-3 p-3 sm:p-4">
+        <div className="min-w-0">
+          <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {metadata || "Miniatura 1:64"}
+          </p>
+          <h3 className="mt-1 min-h-10 text-sm font-semibold leading-5 text-foreground sm:text-base">
+            <a
+              href={url}
+              className="line-clamp-2 rounded-sm decoration-primary/40 underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               {product.model}
             </a>
           </h3>
+
+          {customBadge && (
+            <p className="mt-2 inline-flex max-w-full truncate rounded-full bg-amber-500/15 px-2 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+              {customBadge}
+            </p>
+          )}
+
           {product.observation && (
-            <p className="mt-1 text-xs text-muted-foreground line-clamp-1 italic">
+            <p className="mt-2 line-clamp-2 text-xs leading-4 text-muted-foreground">
               {product.observation}
             </p>
           )}
         </div>
 
-        <div>
-          <p className="text-xs text-muted-foreground">Preço total à vista</p>
-          <p className="mt-0.5 text-xl font-bold tabular-nums">{brl(product.price)}</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {signal.isSemSinal ? 'Sem sinal antecipado' : `Sinal de ${brl(Math.min(Number(product.price), signal.amount))}`}
+        <div className="border-t border-border/40 pt-3">
+          <p className="text-xs font-medium text-muted-foreground">À vista</p>
+          <p className="mt-0.5 text-lg font-bold leading-tight tabular-nums sm:text-xl" style={primaryColor ? { color: primaryColor } : undefined}>
+            {brl(Number(product.price))}
           </p>
+
+          <div className="mt-2 space-y-1 text-xs leading-4">
+            <p className={signal.isSemSinal ? "font-medium text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}>
+              {signal.isSemSinal
+                ? "Sem sinal antecipado"
+                : <>Sinal: <strong className="font-semibold text-foreground">{brl(Math.min(Number(product.price), signal.amount))}</strong></>}
+            </p>
+            {installment && (
+              <p className="text-muted-foreground">
+                Até <strong className="font-semibold text-foreground">{installment.maxInstallments}x de {brl(installment.installmentValue)}</strong>
+              </p>
+            )}
+          </div>
         </div>
 
-        <div className="mt-auto space-y-3">
-          <p className="text-xs text-muted-foreground">
-            {ready
-              ? 'Disponível para envio pela loja'
-              : product.release_date
-                ? `Previsão: ${new Date(`${product.release_date}T12:00:00`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
-                : 'Previsão de chegada a confirmar'}
+        <div className="mt-auto space-y-2">
+          <p className={`text-xs font-medium ${
+            !available
+              ? "text-muted-foreground"
+              : product.stock <= 2
+                ? "text-rose-600 dark:text-rose-400"
+                : "text-emerald-600 dark:text-emerald-400"
+          }`}>
+            {!product.is_open
+              ? "Pré-venda encerrada"
+              : product.stock <= 0
+                ? "Indisponível — consulte a fila"
+                : product.stock === 1
+                  ? "Última unidade disponível"
+                  : `${product.stock} unidades disponíveis`}
           </p>
-          <p className={`text-xs ${available && product.stock <= 2 ? 'font-semibold text-warning' : 'text-muted-foreground'}`}>
-            {available
-              ? `${product.stock} ${product.stock === 1 ? 'unidade disponível' : 'unidades disponíveis'}`
-              : 'Indisponível no momento'}
-          </p>
+
           {available ? (
-            <Button className="min-h-11 w-full gap-2" onClick={event => onAdd(event, product)}>
-              <ShoppingCart className="size-4" />
-              Adicionar
+            <Button
+              className="min-h-11 w-full gap-2 px-2 text-xs font-semibold sm:text-sm"
+              style={primaryColor ? { backgroundColor: primaryColor, color: "#fff" } : undefined}
+              onClick={(event) => onAdd(event, product)}
+            >
+              <ShoppingCart className="size-4 shrink-0" />
+              <span>Adicionar</span>
             </Button>
           ) : (
-            <Button asChild variant="outline" className="min-h-11 w-full">
+            <Button asChild variant="outline" className="min-h-11 w-full px-2 text-xs font-semibold sm:text-sm">
               <a href={url}>Ver disponibilidade</a>
             </Button>
           )}
