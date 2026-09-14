@@ -15,13 +15,14 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, getProductInstallmentInfo, getProductSignalAmount, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
+import { brl, getProductSignalAmount, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
 import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 import { useCartStore } from "@/lib/cart";
 import { saveCustomerToCache } from "@/lib/customerCache";
 import { getStoreBanner, getProductBadge } from "@/lib/storeCustomizations";
 import { StoreReviewsSection } from "@/components/StoreReviewsSection";
+import { StoreProductCard } from "@/components/store/StoreProductCard";
 import { getSubdomain, getStoreFullUrl, getProductUrl } from "@/lib/subdomain";
 
 const fetchStoreBySlug = createServerFn({ method: "GET" })
@@ -879,151 +880,16 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                       })}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
                       {brandProducts.map((p) => (
-                        <a
+                        <StoreProductCard
                           key={p.id}
-                          href={getProductUrl(slug ?? "loja", p.slug || p.id)}
-                          className="group"
-                        >
-                          <Card className="flex h-full flex-col overflow-hidden border-border/30 bg-card/60 transition-transform group-hover:-translate-y-1 shadow-sm">
-                            <div className="relative aspect-video w-full overflow-hidden bg-muted">
-                              {/* Badges Flutuantes no Canto Superior Esquerdo */}
-                              <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10 items-start pointer-events-none">
-                                {getProductBadge(p.id) && (
-                                  <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-gradient-to-r from-amber-500 to-orange-600 border border-amber-400/30">
-                                    {getProductBadge(p.id)}
-                                  </span>
-                                )}
-                                {p.stock > 0 && p.stock <= 2 && (
-                                  <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-rose-600/90 border border-rose-400/30">
-                                    Últimas {p.stock} un.
-                                  </span>
-                                )}
-                                {!isProntaEntrega(p) && hasNoSignalRequirement(p) && (
-                                  <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-emerald-600/90 border border-emerald-400/30">
-                                    Sem Sinal
-                                  </span>
-                                )}
-                                {isProntaEntrega(p) && !getProductBadge(p.id) && (
-                                  <span className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-md bg-emerald-600 border border-emerald-400/40">
-                                    ⚡ Pronta Entrega
-                                  </span>
-                                )}
-                              </div>
-                              {p.image_url ? (
-                                <img
-                                  src={p.image_url}
-                                  alt={`${p.brand} ${p.model}`}
-                                  loading="lazy"
-                                  className="h-full w-full object-cover transition-transform group-hover:scale-105 duration-300"
-                                />
-                              ) : (
-                                <div className="flex h-full items-center justify-center text-muted-foreground">
-                                  <Package className="size-8" />
-                                </div>
-                              )}
-                              {/* Badge flutuante de acionamento na foto */}
-                              <button
-                                onClick={(e) => handleQuickAdd(e, p)}
-                                className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur-md transition-transform hover:scale-105 z-10"
-                                style={{ backgroundColor: store.primary_color }}
-                              >
-                                <ShoppingCart className="size-3.5" />
-                                <span>+ Carrinho</span>
-                              </button>
-                            </div>
-
-                            <CardContent className="flex flex-1 flex-col justify-between p-4">
-                              <div>
-                                <div className="flex items-center justify-between gap-1 flex-wrap">
-                                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                                    {p.brand} · {p.scale}
-                                  </p>
-                                  {(p as any).sku && (
-                                    <span className="font-mono text-[9px] bg-muted/80 text-muted-foreground px-1.5 py-0.2 rounded border border-border/20">
-                                      SKU: {(p as any).sku}
-                                    </span>
-                                  )}
-                                </div>
-                                <h3 className="mt-1 font-semibold line-clamp-1">{p.model}</h3>
-                                {(p as any).observation && (
-                                  <p className="text-[11px] text-muted-foreground line-clamp-2 mt-1 italic leading-snug">
-                                    {(p as any).observation}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="mt-4 space-y-3">
-                                <div className="flex flex-col gap-1.5">
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <span className="text-[10px] uppercase font-semibold text-muted-foreground block">
-                                        À vista
-                                      </span>
-                                      <span
-                                        className="font-display text-lg font-bold"
-                                        style={{ color: store.primary_color }}
-                                      >
-                                        {brl(Number(p.price))}
-                                      </span>
-                                    </div>
-                                    <Badge variant={p.is_open ? "secondary" : "outline"} className="border-border/30 text-xs">
-                                      {formatStockRemaining(p)}
-                                    </Badge>
-                                  </div>
-
-                                  {(() => {
-                                    const signal = getProductSignalAmount(p);
-                                    if (signal.isSemSinal) {
-                                      return (
-                                        <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                                          <span className="inline-block size-1.5 rounded-full bg-emerald-500" />
-                                          <span>Sem sinal (Pagar na chegada)</span>
-                                        </div>
-                                      );
-                                    }
-                                    return (
-                                      <div className="flex items-center justify-between text-xs rounded-md bg-muted/30 px-2 py-1 border border-border/20">
-                                        <span className="text-muted-foreground">Sinal para reservar:</span>
-                                        <strong className="text-primary font-semibold">{brl(signal.amount)}</strong>
-                                      </div>
-                                    );
-                                  })()}
-
-                                  {(() => {
-                                    const inst = getProductInstallmentInfo(p);
-                                    if (!inst) return null;
-                                    return (
-                                      <p className="text-[11px] text-muted-foreground">
-                                        ou <strong className="text-foreground">{inst.maxInstallments}x de {brl(inst.installmentValue)}</strong>{" "}
-                                        {inst.hasSurcharge ? "" : "sem acréscimo"}
-                                      </p>
-                                    );
-                                  })()}
-                                </div>
-
-                                <Button
-                                  size="sm"
-                                  className="w-full font-semibold gap-1.5"
-                                  style={
-                                    p.is_open && p.stock > 0
-                                      ? { backgroundColor: store.primary_color, color: "#fff" }
-                                      : undefined
-                                  }
-                                  variant={p.is_open && p.stock > 0 ? "default" : "outline"}
-                                >
-                                  <BookmarkCheck className="size-4 shrink-0" />
-                                  {!p.is_open
-                                    ? "Pré-venda fechada"
-                                    : p.stock > 0
-                                      ? "Reservar unidade"
-                                      : "Entrar na fila"}
-                                </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </a>
+                          product={p}
+                          storeSlug={slug || "loja"}
+                          primaryColor={store.primary_color}
+                          customBadge={getProductBadge(p.id)}
+                          onAdd={handleQuickAdd}
+                        />
                       ))}
                     </div>
                   )}
