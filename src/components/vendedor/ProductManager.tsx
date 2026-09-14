@@ -7,6 +7,7 @@ import { Loader2, Pencil, Plus, Search, Share2, Trash2, X, ChevronLeft, ChevronR
 import { toast } from "sonner";
 import { getProductBadge, saveProductBadge, saveProductCategory, PRESET_BADGES } from "@/lib/storeCustomizations";
 import { BlingIntegrationDialog } from "@/components/vendedor/BlingIntegrationDialog";
+import { InterfaceState } from "@/components/InterfaceState";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1112,13 +1113,54 @@ export function ProductsTab({
             })}
 
             {displayedProducts.length === 0 && (
-              <p className="text-sm text-muted-foreground py-6 text-center">
-                {mode === "pronta_entrega"
-                  ? "Nenhuma miniatura a pronta entrega cadastrada ainda."
-                  : mode === "pre_venda"
-                    ? "Nenhuma pré-venda cadastrada ainda."
-                    : "Nenhuma miniatura cadastrada ainda."}
-              </p>
+              <InterfaceState
+                icon={mode === "pronta_entrega" ? Zap : BookmarkCheck}
+                title={
+                  searchQuery || selectedBrand !== "all" || onlyOutOfStock
+                    ? "Nenhuma miniatura corresponde aos filtros"
+                    : mode === "pronta_entrega"
+                      ? "Nenhuma miniatura a pronta entrega"
+                      : mode === "pre_venda"
+                        ? "Nenhuma pré-venda cadastrada"
+                        : "Catálogo ainda vazio"
+                }
+                description={
+                  searchQuery || selectedBrand !== "all" || onlyOutOfStock
+                    ? "Limpe os filtros ou tente uma busca diferente para visualizar outros itens."
+                    : "Cadastre a primeira miniatura para começar a organizar e compartilhar seu catálogo."
+                }
+                action={
+                  searchQuery || selectedBrand !== "all" || onlyOutOfStock ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setSearchQuery("");
+                        setSelectedBrand("all");
+                        onClearStockFilter?.();
+                      }}
+                    >
+                      Limpar filtros
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setForm({
+                          ...emptyProduct,
+                          category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda",
+                          badge: mode === "pronta_entrega" ? "Pronta Entrega" : "",
+                        });
+                        setIsCustomBrand(false);
+                        setSheetOpen(true);
+                      }}
+                    >
+                      <Plus className="size-4" />
+                      {mode === "pronta_entrega" ? "Cadastrar pronta entrega" : "Cadastrar pré-venda"}
+                    </Button>
+                  )
+                }
+              />
             )}
           </div>
 
