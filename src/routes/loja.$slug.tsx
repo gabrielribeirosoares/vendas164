@@ -7,6 +7,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { AppHeader } from "@/components/AppHeader";
 import { updateAppFavicon } from "@/lib/favicon";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { InterfaceState } from "@/components/InterfaceState";
 import { Badge } from "@/components/ui/badge";
 import { AppFooter } from "@/components/AppFooter";
 import { Button } from "@/components/ui/button";
@@ -398,7 +399,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
     return (
       <div className="min-h-screen">
         <AppHeader />
-        <main className="mx-auto max-w-6xl px-4 py-10">
+        <main role="status" aria-label="Carregando catálogo" className="mx-auto max-w-6xl px-4 py-10">
           <Skeleton className="h-32 w-full rounded-3xl" />
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -420,7 +421,19 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
     return (
       <div className="min-h-screen">
         <AppHeader />
-        <p className="p-8 text-center text-sm text-muted-foreground">Loja não encontrada.</p>
+        <main className="mx-auto max-w-2xl px-4 py-16">
+          <InterfaceState
+            variant="error"
+            icon={StoreIcon}
+            title="Loja não encontrada"
+            description="O endereço pode estar incorreto ou esta loja não está disponível no momento."
+            action={
+              <Button asChild variant="outline">
+                <Link to="/">Voltar ao início</Link>
+              </Button>
+            }
+          />
+        </main>
       </div>
     );
   }
@@ -730,24 +743,25 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
           )}
         </div>
 
-        {/* Mensagem de Vazio quando não há miniaturas */}
+        {/* Mensagem de vazio quando não há miniaturas */}
         {filteredProducts.length === 0 ? (
-          <div className="mt-12 rounded-3xl border border-dashed border-border/60 p-12 text-center space-y-3 bg-card/20">
-            <Package className="mx-auto size-12 text-muted-foreground/40" />
-            <h3 className="text-base font-semibold text-foreground">Nenhuma miniatura encontrada</h3>
-            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              {searchQuery
+          <InterfaceState
+            className="mt-8"
+            icon={Package}
+            title="Nenhuma miniatura encontrada"
+            description={
+              searchQuery
                 ? `Não encontramos nenhum modelo compatível com "${searchQuery}". Tente pesquisar por outros termos.`
-                : "Não há miniaturas disponíveis com os filtros selecionados no momento."}
-            </p>
-            {hasActiveFilters && (
-              <div className="pt-2">
+                : "Não há miniaturas disponíveis com os filtros selecionados no momento."
+            }
+            action={
+              hasActiveFilters ? (
                 <Button size="sm" variant="outline" onClick={resetFilters}>
                   Limpar todos os filtros
                 </Button>
-              </div>
-            )}
-          </div>
+              ) : undefined
+            }
+          />
         ) : (
           /* Seções por Marca */
           <div className="mt-6 space-y-10">
