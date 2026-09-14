@@ -36,7 +36,7 @@ export function CartDrawer() {
   const total = cart.getCartTotal();
   const signal = cart.getCartDownPaymentTotal();
   const stores = [...new Set(cart.items.map(item => item.storeId))];
-  const unitCount = unitCount;
+  const unitCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
 
   async function refreshPrices() {
     setRefreshing(true);
