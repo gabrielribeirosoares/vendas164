@@ -164,11 +164,26 @@
     scrollbar-color: oklch(0.35 0.014 260 / 0.6) transparent;
   }
 
+  html {
+    min-width: 320px;
+    font-size: 16px;
+    text-size-adjust: 100%;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
+    line-height: 1.5;
+    text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
   }
 
   h1,
@@ -176,7 +191,18 @@
   h3,
   h4 {
     font-family: var(--font-display);
+    line-height: 1.2;
     letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--color-primary) 35%, transparent);
+    color: var(--color-foreground);
   }
 }
 
