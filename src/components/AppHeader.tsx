@@ -43,7 +43,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
   const mobileItemClass = (active: boolean, compact = false) =>
     `w-full justify-start gap-3 ${compact ? "h-11" : "h-12"} rounded-xl transition-colors ${
       active
-        ? "bg-primary/12 text-primary font-semibold shadow-sm ring-1 ring-primary/20 hover:bg-primary/15"
+        ? "bg-primary/10 text-primary font-semibold shadow-sm ring-1 ring-primary/20 hover:bg-primary/20"
         : "text-foreground/80 hover:bg-muted hover:text-foreground"
     }`;
 
