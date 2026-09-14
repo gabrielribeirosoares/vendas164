@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { Car, ChevronDown, LogOut, Menu, Package, Palette, Store as StoreIcon, User, Zap, RefreshCw } from "lucide-react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Car, ChevronDown, LogOut, Menu, Package, Palette, ShieldCheck, Store as StoreIcon, User, Zap, RefreshCw } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +33,19 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const location = useRouterState({ select: (state) => state.location });
+  const activeSellerTab =
+    location.pathname === "/vendedor"
+      ? ((location.search as { tab?: string }).tab || "produtos")
+      : null;
+  const isPanelActive = location.pathname === "/painel";
+  const mobileItemClass = (active: boolean, compact = false) =>
+    `w-full justify-start gap-3 ${compact ? "h-11" : "h-12"} rounded-xl transition-colors ${
+      active
+        ? "bg-primary/12 text-primary font-semibold shadow-sm ring-1 ring-primary/20 hover:bg-primary/15"
+        : "text-foreground/80 hover:bg-muted hover:text-foreground"
+    }`;
 
   const { data: myStore } = useQuery({
     queryKey: ["my-store-header", user?.id],
@@ -60,6 +73,17 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
       return (data ?? [])
         .map((l: any) => l.stores)
         .filter((s: any) => s && s.owner_id !== user!.id);
+    },
+  });
+
+  const { data: isPlatformAdmin = false } = useQuery({
+    queryKey: ["is-platform-admin", user?.id],
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("is_platform_admin");
+      if (error) throw error;
+      return data === true;
     },
   });
 
@@ -118,7 +142,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
           <nav className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {!loading && user ? (
               <>
-                <div className="hidden sm:flex items-center gap-1.5">
+                <div className="hidden md:flex items-center gap-1.5">
                   <Button asChild variant="ghost" size="sm" data-tour="header-reservas" className="px-3">
                     <Link to="/painel" preload="intent">Minhas reservas</Link>
                   </Button>
@@ -175,70 +199,79 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                 <div className="flex items-center gap-1 sm:gap-1.5">
                   <ThemeToggle />
                   <CartDrawer />
-                  <div className="hidden sm:flex"><TourTriggerButton /></div>
+                  <div className="hidden md:flex"><TourTriggerButton /></div>
                   
-                  <div className="flex sm:hidden">
-                    <Sheet>
+                  <div className="flex md:hidden">
+                    <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
                       <SheetTrigger asChild>
-                        <Button variant="ghost" size="icon" aria-label="Menu Mobile" className="size-9">
+                        <Button variant="ghost" size="icon" aria-label="Abrir menu" className="size-9">
                           <Menu className="size-5" />
                         </Button>
                       </SheetTrigger>
-                      <SheetContent side="right" className="w-[280px] p-0 border-l border-border/60">
+                      <SheetContent side="right" className="w-[min(320px,90vw)] p-0 border-l border-border/60">
                         <div className="flex flex-col h-full bg-background">
-                          <div className="p-5 border-b border-border/50 bg-muted/20">
-                            <h3 className="font-bold text-lg text-foreground">Menu</h3>
-                            <p className="text-xs text-muted-foreground mt-1 truncate">{user.email}</p>
+                          <div className="p-5 border-b border-border/50 bg-gradient-to-br from-primary/10 via-background to-background">
+                            <SheetTitle className="font-bold text-lg text-foreground">Navegação</SheetTitle>
+                            <SheetDescription className="text-xs text-muted-foreground mt-1 truncate">
+                              {user.email}
+                            </SheetDescription>
                           </div>
                           
                           <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                            <Button asChild variant="ghost" className="w-full justify-start gap-3 h-11" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
-                              <Link to="/painel" preload="intent">
+                            <Button asChild variant="ghost" className={mobileItemClass(isPanelActive, true)} onClick={() => setMobileMenuOpen(false)}>
+                              <Link to="/painel" preload="intent" aria-current={isPanelActive ? "page" : undefined}>
                                 <Car className="size-5 text-primary" /> Minhas Reservas
                               </Link>
                             </Button>
                             {currentStore ? (
                               <div className="py-2 border-y border-border/50 my-2">
                                 <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 px-2">Minha Loja</h4>
-                                <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
-                                  <Link to="/vendedor" search={{ tab: 'produtos' }}>
+                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "produtos")} onClick={() => setMobileMenuOpen(false)}>
+                                  <Link to="/vendedor" search={{ tab: "produtos" }} aria-current={activeSellerTab === "produtos" ? "page" : undefined}>
                                     <Package className="size-4 text-amber-500" /> Pré-vendas
                                   </Link>
                                 </Button>
-                                <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
-                                  <Link to="/vendedor" search={{ tab: 'pronta_entrega' }}>
+                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "pronta_entrega")} onClick={() => setMobileMenuOpen(false)}>
+                                  <Link to="/vendedor" search={{ tab: "pronta_entrega" }} aria-current={activeSellerTab === "pronta_entrega" ? "page" : undefined}>
                                     <Zap className="size-4 text-emerald-500 fill-emerald-500" /> Pronta Entrega
                                   </Link>
                                 </Button>
-                                <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
-                                  <Link to="/vendedor" search={{ tab: 'reservas' }}>
+                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "reservas")} onClick={() => setMobileMenuOpen(false)}>
+                                  <Link to="/vendedor" search={{ tab: "reservas" }} aria-current={activeSellerTab === "reservas" ? "page" : undefined}>
                                     <Car className="size-4 text-emerald-500" /> Pedidos/Reservas
                                   </Link>
                                 </Button>
-                                <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
-                                  <Link to="/vendedor" search={{ tab: 'clientes' }}>
+                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "clientes")} onClick={() => setMobileMenuOpen(false)}>
+                                  <Link to="/vendedor" search={{ tab: "clientes" }} aria-current={activeSellerTab === "clientes" ? "page" : undefined}>
                                     <User className="size-4 text-emerald-500" /> Clientes
                                   </Link>
                                 </Button>
-                                <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1 text-blue-600 dark:text-blue-400" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
-                                  <Link to="/vendedor" search={{ tab: 'rastreamento' }}>
+                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "rastreamento")} onClick={() => setMobileMenuOpen(false)}>
+                                  <Link to="/vendedor" search={{ tab: "rastreamento" }} aria-current={activeSellerTab === "rastreamento" ? "page" : undefined}>
                                     <RefreshCw className="size-4" /> Rastreamento
                                   </Link>
                                 </Button>
-                                <Button asChild variant="ghost" className="w-full justify-start gap-3 h-10 mb-1" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
-                                  <Link to="/vendedor" search={{ tab: 'loja' }}>
+                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "loja")} onClick={() => setMobileMenuOpen(false)}>
+                                  <Link to="/vendedor" search={{ tab: "loja" }} aria-current={activeSellerTab === "loja" ? "page" : undefined}>
                                     <Palette className="size-4 text-emerald-500" /> Personalização
                                   </Link>
                                 </Button>
+                                {isPlatformAdmin && (
+                                  <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "admin_moderation")} onClick={() => setMobileMenuOpen(false)}>
+                                    <Link to="/vendedor" search={{ tab: "admin_moderation" }} aria-current={activeSellerTab === "admin_moderation" ? "page" : undefined}>
+                                      <ShieldCheck className="size-4 text-amber-500" /> Moderação
+                                    </Link>
+                                  </Button>
+                                )}
                               </div>
                             ) : (
-                              <Button asChild variant="ghost" className="w-full justify-start gap-3 h-11" onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}>
+                              <Button asChild variant="ghost" className="w-full justify-start gap-3 h-11" onClick={() => setMobileMenuOpen(false)}>
                                 <Link to="/vendedor" search={{ tab: "produtos" }} preload="intent">
                                   <StoreIcon className="size-5 text-emerald-500" /> Criar Minha Loja
                                 </Link>
                               </Button>
                             )}
-                            <Button variant="ghost" className="w-full justify-start gap-3 h-11" onClick={() => { setProfileOpen(true); document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'})); }}>
+                            <Button variant="ghost" className={mobileItemClass(false, true)} onClick={() => { setMobileMenuOpen(false); setProfileOpen(true); }}>
                               <User className="size-5 text-blue-500" /> Meu Perfil
                             </Button>
                             
@@ -262,7 +295,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                           </div>
                           
                           <div className="p-4 border-t border-border/50 bg-muted/10">
-                            <Button variant="destructive" className="w-full gap-2 font-medium" onClick={signOut}>
+                            <Button variant="destructive" className="w-full h-11 gap-2 font-medium" onClick={() => { setMobileMenuOpen(false); void signOut(); }}>
                               <LogOut className="size-4" /> Sair da conta
                             </Button>
                           </div>
