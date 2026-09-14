@@ -50,6 +50,7 @@ import { ClientsTab } from "@/components/vendedor/ClientsManager";
 import { SmartNotifications } from "@/components/vendedor/SmartNotifications";
 import { ProductsTab } from "@/components/vendedor/ProductManager";
 import { SellerOverview } from "@/components/vendedor/SellerOverview";
+import { SellerSectionHeader } from "@/components/vendedor/SellerSectionHeader";
 import { TrackingIntegration } from "@/components/vendedor/TrackingIntegration";
 import { SpreadsheetImporterDialog } from "@/components/vendedor/SpreadsheetImporterDialog";
 import { undoSpreadsheetImport } from "@/lib/importSpreadsheet";
@@ -500,7 +501,10 @@ function SellerDashboard() {
         <SmartNotifications products={products ?? []} orders={orders ?? []} onOpenOrders={filter => { setOrderFocus(filter); setActiveTab("reservas"); }} onOpenProducts={() => { setOnlyOutOfStock(true); setActiveTab("produtos"); }} />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="mt-8 md:grid md:grid-cols-[190px_minmax(0,1fr)] md:items-start md:gap-6">
-          <TabsList className="hidden md:flex md:sticky md:top-24 h-auto w-full flex-col items-stretch justify-start gap-1 rounded-xl bg-muted/30 p-2 [&>button]:min-h-11 [&>button]:justify-start">
+          <TabsList className="hidden md:flex md:sticky md:top-24 h-auto w-full flex-col items-stretch justify-start gap-1 rounded-xl border border-border/50 bg-card/70 p-2 shadow-sm [&>button]:min-h-11 [&>button]:justify-start">
+            <span className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Operação
+            </span>
             <TabsTrigger value="produtos" className="gap-1.5 text-xs sm:text-sm">
               <Package className="size-3.5 text-amber-500" /> Pré-vendas
             </TabsTrigger>
@@ -516,6 +520,10 @@ function SellerDashboard() {
             <TabsTrigger value="rastreamento" className="gap-1.5 text-xs sm:text-sm text-blue-600 dark:text-blue-400">
               <RefreshCw className="size-3.5 text-blue-500" /> Rastreamento
             </TabsTrigger>
+            <div className="mx-2 my-1 h-px bg-border/60" />
+            <span className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Configuração
+            </span>
             <TabsTrigger value="loja" className="gap-1.5 text-xs sm:text-sm">
               <Palette className="size-3.5 text-emerald-500" /> Personalização
             </TabsTrigger>
@@ -525,6 +533,9 @@ function SellerDashboard() {
               </TabsTrigger>
             )}
           </TabsList>
+
+          <div className="min-w-0">
+            <SellerSectionHeader activeSection={activeTab} storeName={store.name} />
 
           <TabsContent value="produtos" className="mt-5">
             <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pre_venda" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} />
@@ -556,6 +567,7 @@ function SellerDashboard() {
               <AdminModerationPanel />
             </TabsContent>
           )}
+          </div>
         </Tabs>
       </main>
     </div>
