@@ -96,7 +96,7 @@ function StatusBadge({
       )}
     >
       <Icon className="size-3 shrink-0" aria-hidden="true" />
-      <span className="truncate">{label}</span>
+      <span className="whitespace-normal">{label}</span>
     </Badge>
   );
 }
