@@ -122,7 +122,7 @@ function OrderWhatsAppDropdown({
         {variant === "badge" ? (
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 px-2.5 py-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium font-mono border border-emerald-500/30 transition-all cursor-pointer shadow-sm hover:scale-105"
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 px-3 py-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium font-mono border border-emerald-500/30 transition-all cursor-pointer shadow-sm hover:scale-105"
             title="Opções de mensagem do WhatsApp"
           >
             <MessageCircle className="size-3.5" />
@@ -590,7 +590,7 @@ export function OrdersTab({
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 350,
+    estimateSize: () => 470,
     overscan: 5,
   });
   
@@ -753,7 +753,7 @@ export function OrdersTab({
       )}
       <Card className="border-border/60 panel relative">
         {/* FILTRO POR TIPO DE PEDIDO (PRÉ-VENDA VS PRONTA ENTREGA) */}
-        <div className="flex flex-wrap items-center gap-2 p-4 pb-0">
+        <div className="flex items-center gap-2 overflow-x-auto px-3 pb-1 pt-3 sm:flex-wrap sm:overflow-visible sm:p-4 sm:pb-0 [&>button]:shrink-0">
           <Button
             type="button"
             size="sm"
@@ -788,7 +788,7 @@ export function OrdersTab({
         </div>
 
         {/* BARRA DE PESQUISA E FILTROS DE CLIENTE / WHATSAPP / STATUS */}
-        <div className="flex flex-col gap-3 border-b border-border/60 p-4">
+        <div className="flex flex-col gap-3 border-b border-border/60 p-3 sm:p-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="relative w-full sm:flex-1 sm:min-w-[240px]">
               <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
@@ -811,7 +811,7 @@ export function OrdersTab({
             />
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full justify-between">
-            <div className="flex bg-muted/50 p-0.5 rounded-lg border border-border/60">
+            <div className="hidden bg-muted/50 p-0.5 rounded-lg border border-border/60 sm:flex">
               <Button
                 variant={viewMode === "table" ? "secondary" : "ghost"}
                 size="sm"
@@ -831,7 +831,7 @@ export function OrdersTab({
                 <LayoutGrid className="size-4" />
               </Button>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid w-full grid-cols-2 items-center gap-2 sm:flex sm:w-auto sm:flex-wrap">
               {storeId && (
                 <Button
                   size="sm"
@@ -840,7 +840,7 @@ export function OrdersTab({
                   className="h-9 text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/5"
                 >
                   <FileSpreadsheet className="size-3.5" />
-                  <span>Importar Planilha (CSV)</span>
+                  <span><span className="sm:hidden">Importar</span><span className="hidden sm:inline">Importar Planilha (CSV)</span></span>
                 </Button>
               )}
 
@@ -867,23 +867,23 @@ export function OrdersTab({
                 className="h-9 text-xs gap-1.5 border-border/80 no-print"
               >
                 <Download className="size-3.5 text-primary" />
-                <span>Exportar Relatório Financeiro</span>
+                <span><span className="sm:hidden">Exportar</span><span className="hidden sm:inline">Exportar Relatório Financeiro</span></span>
               </Button>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/40">
+          <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border/40">
             {storeId && (
               <Button
                 size="sm"
                 onClick={() => setManualDialogOpen(true)}
-                className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90 h-9 text-xs font-semibold"
+                className="h-10 w-full gap-1 bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90 sm:h-9 sm:w-auto sm:text-xs"
               >
                 <Plus className="size-4" />
                 <span>Nova Reserva</span>
               </Button>
             )}
-            <Filter className="size-4 text-muted-foreground ml-1" />
+            <Filter className="ml-1 hidden size-4 text-muted-foreground sm:block" />
             <Select
               value={paymentFilter}
               onValueChange={(v) => {
@@ -891,7 +891,7 @@ export function OrdersTab({
                 setPage(0);
               }}
             >
-              <SelectTrigger className="h-9 w-[160px] text-xs">
+              <SelectTrigger className="h-10 min-w-0 flex-1 text-xs sm:h-9 sm:w-[160px] sm:flex-none">
                 <SelectValue placeholder="Pagamento" />
               </SelectTrigger>
               <SelectContent>
@@ -913,7 +913,7 @@ export function OrdersTab({
                 setPage(0);
               }}
             >
-              <SelectTrigger className="h-9 w-[130px] text-xs">
+              <SelectTrigger className="h-10 min-w-0 flex-1 text-xs sm:h-9 sm:w-[130px] sm:flex-none">
                 <SelectValue placeholder="Envio" />
               </SelectTrigger>
               <SelectContent>
@@ -1038,7 +1038,7 @@ export function OrdersTab({
           ) : (
             <>
               {/* VISÃO PARA CELULAR (CARDS INDIVIDUAIS COM ESPAÇAMENTO CLARO) */}
-              <div ref={parentRef} className="md:hidden bg-muted/20 h-[65dvh] overflow-y-auto px-4">
+              <div ref={parentRef} className="h-[70dvh] overflow-y-auto bg-muted/20 px-3 md:hidden">
                 <div
                   style={{
                     height: `${rowVirtualizer.getTotalSize() + 32}px`,
@@ -1078,7 +1078,7 @@ export function OrdersTab({
                         className="pb-4"
                         style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${virtualRow.start}px)` }}
                       >
-                        <div className="rounded-2xl border border-border/70 bg-card p-4 space-y-3.5 shadow-sm">
+                        <div className="space-y-3 rounded-2xl border border-border/70 bg-card p-3 shadow-sm">
                         {/* Cliente e WhatsApp */}
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-start gap-3 min-w-0 flex-1">
@@ -1152,137 +1152,146 @@ export function OrdersTab({
                           </div>
                         </div>
 
-                        {/* Valores (Total / Sinal / Saldo) */}
-                        <div className="grid grid-cols-3 gap-2 rounded-xl bg-muted/20 p-2.5 text-center text-xs border border-border/30">
-                          <div>
-                            <p className="text-muted-foreground">Total {o.installment_count && o.installment_count > 1 ? `(${o.installment_count}x)` : ""}</p>
-                            <p className="font-semibold text-sm">{brl(Number(o.total_price) * quantity)}</p>
+                        {/* Resumo financeiro e edição do sinal */}
+                        <div className="grid grid-cols-2 gap-2 rounded-xl border border-border/40 bg-muted/20 p-3">
+                          <div className="min-w-0">
+                            <p className="text-[11px] text-muted-foreground">
+                              Total {o.installment_count && o.installment_count > 1 ? `(${o.installment_count}x)` : ""}
+                            </p>
+                            <p className="mt-0.5 break-words text-base font-bold tabular-nums">
+                              {brl(Number(o.total_price) * quantity)}
+                            </p>
                           </div>
-                          <div>
-                            <p className="text-muted-foreground">Sinal (un.)</p>
-                            <div className="flex items-center justify-center gap-1 mt-0.5">
-                              <Input
-                                className="h-7 w-16 text-center text-xs px-1"
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={drafts[groupId] ?? String(o.down_payment)}
-                                onChange={(e) => setDrafts({ ...drafts, [groupId]: e.target.value })}
-                              />
-                              <Button
-                                size="icon"
-                                variant="secondary"
-                                className="size-7 text-[10px]"
-                                onClick={() => updateGroup(ids, { down_payment: Number(drafts[groupId] ?? o.down_payment) })}
-                              >
-                                OK
-                              </Button>
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Saldo</p>
-                            <p className="font-bold text-sm text-primary">
+                          <div className="min-w-0 text-right">
+                            <p className="text-[11px] text-muted-foreground">Saldo a receber</p>
+                            <p className="mt-0.5 break-words text-base font-bold text-primary tabular-nums">
                               {(() => {
                                 const total = Number(o.total_price) * quantity;
                                 const sinal = Number(o.down_payment) * quantity;
                                 const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid");
                                 const totalPaidInsts = paidInsts.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-                                const saldo = Math.max(0, total - sinal - totalPaidInsts);
-                                return brl(saldo);
+                                return brl(Math.max(0, total - sinal - totalPaidInsts));
                               })()}
                             </p>
                           </div>
+                          <div className="col-span-2 border-t border-border/40 pt-2.5">
+                            <label htmlFor={`mobile-signal-${groupId}`} className="mb-1.5 block text-[11px] font-medium text-muted-foreground">
+                              Sinal por unidade
+                            </label>
+                            <div className="flex gap-2">
+                              <Input
+                                id={`mobile-signal-${groupId}`}
+                                className="h-10 min-w-0 flex-1 text-sm tabular-nums"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                inputMode="decimal"
+                                value={drafts[groupId] ?? String(o.down_payment)}
+                                onChange={(e) => setDrafts({ ...drafts, [groupId]: e.target.value })}
+                              />
+                              <Button
+                                variant="secondary"
+                                className="h-10 shrink-0 px-4 text-xs font-semibold"
+                                onClick={() => updateGroup(ids, { down_payment: Number(drafts[groupId] ?? o.down_payment) })}
+                              >
+                                Salvar sinal
+                              </Button>
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Status e Prazo */}
+                        {/* Situação financeira e andamento do envio */}
                         {(() => {
                           const currentPaymentStatus = o.payment_status;
                           return (
-                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                              <div className="flex flex-wrap items-center gap-2">
+                            <div className="space-y-3 rounded-xl border border-border/40 p-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
                                 <PaymentBadge status={currentPaymentStatus} />
-                                <Select
-                                  value={currentPaymentStatus}
-                                  onValueChange={(v) => handlePaymentStatusChange(item, v)}
-                                >
-                                  <SelectTrigger className="h-8 text-xs w-36">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="pronta_entrega">Pronta Entrega</SelectItem>
-                                    <SelectItem value="sem_sinal">Sem sinal / Pagar na chegada</SelectItem>
-                                    <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
-                                    <SelectItem value="sinal_pago">Sinal pago</SelectItem>
-                                    <SelectItem value="quitado">Quitado</SelectItem>
-                                    <SelectItem value="cancelado">Cancelado</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <Select
-                                  value={o.delivery_status}
-                                  onValueChange={(v) => handleDeliveryStatusChange(item, v)}
-                                >
-                                  <SelectTrigger className="h-8 text-xs w-32">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="pendente">Pendente</SelectItem>
-                                    <SelectItem value="em_transito">Em trânsito</SelectItem>
-                                    <SelectItem value="entregue">Entregue</SelectItem>
-                                    <SelectItem value="cancelado">Cancelado</SelectItem>
-                                  </SelectContent>
-                                </Select>
+                                {currentPaymentStatus === "aguardando_sinal" && o.reservation_expires_at ? (
+                                  <Countdown expiresAt={o.reservation_expires_at} />
+                                ) : (currentPaymentStatus === "sem_sinal" || currentPaymentStatus === "pagar_na_chegada") && (o.products as any)?.release_date ? (
+                                  <div className="text-right text-xs">
+                                    <span className="block text-[11px] font-semibold text-purple-600 dark:text-purple-400">Pagar na chegada</span>
+                                    <span className="font-mono text-[10px] text-muted-foreground">
+                                      {new Date((o.products as any).release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}
+                                    </span>
+                                  </div>
+                                ) : null}
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <label className="min-w-0 text-[11px] font-medium text-muted-foreground">
+                                  Pagamento
+                                  <Select value={currentPaymentStatus} onValueChange={(v) => handlePaymentStatusChange(item, v)}>
+                                    <SelectTrigger className="mt-1 h-10 w-full text-xs text-foreground">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="pronta_entrega">Pronta Entrega</SelectItem>
+                                      <SelectItem value="sem_sinal">Sem sinal / Pagar na chegada</SelectItem>
+                                      <SelectItem value="aguardando_sinal">Aguardando sinal</SelectItem>
+                                      <SelectItem value="sinal_pago">Sinal pago</SelectItem>
+                                      <SelectItem value="quitado">Quitado</SelectItem>
+                                      <SelectItem value="cancelado">Cancelado</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </label>
+
+                                <label className="min-w-0 text-[11px] font-medium text-muted-foreground">
+                                  Envio
+                                  <Select value={o.delivery_status} onValueChange={(v) => handleDeliveryStatusChange(item, v)}>
+                                    <SelectTrigger className="mt-1 h-10 w-full text-xs text-foreground">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="pendente">Pendente</SelectItem>
+                                      <SelectItem value="em_transito">Em trânsito</SelectItem>
+                                      <SelectItem value="entregue">Entregue</SelectItem>
+                                      <SelectItem value="cancelado">Cancelado</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </label>
+                              </div>
+
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-2">
+                                <OrderInstallmentsDialog
+                                  orderId={o.id}
+                                  orderIds={ids}
+                                  quantity={quantity}
+                                  downPayment={Number(o.down_payment)}
+                                  totalPrice={Number(o.total_price) * quantity}
+                                  installmentCount={o.installment_count}
+                                  customerName={guestMeta?.name || o.profiles?.name || "Cliente"}
+                                  productName={`${o.products?.brand || ''} ${o.products?.model || ''}`}
+                                />
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                  className="h-10 gap-2 px-3 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                                   title="Excluir reserva permanentemente"
                                   onClick={() => handleDeleteGroup(item)}
                                 >
                                   <Trash2 className="size-4" />
+                                  Excluir reserva
                                 </Button>
-                                </div>
-                                <div className="mt-2 flex justify-end">
-                                  <OrderInstallmentsDialog
-                                      orderId={o.id}
-                                      orderIds={ids}
-                                      quantity={quantity}
-                                      downPayment={Number(o.down_payment)}
-                                      totalPrice={Number(o.total_price) * quantity}
-                                      installmentCount={o.installment_count}
-                                      customerName={guestMeta?.name || o.profiles?.name || "Cliente"}
-                                      productName={`${o.products?.brand || ''} ${o.products?.model || ''}`}
-                                    />
-                                  </div>
-
-                              {currentPaymentStatus === "aguardando_sinal" && o.reservation_expires_at ? (
-                                <div className="text-xs">
-                                  <Countdown expiresAt={o.reservation_expires_at} />
-                                </div>
-                              ) : (currentPaymentStatus === "sem_sinal" || currentPaymentStatus === "pagar_na_chegada") && (o.products as any)?.release_date ? (
-                                <div className="text-xs text-right">
-                                  <span className="font-semibold text-purple-600 dark:text-purple-400 block text-[11px]">Pagar na chegada</span>
-                                  <span className="text-muted-foreground font-mono text-[10px]">
-                                    {new Date((o.products as any).release_date + "T00:00:00").toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}
-                                  </span>
-                                </div>
-                              ) : null}
+                              </div>
                             </div>
                           );
                         })()}
 
                         {/* Código de Rastreio dos Correios (Mobile) */}
-                        <div className="flex items-center gap-2 pt-2 border-t border-border/40">
+                        <div className="flex flex-wrap items-center gap-2 border-t border-border/40 pt-3">
                   <Truck className="size-4 text-primary shrink-0" />
                   <Input
-                    className="h-8 text-xs font-mono flex-1"
-                    placeholder="Cód. Rastreio (Ex: AA123456789BR)"
+                    className="h-10 min-w-[180px] flex-1 basis-[180px] text-sm font-mono"
+                    placeholder="Código de rastreio"
                     value={trackingDrafts[groupId] ?? o.tracking_code ?? ""}
                     onChange={(e) => setTrackingDrafts({ ...trackingDrafts, [groupId]: e.target.value })}
                   />
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="h-8 px-3 text-xs font-medium"
+                    className="h-10 flex-1 px-4 text-xs font-semibold sm:flex-none"
                     onClick={() => handleTrackingSave(ids, trackingDrafts[groupId] ?? o.tracking_code ?? "")}
                   >
                     Salvar
@@ -1292,7 +1301,7 @@ export function OrdersTab({
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-8 w-8 p-0 text-primary hover:bg-primary/10"
+                        className="size-10 p-0 text-primary hover:bg-primary/10"
                         title="Atualizar rastreio automaticamente"
                         onClick={() => handleTrackingUpdate(o.id, o.tracking_code!, o.delivery_status)}
                         disabled={trackingUpdating.has(o.id)}
@@ -1306,7 +1315,7 @@ export function OrdersTab({
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                        className="size-10 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
                         title="Abrir no site oficial dos Correios"
                         asChild
                       >
@@ -1664,7 +1673,7 @@ export function OrdersTab({
                     setPageSize(opt);
                     setPage(0);
                   }}
-                  className={`px-1.5 py-0.5 rounded text-[11px] font-semibold transition-all ${
+                  className={`min-h-8 min-w-8 rounded px-2 text-[11px] font-semibold transition-all ${
                     pageSize === opt
                       ? "bg-primary text-primary-foreground shadow-xs"
                       : "bg-muted/40 hover:bg-muted text-muted-foreground"
@@ -1677,11 +1686,11 @@ export function OrdersTab({
           </div>
 
           {!isAllPages && pages > 1 && (
-            <div className="flex items-center gap-1 flex-nowrap">
+            <div className="flex w-full items-center gap-2 sm:w-auto sm:gap-1">
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 w-7 p-0"
+                className="hidden size-9 p-0 sm:inline-flex"
                 disabled={safePage === 0}
                 onClick={() => setPage(0)}
                 title="Primeira página"
@@ -1691,12 +1700,12 @@ export function OrdersTab({
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 px-2 text-xs gap-0.5"
+                className="h-10 flex-1 gap-1 px-4 text-xs sm:h-9 sm:flex-none"
                 disabled={safePage === 0}
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
               >
                 <ChevronLeft className="size-3" />
-                <span className="hidden sm:inline">Ant.</span>
+                <span>Anterior</span>
               </Button>
 
               {/* Botões numerados com elipses inteligentes */}
@@ -1713,7 +1722,7 @@ export function OrdersTab({
                       key={pageNum}
                       size="sm"
                       variant={isCurrent ? "default" : "outline"}
-                      className={`h-7 w-7 p-0 text-xs font-semibold ${
+                      className={`hidden size-9 p-0 text-xs font-semibold sm:inline-flex ${
                         isCurrent ? "shadow-xs scale-105" : "bg-background/80"
                       }`}
                       onClick={() => setPage(i)}
@@ -1724,7 +1733,7 @@ export function OrdersTab({
                 }
                 if (pageNum === safePage - 1 || pageNum === safePage + 3) {
                   return (
-                    <span key={pageNum} className="text-muted-foreground px-0.5 text-xs">
+                    <span key={pageNum} className="hidden px-0.5 text-xs text-muted-foreground sm:inline">
                       ...
                     </span>
                   );
@@ -1735,17 +1744,17 @@ export function OrdersTab({
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 px-2 text-xs gap-0.5"
+                className="h-10 flex-1 gap-1 px-4 text-xs sm:h-9 sm:flex-none"
                 disabled={safePage >= pages - 1}
                 onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}
               >
-                <span className="hidden sm:inline">Próx.</span>
+                <span>Próxima</span>
                 <ChevronRight className="size-3" />
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 w-7 p-0"
+                className="hidden size-9 p-0 sm:inline-flex"
                 disabled={safePage >= pages - 1}
                 onClick={() => setPage(pages - 1)}
                 title="Última página"
