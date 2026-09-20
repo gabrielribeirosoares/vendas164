@@ -109,6 +109,9 @@ export function PushNotificationManager({ storeId }: { storeId?: string }) {
       toast.error(`Erro ao ativar notificações: ${error.message || "Tente novamente"}`);
     } finally {
       setIsLoading(false);
+    }
+  }
+
   if (!isSupported) return null;
 
   if (isSubscribed) {
