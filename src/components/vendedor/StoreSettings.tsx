@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { PhoneInput } from '@/components/PhoneInput';
 import { DEFAULT_PRESET_BRANDS, getStoreBrands, saveStoreBrands } from '@/lib/brands';
-import { getStoreBanner, saveStoreBanner, getStoreTabColors, saveStoreTabColors, DEFAULT_TAB_COLORS } from '@/lib/storeCustomizations';
+import { getReadableTextColor, getStoreBanner, saveStoreBanner } from '@/lib/storeCustomizations';
 import { getStoreStockDisplayThreshold, saveStoreStockDisplayThreshold } from '@/lib/stock';
 import { uploadImage } from '@/lib/upload';
 import { updateAppFavicon } from '@/lib/favicon';
@@ -51,17 +51,11 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
   });
   const [saving, setSaving] = useState(false);
   const [selectedBrands, setSelectedBrands] = useState<string[]>(() => getStoreBrands(store.id));
-  const [tabColors, setTabColors] = useState(() => getStoreTabColors(store.id, store.primary_color));
+  const [newCustomBrand, setNewCustomBrand] = useState("");
+  const themeTextColor = getReadableTextColor(form.primary_color);
 
   function handlePrimaryColorChange(newColor: string) {
     setForm((prev) => ({ ...prev, primary_color: newColor }));
-    setTabColors((prev) => {
-      // If preVendaColor was matching the previous color or the default, keep it in sync with the store theme
-      if (!prev.preVendaColor || prev.preVendaColor.toLowerCase() === form.primary_color.toLowerCase() || prev.preVendaColor.toLowerCase() === DEFAULT_TAB_COLORS.preVendaColor.toLowerCase()) {
-        return { ...prev, preVendaColor: newColor };
-      }
-      return prev;
-    });
   }
 
   function handleToggleBrand(brand: string) {
@@ -98,10 +92,9 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
 
     setSaving(true);
 
-    // Salvar marcas comercializadas, banner promocional e cores das abas
+    // Salvar marcas comercializadas e banner promocional
     saveStoreBrands(store.id, selectedBrands);
     saveStoreBanner(store.id, form.banner);
-    saveStoreTabColors(store.id, tabColors);
     const parsedThreshold = stockThreshold.trim() ? parseInt(stockThreshold, 10) : null;
     saveStoreStockDisplayThreshold(store.id, parsedThreshold && parsedThreshold > 0 ? parsedThreshold : null);
 
@@ -278,7 +271,7 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
                     }
                   }}
                 />
-                <Button type="button" variant="secondary" size="sm" onClick={handleAddCustomBrand} className="shrink-0">
+                <Button type="button" size="sm" onClick={handleAddCustomBrand} className="shrink-0 font-semibold hover:opacity-90" style={{ backgroundColor: form.primary_color, color: themeTextColor }}>
                   <Plus className="size-4 mr-1" /> Adicionar
                 </Button>
               </div>
@@ -439,143 +432,6 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
               </div>
             </div>
 
-            {/* SEÇÃO DE CORES DOS BOTÕES DAS ABAS (PRÉ-VENDA E PRONTA ENTREGA) */}
-            <div className="space-y-4 rounded-xl border border-border/50 bg-muted/30 p-4">
-              <div>
-                <Label className="text-base font-semibold">Cores dos Botões das Abas e Painel</Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Personalize as cores dos botões de ação (+ Nova pré-venda, Reservar para cliente, filtros e abas). Você pode fazê-los seguir a <strong>Cor Tema da sua Loja</strong> ou definir cores exclusivas.
-                </p>
-              </div>
-
-              {/* Prévia dos Botões */}
-              <div className="rounded-lg border border-border/40 bg-background/50 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
-                    Prévia dos Botões (Vitrine & Painel)
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-6 text-[11px] px-2 gap-1"
-                      onClick={() => setTabColors({ ...tabColors, preVendaColor: form.primary_color })}
-                    >
-                      <span className="size-2 rounded-full" style={{ backgroundColor: form.primary_color }} />
-                      Usar Cor Tema ({form.primary_color})
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground"
-                      onClick={() => setTabColors(DEFAULT_TAB_COLORS)}
-                    >
-                      Restaurar Padrão
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    className="rounded-full px-3.5 py-1 text-xs font-semibold text-white shadow-xs transition-all hover:scale-105"
-                    style={{ backgroundColor: tabColors.preVendaColor }}
-                  >
-                    Aba Pré-venda
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-full px-3.5 py-1 text-xs font-semibold text-white shadow-xs transition-all hover:scale-105"
-                    style={{ backgroundColor: tabColors.prontaEntregaColor }}
-                  >
-                    Aba Pronta Entrega
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md px-3 py-1 text-xs font-semibold text-white shadow-xs"
-                    style={{ backgroundColor: tabColors.preVendaColor }}
-                  >
-                    + Nova pré-venda
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md px-2.5 py-1 text-xs font-medium border"
-                    style={{
-                      borderColor: `${tabColors.preVendaColor}66`,
-                      color: tabColors.preVendaColor,
-                      backgroundColor: `${tabColors.preVendaColor}12`,
-                    }}
-                  >
-                    Bling ERP
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md px-3 py-1 text-xs font-semibold text-white shadow-xs"
-                    style={{ backgroundColor: tabColors.preVendaColor }}
-                  >
-                    Reservar para cliente
-                  </button>
-                </div>
-              </div>
-
-              {/* Controles de Cor Lado a Lado */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                {/* Pré-venda */}
-                <div className="space-y-2 rounded-lg border border-border/40 bg-card p-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold flex items-center gap-1.5">
-                      <span className="size-2.5 rounded-full shadow-xs" style={{ backgroundColor: tabColors.preVendaColor }} />
-                      Aba Pré-venda e Botões de Operação
-                    </Label>
-                    <span className="font-mono text-[11px] text-muted-foreground uppercase">{tabColors.preVendaColor}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="color"
-                      className="h-9 w-12 cursor-pointer p-1"
-                      value={tabColors.preVendaColor}
-                      onChange={(e) => setTabColors({ ...tabColors, preVendaColor: e.target.value })}
-                    />
-                    <Input
-                      type="text"
-                      maxLength={7}
-                      className="font-mono text-xs uppercase"
-                      value={tabColors.preVendaColor}
-                      onChange={(e) => setTabColors({ ...tabColors, preVendaColor: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                {/* Pronta Entrega */}
-                <div className="space-y-2 rounded-lg border border-border/40 bg-card p-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold flex items-center gap-1.5">
-                      <span className="size-2.5 rounded-full shadow-xs" style={{ backgroundColor: tabColors.prontaEntregaColor }} />
-                      Aba Pronta Entrega
-                    </Label>
-                    <span className="font-mono text-[11px] text-muted-foreground uppercase">{tabColors.prontaEntregaColor}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="color"
-                      className="h-9 w-12 cursor-pointer p-1"
-                      value={tabColors.prontaEntregaColor}
-                      onChange={(e) => setTabColors({ ...tabColors, prontaEntregaColor: e.target.value })}
-                    />
-                    <Input
-                      type="text"
-                      maxLength={7}
-                      className="font-mono text-xs uppercase"
-                      value={tabColors.prontaEntregaColor}
-                      onChange={(e) => setTabColors({ ...tabColors, prontaEntregaColor: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* SEÇÃO DE LOGOTIPO E FAVICON */}
             <div className="space-y-2">
               <Label htmlFor="b-logo">Logotipo da Loja (também usado como Favicon)</Label>
@@ -603,7 +459,7 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
               )}
             </div>
 
-            <Button type="submit" disabled={saving} className="w-full sm:w-auto">
+            <Button type="submit" disabled={saving} className="w-full sm:w-auto font-semibold hover:opacity-90" style={{ backgroundColor: form.primary_color, color: themeTextColor }}>
               {saving && <Loader2 className="size-4 animate-spin" />} Salvar alterações
             </Button>
           </form>
@@ -628,7 +484,7 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
               ) : (
                 <div
                   className="flex size-12 items-center justify-center rounded-xl font-bold text-white text-lg"
-                  style={{ backgroundColor: form.primary_color }}
+                  style={{ backgroundColor: form.primary_color, color: themeTextColor }}
                 >
                   {form.name ? form.name[0].toUpperCase() : "L"}
                 </div>
@@ -655,7 +511,7 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
                 <button
                   type="button"
                   className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white shadow-sm transition-opacity"
-                  style={{ backgroundColor: form.primary_color }}
+                  style={{ backgroundColor: form.primary_color, color: themeTextColor }}
                 >
                   Seguir loja
                 </button>

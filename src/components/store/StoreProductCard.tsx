@@ -3,7 +3,7 @@ import type { Product } from "@/lib/cart";
 import { brl, getProductInstallmentInfo, getProductSignalAmount, isProntaEntrega } from "@/lib/format";
 import { getProductUrl } from "@/lib/subdomain";
 import { formatStoreProductCardStock } from "@/lib/stock";
-import { getStoreTabColors, type StoreTabColors } from "@/lib/storeCustomizations";
+import { getReadableTextColor } from "@/lib/storeCustomizations";
 import { Button } from "@/components/ui/button";
 import { Package, ShoppingCart } from "lucide-react";
 
@@ -12,7 +12,6 @@ interface StoreProductCardProps {
   storeSlug: string;
   primaryColor?: string | null;
   customBadge?: string | null;
-  tabColors?: StoreTabColors | null;
   onAdd: (event: MouseEvent, product: Product) => void;
 }
 
@@ -21,10 +20,9 @@ export function StoreProductCard({
   storeSlug,
   primaryColor,
   customBadge,
-  tabColors: propTabColors,
   onAdd,
 }: StoreProductCardProps) {
-  const resolvedTabColors = propTabColors || getStoreTabColors(product.store_id);
+  const themeTextColor = getReadableTextColor(primaryColor || "#e11d48");
   const available = product.is_open && product.stock > 0;
   const ready = isProntaEntrega(product);
   const signal = getProductSignalAmount(product);
@@ -55,8 +53,12 @@ export function StoreProductCard({
         )}
 
         <span
-          className="absolute left-2 top-2 max-w-[calc(100%-1rem)] truncate rounded-full px-2 py-1 text-xs font-semibold text-white shadow-sm sm:left-3 sm:top-3"
-          style={{ backgroundColor: ready ? (resolvedTabColors?.prontaEntregaColor || "#059669") : (resolvedTabColors?.preVendaColor || "#ea580c") }}
+          className={`absolute left-2 top-2 max-w-[calc(100%-1rem)] truncate rounded-full px-2 py-1 text-xs font-semibold shadow-sm sm:left-3 sm:top-3 ${
+            ready
+              ? "bg-emerald-600 text-white"
+              : "border border-current bg-background/90"
+          }`}
+          style={!ready && primaryColor ? { color: primaryColor } : undefined}
         >
           {ready ? "Pronta entrega" : "Pré-venda"}
         </span>
@@ -130,7 +132,7 @@ export function StoreProductCard({
           {available ? (
             <Button
               className="min-h-11 w-full gap-2 px-2 text-xs font-semibold sm:text-sm"
-              style={primaryColor ? { backgroundColor: primaryColor, color: "#fff" } : undefined}
+              style={primaryColor ? { backgroundColor: primaryColor, color: themeTextColor } : undefined}
               onClick={(event) => onAdd(event, product)}
             >
               <ShoppingCart className="size-4 shrink-0" />

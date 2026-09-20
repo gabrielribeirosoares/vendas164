@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { brl, isProntaEntrega, getProductSignalAmount } from "@/lib/format";
 import { getProductUrl } from "@/lib/subdomain";
 import { formatStoreProductCardStock } from "@/lib/stock";
-import { getStoreTabColors } from "@/lib/storeCustomizations";
+import { getReadableTextColor } from "@/lib/storeCustomizations";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight, Pause, Play, Sparkles, Package, ArrowUpRight } from "lucide-react";
@@ -28,7 +28,7 @@ export function BrandMiniaturesMarquee({
 }: BrandMiniaturesMarqueeProps) {
   const [userPaused, setUserPaused] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const tabColors = getStoreTabColors(storeId);
+  const themeTextColor = getReadableTextColor(primaryColor || "#e11d48");
 
   const cleanBrand = brand?.trim() || "";
 
@@ -124,7 +124,7 @@ export function BrandMiniaturesMarquee({
           <div className="flex items-center gap-2">
             <span
               className="inline-flex size-6 items-center justify-center rounded-lg text-white text-xs shadow-sm"
-              style={{ backgroundColor: primaryColor || "var(--color-primary)" }}
+              style={{ backgroundColor: primaryColor || "var(--color-primary)", color: primaryColor ? themeTextColor : undefined }}
             >
               <Sparkles className="size-3.5" />
             </span>
@@ -226,8 +226,12 @@ export function BrandMiniaturesMarquee({
 
                       {/* Badge Pronta Entrega / Pré-Venda */}
                       <span
-                        className="absolute left-1.5 top-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm"
-                        style={{ backgroundColor: ready ? tabColors.prontaEntregaColor : tabColors.preVendaColor }}
+                        className={`absolute left-1.5 top-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-sm ${
+                          ready
+                            ? "bg-emerald-600 text-white"
+                            : "border border-current bg-background/90"
+                        }`}
+                        style={!ready && primaryColor ? { color: primaryColor } : undefined}
                       >
                         {ready ? "Pronta entrega" : "Pré-venda"}
                       </span>

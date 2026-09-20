@@ -31,3 +31,18 @@ test("stock helper defines Zero51 Garage default threshold of 5 units", async ()
   assert.match(stockLib, /b2d3e709-3d0c-4dc1-be97-6c92b961f210/);
   assert.match(stockLib, /Disponível/);
 });
+
+test("store actions follow the configured theme instead of device-local tab colors", async () => {
+  const [customizations, settings, products, itemRoute] = await Promise.all([
+    readFile(new URL("../src/lib/storeCustomizations.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/vendedor/StoreSettings.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/vendedor/ProductManager.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/routes/loja.$slug.$itemSlug.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.doesNotMatch(customizations, /minipre_store_tab_colors_/);
+  assert.doesNotMatch(settings, /Cores dos Botões das Abas e Painel/);
+  assert.match(products, /const activeColor = store\.primary_color/);
+  assert.match(itemRoute, /const themeColor = product\?\.stores\?\.primary_color/);
+  assert.match(customizations, /getReadableTextColor/);
+});

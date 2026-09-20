@@ -163,53 +163,24 @@ export async function saveStoreReviewToSupabase(storeId: string, review: Omit<St
   return localUpdated;
 }
 
-export interface StoreTabColors {
-  preVendaColor: string; // Padrão: Laranja "#ea580c"
-  prontaEntregaColor: string; // Padrão: Verde "#059669"
+export function getReadableTextColor(backgroundColor?: string | null) {
+  const raw = (backgroundColor || "").trim().replace(/^#/, "");
+  const hex = raw.length === 3
+    ? raw.split("").map((char) => char + char).join("")
+    : raw;
+
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return "#ffffff";
+
+  const channels = [0, 2, 4].map((offset) => {
+    const value = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+    return value <= 0.04045
+      ? value / 12.92
+      : Math.pow((value + 0.055) / 1.055, 2.4);
+  });
+  const luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  const darkLuminance = 0.009;
+  const contrastWithDark = (luminance + 0.05) / (darkLuminance + 0.05);
+  const contrastWithWhite = 1.05 / (luminance + 0.05);
+
+  return contrastWithDark >= contrastWithWhite ? "#111827" : "#ffffff";
 }
-
-export const DEFAULT_TAB_COLORS: StoreTabColors = {
-  preVendaColor: "#ea580c",
-  prontaEntregaColor: "#059669",
-};
-
-export function getStoreTabColors(storeId: string | null | undefined, fallbackThemeColor?: string | null): StoreTabColors {
-  const defaultPreVenda = fallbackThemeColor || DEFAULT_TAB_COLORS.preVendaColor;
-  if (!storeId) {
-    return {
-      preVendaColor: defaultPreVenda,
-      prontaEntregaColor: DEFAULT_TAB_COLORS.prontaEntregaColor,
-    };
-  }
-  try {
-    const raw = localStorage.getItem(`minipre_store_tab_colors_${storeId}`);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return {
-        preVendaColor: parsed.preVendaColor || defaultPreVenda,
-        prontaEntregaColor: parsed.prontaEntregaColor || DEFAULT_TAB_COLORS.prontaEntregaColor,
-      };
-    }
-  } catch {
-    // ignore
-  }
-  return {
-    preVendaColor: defaultPreVenda,
-    prontaEntregaColor: DEFAULT_TAB_COLORS.prontaEntregaColor,
-  };
-}
-
-export function saveStoreTabColors(storeId: string, colors: Partial<StoreTabColors>) {
-  if (!storeId) return;
-  try {
-    const current = getStoreTabColors(storeId);
-    const updated = { ...current, ...colors };
-    localStorage.setItem(`minipre_store_tab_colors_${storeId}`, JSON.stringify(updated));
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("store_customizations_updated", { detail: { storeId } }));
-    }
-  } catch {
-    // ignore
-  }
-}
-

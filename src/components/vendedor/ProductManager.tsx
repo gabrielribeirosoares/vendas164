@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Pencil, Plus, Search, Share2, Trash2, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { toast } from "sonner";
-import { getProductBadge, saveProductBadge, saveProductCategory, PRESET_BADGES, getStoreTabColors } from "@/lib/storeCustomizations";
+import { getProductBadge, saveProductBadge, saveProductCategory, PRESET_BADGES, getReadableTextColor } from "@/lib/storeCustomizations";
 import { BlingIntegrationDialog } from "@/components/vendedor/BlingIntegrationDialog";
 import { InterfaceState } from "@/components/InterfaceState";
 import { Button } from "@/components/ui/button";
@@ -103,23 +103,8 @@ export function ProductsTab({
 
   const isBlingEligible = true;
 
-  const storeThemeColor = store.primary_color || "#e11d48";
-  const [tabColors, setTabColors] = useState(() => getStoreTabColors(store.id, store.primary_color));
-
-  useEffect(() => {
-    setTabColors(getStoreTabColors(store.id, store.primary_color));
-    const handler = (e: any) => {
-      if (!e.detail || e.detail.storeId === store.id) {
-        setTabColors(getStoreTabColors(store.id, store.primary_color));
-      }
-    };
-    window.addEventListener("store_customizations_updated", handler);
-    return () => window.removeEventListener("store_customizations_updated", handler);
-  }, [store.id, store.primary_color]);
-
-  const activeColor = mode === "pronta_entrega"
-    ? (tabColors.prontaEntregaColor || "#059669")
-    : (tabColors.preVendaColor || storeThemeColor);
+  const activeColor = store.primary_color || "#e11d48";
+  const activeTextColor = getReadableTextColor(activeColor);
 
   const displayedProducts = useMemo(() => {
     let list = products;
@@ -841,7 +826,7 @@ export function ProductsTab({
                 />
                 {form.image_url && <p className="text-xs text-success">Foto pronta para publicar.</p>}
               </div>
-              <Button type="submit" className="w-full text-white font-semibold hover:opacity-90" style={{ backgroundColor: activeColor }} disabled={saving}>
+              <Button type="submit" className="w-full text-white font-semibold hover:opacity-90" style={{ backgroundColor: activeColor, color: activeTextColor }} disabled={saving}>
                 {saving && <Loader2 className="size-4 animate-spin" />} {mode === "pronta_entrega" ? "Publicar a pronta entrega" : "Publicar pré-venda"}
               </Button>
             </form>
@@ -888,7 +873,7 @@ export function ProductsTab({
               size="sm"
               onClick={() => { setForm({ ...emptyProduct, category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda", badge: mode === "pronta_entrega" ? "Pronta Entrega" : "" }); setIsCustomBrand(false); setSheetOpen(true); }}
               className="gap-1.5 text-white font-semibold shadow-xs transition-opacity hover:opacity-90"
-              style={{ backgroundColor: activeColor }}
+              style={{ backgroundColor: activeColor, color: activeTextColor }}
             >
               <Plus className="size-4" /> {mode === "pronta_entrega" ? "Nova pronta entrega" : "Nova pré-venda"}
             </Button>
@@ -938,7 +923,7 @@ export function ProductsTab({
                 className="h-7 px-3 text-xs rounded-full font-medium transition-colors"
                 style={
                   selectedBrand === "all"
-                    ? { backgroundColor: activeColor, borderColor: activeColor, color: "#ffffff" }
+                    ? { backgroundColor: activeColor, borderColor: activeColor, color: activeTextColor }
                     : undefined
                 }
               >
@@ -956,7 +941,7 @@ export function ProductsTab({
                     className="h-7 px-3 text-xs rounded-full font-medium transition-colors"
                     style={
                       isSelected
-                        ? { backgroundColor: activeColor, borderColor: activeColor, color: "#ffffff" }
+                        ? { backgroundColor: activeColor, borderColor: activeColor, color: activeTextColor }
                         : undefined
                     }
                   >
@@ -988,9 +973,10 @@ export function ProductsTab({
                         }}
                         className={`px-2 py-0.5 rounded text-xs font-semibold transition-all ${
                           pageSize === opt
-                            ? "bg-primary text-primary-foreground shadow-xs"
+                            ? "shadow-xs"
                             : "bg-muted/40 hover:bg-muted text-muted-foreground"
                         }`}
+                        style={pageSize === opt ? { backgroundColor: activeColor, color: activeTextColor } : undefined}
                       >
                         {opt === 0 ? "Todos" : opt}
                       </button>
@@ -1140,7 +1126,7 @@ export function ProductsTab({
                               disabled={!p.is_open || p.stock <= 0}
                               onClick={() => handleReserveUnidade(p)}
                               className="gap-1 text-white hover:opacity-90 text-xs font-semibold transition-opacity"
-                              style={p.is_open && p.stock > 0 ? { backgroundColor: activeColor } : undefined}
+                              style={p.is_open && p.stock > 0 ? { backgroundColor: activeColor, color: activeTextColor } : undefined}
                               title="Fazer reserva para cliente nesta unidade"
                             >
                               <BookmarkCheck className="size-3.5" />
@@ -1150,7 +1136,7 @@ export function ProductsTab({
                               <Switch
                                 checked={p.is_open}
                                 onCheckedChange={() => toggleOpen(p)}
-                                style={p.is_open ? { backgroundColor: activeColor } : undefined}
+                                style={p.is_open ? { backgroundColor: activeColor, color: activeTextColor } : undefined}
                               />
                               {p.is_open ? "Aberta" : "Fechada"}
                             </div>
@@ -1237,7 +1223,7 @@ export function ProductsTab({
                         setSheetOpen(true);
                       }}
                       className="text-white hover:opacity-90 font-semibold"
-                      style={{ backgroundColor: activeColor }}
+                      style={{ backgroundColor: activeColor, color: activeTextColor }}
                     >
                       <Plus className="size-4" />
                       {mode === "pronta_entrega" ? "Cadastrar pronta entrega" : "Cadastrar pré-venda"}
@@ -1269,7 +1255,7 @@ export function ProductsTab({
                         className={`h-7 px-2 text-xs font-semibold ${
                           pageSize === opt ? "shadow-xs text-white" : "bg-background/80"
                         }`}
-                        style={pageSize === opt ? { backgroundColor: activeColor, borderColor: activeColor, color: "#fff" } : undefined}
+                        style={pageSize === opt ? { backgroundColor: activeColor, borderColor: activeColor, color: activeTextColor } : undefined}
                         onClick={() => {
                           setPageSize(opt);
                           setPage(0);
@@ -1328,7 +1314,7 @@ export function ProductsTab({
                           className={`h-8 w-8 p-0 text-xs font-semibold ${
                             isCurrent ? "shadow-xs scale-105 text-white" : "bg-background/80"
                           }`}
-                          style={isCurrent ? { backgroundColor: activeColor, borderColor: activeColor, color: "#fff" } : undefined}
+                          style={isCurrent ? { backgroundColor: activeColor, borderColor: activeColor, color: activeTextColor } : undefined}
                           onClick={() => {
                             setPage(i);
                             window.scrollTo({ top: 300, behavior: "smooth" });

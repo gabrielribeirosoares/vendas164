@@ -18,7 +18,7 @@ import { useSession } from "@/lib/session";
 import { joinWaitlist, reservationErrorMessage } from "@/lib/reservations";
 import { useCartStore } from "@/lib/cart";
 import { getSubdomain, getStoreFullUrl } from "@/lib/subdomain";
-import { getStoreTabColors } from "@/lib/storeCustomizations";
+import { getReadableTextColor } from "@/lib/storeCustomizations";
 import { BrandMiniaturesMarquee } from "@/components/store/BrandMiniaturesMarquee";
 
 const fetchProductBySlugs = createServerFn({ method: "GET" })
@@ -163,7 +163,8 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
   const isPronta = isProntaEntrega(product);
   const hasNoSignal = hasNoSignalRequirement(product);
   const signalInfo = getProductSignalAmount(product, quantity);
-  const tabColors = getStoreTabColors(product?.stores?.id || product?.store_id);
+  const themeColor = product?.stores?.primary_color || "#e11d48";
+  const themeTextColor = getReadableTextColor(themeColor);
 
   // Cálculo de parcelamento e total com base no produto e quantidade selecionada
   const installmentOptions = getInstallmentOptions(product, quantity);
@@ -318,16 +319,15 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
               {isPronta ? (
                 <Badge
                   variant="secondary"
-                  className="text-white font-medium text-xs gap-1.5 py-1 px-2.5 shadow-xs"
-                  style={{ backgroundColor: tabColors.prontaEntregaColor }}
+                  className="border border-emerald-500/20 bg-emerald-600 text-white font-medium text-xs gap-1.5 py-1 px-2.5 shadow-xs"
                 >
                   <Zap className="size-3.5 fill-current" /> Pronta Entrega — Envio Imediato
                 </Badge>
               ) : (
                 <Badge
                   variant="secondary"
-                  className="text-white font-medium text-xs gap-1.5 py-1 px-2.5 shadow-xs"
-                  style={{ backgroundColor: tabColors.preVendaColor }}
+                  className="border font-medium text-xs gap-1.5 py-1 px-2.5 shadow-xs"
+                  style={{ backgroundColor: `${themeColor}18`, borderColor: `${themeColor}40`, color: themeColor }}
                 >
                   <Package className="size-3.5" /> Pré-venda
                 </Badge>
@@ -563,7 +563,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
                     size="lg"
                     className="min-h-12 flex-1 rounded-xl text-sm font-bold text-white shadow-md transition-all"
                     onClick={handleReserve}
-                    style={{ backgroundColor: product.stores?.primary_color }}
+                    style={{ backgroundColor: themeColor, color: themeTextColor }}
                     disabled={reserving}
                   >
                     <ShoppingBag className="size-4 mr-2" />
@@ -593,7 +593,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
                     (product.stock > 0 && !isEligibleToBuyWaitlist) ||
                     (product.stock === 0 && isOnWaitlist)
                   }
-                  style={product.is_open && product.stock > 0 ? { backgroundColor: product.stores?.primary_color } : undefined}
+                  style={product.is_open && product.stock > 0 ? { backgroundColor: themeColor, color: themeTextColor } : undefined}
                 >
                   {!product.is_open
                     ? isPronta ? "Item indisponível" : "Pré-venda fechada"

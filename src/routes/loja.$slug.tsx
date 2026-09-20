@@ -21,7 +21,7 @@ import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 import { useCartStore } from "@/lib/cart";
 import { saveCustomerToCache } from "@/lib/customerCache";
-import { getStoreBanner, getProductBadge, getStoreTabColors } from "@/lib/storeCustomizations";
+import { getReadableTextColor, getStoreBanner, getProductBadge } from "@/lib/storeCustomizations";
 import { StoreReviewsSection } from "@/components/StoreReviewsSection";
 import { StoreProductCard } from "@/components/store/StoreProductCard";
 import { getSubdomain, getStoreFullUrl, getProductUrl } from "@/lib/subdomain";
@@ -321,7 +321,8 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
   const products = data?.products ?? [];
   const isOwner = !!(user && store?.owner_id === user.id);
   const storeStatus = (store as any)?.status || "active";
-  const tabColors = useMemo(() => getStoreTabColors(store?.id), [store?.id]);
+  const themeColor = store?.primary_color || "#e11d48";
+  const themeTextColor = getReadableTextColor(themeColor);
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -468,7 +469,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
       {getStoreBanner(store.id) && (
         <div 
           className="w-full text-white text-xs sm:text-sm font-semibold py-2.5 px-4 text-center flex items-center justify-center gap-2 shadow-sm"
-          style={{ backgroundColor: store.primary_color || "#e11d48" }}
+          style={{ backgroundColor: themeColor, color: themeTextColor }}
         >
           <Sparkles className="size-4 shrink-0 animate-pulse text-amber-300" />
           <span>{getStoreBanner(store.id)}</span>
@@ -492,7 +493,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
             ) : (
               <span
                 className="flex size-16 items-center justify-center rounded-2xl text-white font-bold text-xl shadow-sm"
-                style={{ backgroundColor: store.primary_color }}
+                style={{ backgroundColor: themeColor, color: themeTextColor }}
               >
                 <StoreIcon className="size-7" />
               </span>
@@ -521,7 +522,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                       ? "border-success/30 text-success hover:bg-success/10 font-semibold gap-1.5 text-xs sm:text-sm"
                       : "gap-1.5 text-xs sm:text-sm"
                   }
-                  style={!isFollowing ? { backgroundColor: store.primary_color, color: "#fff" } : undefined}
+                  style={!isFollowing ? { backgroundColor: themeColor, color: themeTextColor } : undefined}
                 >
                   {isFollowing ? (
                     <>
@@ -622,7 +623,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                       ? "text-white shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
-                  style={selectedType === "all" ? { backgroundColor: store.primary_color } : undefined}
+                  style={selectedType === "all" ? { backgroundColor: themeColor, color: themeTextColor } : undefined}
                 >
                   Todos
                </button>
@@ -634,7 +635,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                       ? "text-white shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
-                  style={selectedType === "pre" ? { backgroundColor: tabColors.preVendaColor } : undefined}
+                  style={selectedType === "pre" ? { backgroundColor: themeColor } : undefined}
                 >
                   Pré-venda
                </button>
@@ -646,7 +647,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                       ? "text-white shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
-                  style={selectedType === "pronta" ? { backgroundColor: tabColors.prontaEntregaColor } : undefined}
+                  style={selectedType === "pronta" ? { backgroundColor: themeColor } : undefined}
                 >
                   Pronta entrega
                </button>
@@ -658,7 +659,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                 size="sm"
                 className="h-9 text-xs px-3 gap-1.5 rounded-full"
                 onClick={() => setOnlyInStock(!onlyInStock)}
-                style={onlyInStock ? { backgroundColor: store.primary_color, color: "#fff" } : undefined}
+                style={onlyInStock ? { backgroundColor: themeColor, color: themeTextColor } : undefined}
               >
                 <span>Somente em estoque</span>
               </Button>
@@ -873,7 +874,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                                   <button
                                     onClick={(e) => handleQuickAdd(e, p)}
                                     className="p-2 rounded-lg text-white shadow-sm hover:scale-105 transition-transform"
-                                    style={{ backgroundColor: store.primary_color }}
+                                    style={{ backgroundColor: themeColor, color: themeTextColor }}
                                     title="Adicionar ao carrinho"
                                   >
                                     <ShoppingCart className="size-4" />
@@ -881,7 +882,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                                   <Button
                                     size="sm"
                                     className="font-semibold text-xs h-9 px-3 gap-1"
-                                    style={p.is_open && p.stock > 0 ? { backgroundColor: store.primary_color, color: "#fff" } : undefined}
+                                    style={p.is_open && p.stock > 0 ? { backgroundColor: themeColor, color: themeTextColor } : undefined}
                                     variant={p.is_open && p.stock > 0 ? "default" : "outline"}
                                   >
                                     <BookmarkCheck className="size-3.5" />
@@ -903,7 +904,6 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                           storeSlug={slug || "loja"}
                           primaryColor={store.primary_color}
                           customBadge={getProductBadge(p.id)}
-                          tabColors={tabColors}
                           onAdd={handleQuickAdd}
                         />
                       ))}
@@ -958,7 +958,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                           ? "text-white border-transparent shadow-md scale-105"
                           : "bg-muted/30 border-border/30 text-muted-foreground hover:bg-muted"
                       }`}
-                      style={currentPage === pageNum ? { backgroundColor: store.primary_color } : undefined}
+                      style={currentPage === pageNum ? { backgroundColor: themeColor, color: themeTextColor } : undefined}
                     >
                       {pageNum}
                     </button>
