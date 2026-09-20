@@ -570,40 +570,40 @@ function SellerDashboard() {
             <span className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               Operação
             </span>
-            <TabsTrigger value="produtos" className="gap-1.5 text-xs sm:text-sm">
-              <Package className="size-3.5 text-amber-500" /> Pré-vendas
+            <TabsTrigger value="produtos" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
+              <Package className="size-3.5 text-muted-foreground" /> Pré-vendas
             </TabsTrigger>
-            <TabsTrigger value="pronta_entrega" className="gap-1.5 text-xs sm:text-sm text-emerald-600 dark:text-emerald-400 font-semibold">
-              <Zap className="size-3.5 fill-emerald-500 text-emerald-500" /> Pronta Entrega
+            <TabsTrigger value="pronta_entrega" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
+              <Zap className="size-3.5 text-muted-foreground" /> Pronta Entrega
             </TabsTrigger>
-            <TabsTrigger value="reservas" className="gap-1.5 text-xs sm:text-sm">
-              <Car className="size-3.5 text-emerald-500" /> Reservas
+            <TabsTrigger value="reservas" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
+              <Car className="size-3.5 text-muted-foreground" /> Reservas
             </TabsTrigger>
-            <TabsTrigger value="clientes" className="gap-1.5 text-xs sm:text-sm">
-              <User className="size-3.5 text-emerald-500" /> Clientes
+            <TabsTrigger value="clientes" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
+              <User className="size-3.5 text-muted-foreground" /> Clientes
             </TabsTrigger>
-            <TabsTrigger value="fila_espera" className="gap-1.5 text-xs sm:text-sm">
-              <Clock className="size-3.5 text-amber-500" />
+            <TabsTrigger value="fila_espera" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
+              <Clock className="size-3.5 text-muted-foreground" />
               <span>Fila de Espera</span>
               {waitlist.length > 0 && (
-                <Badge className="ml-auto bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[10px] px-1.5 py-0 h-4 font-bold">
+                <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 font-semibold text-muted-foreground border-border/50">
                   {waitlist.length}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="rastreamento" className="gap-1.5 text-xs sm:text-sm text-blue-600 dark:text-blue-400">
-              <RefreshCw className="size-3.5 text-blue-500" /> Rastreamento
+            <TabsTrigger value="rastreamento" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
+              <RefreshCw className="size-3.5 text-muted-foreground" /> Rastreamento
             </TabsTrigger>
             <div className="mx-2 my-1 h-px bg-border/60" />
             <span className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               Configuração
             </span>
-            <TabsTrigger value="loja" className="gap-1.5 text-xs sm:text-sm">
-              <Palette className="size-3.5 text-emerald-500" /> Personalização
+            <TabsTrigger value="loja" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
+              <Palette className="size-3.5 text-muted-foreground" /> Personalização
             </TabsTrigger>
             {isAdmin && (
-              <TabsTrigger value="admin_moderation" className="gap-1.5 text-xs sm:text-sm text-amber-600">
-                <ShieldCheck className="size-3.5 text-amber-500" /> Moderação
+              <TabsTrigger value="admin_moderation" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
+                <ShieldCheck className="size-3.5 text-muted-foreground" /> Moderação
               </TabsTrigger>
             )}
           </TabsList>
@@ -618,7 +618,7 @@ function SellerDashboard() {
                 onClick={() => setActiveTab("produtos")}
                 className="h-8 text-xs shrink-0 gap-1.5"
               >
-                <Package className="size-3 text-amber-500" /> Pré-vendas
+                <Package className="size-3 text-muted-foreground" /> Pré-vendas
               </Button>
               <Button
                 type="button"
@@ -627,7 +627,7 @@ function SellerDashboard() {
                 onClick={() => setActiveTab("pronta_entrega")}
                 className="h-8 text-xs shrink-0 gap-1.5"
               >
-                <Zap className="size-3 text-emerald-500" /> Pronta Entrega
+                <Zap className="size-3 text-muted-foreground" /> Pronta Entrega
               </Button>
               <Button
                 type="button"
@@ -636,7 +636,7 @@ function SellerDashboard() {
                 onClick={() => setActiveTab("reservas")}
                 className="h-8 text-xs shrink-0 gap-1.5"
               >
-                <Car className="size-3 text-emerald-500" /> Reservas
+                <Car className="size-3 text-muted-foreground" /> Reservas
               </Button>
               <Button
                 type="button"
@@ -645,7 +645,7 @@ function SellerDashboard() {
                 onClick={() => setActiveTab("clientes")}
                 className="h-8 text-xs shrink-0 gap-1.5"
               >
-                <User className="size-3 text-emerald-500" /> Clientes
+                <User className="size-3 text-muted-foreground" /> Clientes
               </Button>
               <Button
                 type="button"
@@ -654,9 +654,9 @@ function SellerDashboard() {
                 onClick={() => setActiveTab("fila_espera")}
                 className="h-8 text-xs shrink-0 gap-1.5"
               >
-                <Clock className="size-3 text-amber-500" /> Fila
+                <Clock className="size-3 text-muted-foreground" /> Fila
                 {waitlist.length > 0 && (
-                  <span className="rounded-full bg-amber-500 text-amber-950 px-1 py-0.2 text-[9px] font-bold">
+                  <span className="rounded-full bg-muted text-muted-foreground border border-border/50 px-1 py-0.2 text-[9px] font-semibold">
                     {waitlist.length}
                   </span>
                 )}
@@ -668,7 +668,7 @@ function SellerDashboard() {
                 onClick={() => setActiveTab("rastreamento")}
                 className="h-8 text-xs shrink-0 gap-1.5"
               >
-                <RefreshCw className="size-3 text-blue-500" /> Rastreamento
+                <RefreshCw className="size-3 text-muted-foreground" /> Rastreamento
               </Button>
               <Button
                 type="button"
@@ -677,8 +677,19 @@ function SellerDashboard() {
                 onClick={() => setActiveTab("loja")}
                 className="h-8 text-xs shrink-0 gap-1.5"
               >
-                <Palette className="size-3 text-emerald-500" /> Loja
+                <Palette className="size-3 text-muted-foreground" /> Personalização
               </Button>
+              {isAdmin && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={activeTab === "admin_moderation" ? "default" : "outline"}
+                  onClick={() => setActiveTab("admin_moderation")}
+                  className="h-8 text-xs shrink-0 gap-1.5"
+                >
+                  <ShieldCheck className="size-3 text-muted-foreground" /> Moderação
+                </Button>
+              )}
             </div>
 
             <SellerSectionHeader activeSection={activeTab} storeName={store.name} />

@@ -228,43 +228,43 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                                 <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 px-2">Minha Loja</h4>
                                 <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "produtos")} onClick={() => setMobileMenuOpen(false)}>
                                   <Link to="/vendedor" search={{ tab: "produtos" }} aria-current={activeSellerTab === "produtos" ? "page" : undefined}>
-                                    <Package className="size-4 text-amber-500" /> Pré-vendas
+                                    <Package className="size-4 text-muted-foreground" /> Pré-vendas
                                   </Link>
                                 </Button>
                                 <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "pronta_entrega")} onClick={() => setMobileMenuOpen(false)}>
                                   <Link to="/vendedor" search={{ tab: "pronta_entrega" }} aria-current={activeSellerTab === "pronta_entrega" ? "page" : undefined}>
-                                    <Zap className="size-4 text-emerald-500 fill-emerald-500" /> Pronta Entrega
+                                    <Zap className="size-4 text-muted-foreground" /> Pronta Entrega
                                   </Link>
                                 </Button>
                                 <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "reservas")} onClick={() => setMobileMenuOpen(false)}>
                                   <Link to="/vendedor" search={{ tab: "reservas" }} aria-current={activeSellerTab === "reservas" ? "page" : undefined}>
-                                    <Car className="size-4 text-emerald-500" /> Pedidos/Reservas
+                                    <Car className="size-4 text-muted-foreground" /> Pedidos/Reservas
                                   </Link>
                                 </Button>
                                 <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "clientes")} onClick={() => setMobileMenuOpen(false)}>
                                   <Link to="/vendedor" search={{ tab: "clientes" }} aria-current={activeSellerTab === "clientes" ? "page" : undefined}>
-                                    <User className="size-4 text-emerald-500" /> Clientes
+                                    <User className="size-4 text-muted-foreground" /> Clientes
                                   </Link>
                                 </Button>
                                 <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "fila_espera")} onClick={() => setMobileMenuOpen(false)}>
                                   <Link to="/vendedor" search={{ tab: "fila_espera" }} aria-current={activeSellerTab === "fila_espera" ? "page" : undefined}>
-                                    <Clock className="size-4 text-amber-500" /> Fila de Espera
+                                    <Clock className="size-4 text-muted-foreground" /> Fila de Espera
                                   </Link>
                                 </Button>
                                 <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "rastreamento")} onClick={() => setMobileMenuOpen(false)}>
                                   <Link to="/vendedor" search={{ tab: "rastreamento" }} aria-current={activeSellerTab === "rastreamento" ? "page" : undefined}>
-                                    <RefreshCw className="size-4" /> Rastreamento
+                                    <RefreshCw className="size-4 text-muted-foreground" /> Rastreamento
                                   </Link>
                                 </Button>
                                 <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "loja")} onClick={() => setMobileMenuOpen(false)}>
                                   <Link to="/vendedor" search={{ tab: "loja" }} aria-current={activeSellerTab === "loja" ? "page" : undefined}>
-                                    <Palette className="size-4 text-emerald-500" /> Personalização
+                                    <Palette className="size-4 text-muted-foreground" /> Personalização
                                   </Link>
                                 </Button>
                                 {isPlatformAdmin && (
                                   <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "admin_moderation")} onClick={() => setMobileMenuOpen(false)}>
                                     <Link to="/vendedor" search={{ tab: "admin_moderation" }} aria-current={activeSellerTab === "admin_moderation" ? "page" : undefined}>
-                                      <ShieldCheck className="size-4 text-amber-500" /> Moderação
+                                      <ShieldCheck className="size-4 text-muted-foreground" /> Moderação
                                     </Link>
                                   </Button>
                                 )}
