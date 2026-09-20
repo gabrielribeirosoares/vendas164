@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
-import { getStoreFullUrl, getStoreDisplayDomain, redirectToMainIfOnSubdomain } from "@/lib/subdomain";
+import { getStoreFullUrl, getStoreDisplayDomain, redirectToMainIfOnSubdomain, withStorePreviewVersion } from "@/lib/subdomain";
 import { PhoneInput } from "@/components/PhoneInput";
 import { getCustomerFromCache } from "@/lib/customerCache";
 import { getReadableTextColor } from "@/lib/storeCustomizations";
@@ -554,7 +554,10 @@ function SellerDashboard() {
               className="text-xs"
               onClick={() => {
                 navigator.clipboard.writeText(
-                  getStoreFullUrl(store.slug),
+                  withStorePreviewVersion(
+                    getStoreFullUrl(store.slug),
+                    store.logo_url || store.favicon_url,
+                  ),
                 );
                 toast.success("Link da loja copiado!");
               }}
