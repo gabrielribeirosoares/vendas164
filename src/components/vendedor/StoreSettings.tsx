@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { PhoneInput } from '@/components/PhoneInput';
 import { DEFAULT_PRESET_BRANDS, getStoreBrands, saveStoreBrands } from '@/lib/brands';
 import { getStoreBanner, saveStoreBanner } from '@/lib/storeCustomizations';
+import { getStoreStockDisplayThreshold, saveStoreStockDisplayThreshold } from '@/lib/stock';
 import { uploadImage } from '@/lib/upload';
 import { updateAppFavicon } from '@/lib/favicon';
 import type { Tables } from '@/integrations/supabase/types';
@@ -43,6 +44,10 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
     contact_email: store.contact_email ?? "",
     contact_instagram: store.contact_instagram ?? "",
     default_installment_due_day: store.default_installment_due_day?.toString() ?? "",
+  });
+  const [stockThreshold, setStockThreshold] = useState<string>(() => {
+    const val = getStoreStockDisplayThreshold(store.id);
+    return val !== null ? val.toString() : "";
   });
   const [saving, setSaving] = useState(false);
   const [selectedBrands, setSelectedBrands] = useState<string[]>(() => getStoreBrands(store.id));
@@ -85,6 +90,8 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
     // Salvar marcas comercializadas e banner promocional
     saveStoreBrands(store.id, selectedBrands);
     saveStoreBanner(store.id, form.banner);
+    const parsedThreshold = stockThreshold.trim() ? parseInt(stockThreshold, 10) : null;
+    saveStoreStockDisplayThreshold(store.id, parsedThreshold && parsedThreshold > 0 ? parsedThreshold : null);
 
     // Verificar se já existe OUTRA loja cadastrada com o mesmo slug
     const { data: existing } = await supabase
@@ -328,6 +335,46 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
                 Se preenchido, todas as novas parcelas geradas pela loja (compras ou pré-vendas) 
                 terão o vencimento fixado para o mês seguinte neste dia escolhido. 
                 Se deixar em branco, o sistema usa 1 mês inteiro a partir da data do pedido.
+              </p>
+            </div>
+
+            {/* SEÇÃO DE EXIBIÇÃO DE ESTOQUE NA VITRINE */}
+            <div className="space-y-2 rounded-xl border border-border/50 bg-muted/30 p-4">
+              <div>
+                <Label htmlFor="b-stock-threshold" className="text-base font-semibold">
+                  Exibição de Estoque na Vitrine
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Controle a partir de qual limite os clientes verão a contagem exata de unidades ou apenas "Disponível".
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 pt-1">
+                <span className="text-xs font-medium text-foreground">
+                  Mostrar quantidade apenas quando estiver abaixo de:
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    id="b-stock-threshold"
+                    type="number"
+                    min="0"
+                    max="999"
+                    placeholder="Ex: 5"
+                    value={stockThreshold}
+                    onChange={(e) => setStockThreshold(e.target.value)}
+                    className="w-20 h-9 font-mono text-center text-xs sm:text-sm bg-background"
+                  />
+                  <span className="text-xs text-muted-foreground">unidades</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {stockThreshold && parseInt(stockThreshold, 10) > 0 ? (
+                  <>
+                    Miniaturas com <strong>{stockThreshold} ou mais</strong> unidades em estoque exibirão apenas <strong>"Disponível"</strong> na vitrine. A quantidade numérica só será revelada quando o estoque for menor que {stockThreshold}.
+                  </>
+                ) : (
+                  "Deixe 0 ou em branco para sempre exibir a quantidade numérica exata na vitrine."
+                )}
               </p>
             </div>
 

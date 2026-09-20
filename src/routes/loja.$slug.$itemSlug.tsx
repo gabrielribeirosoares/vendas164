@@ -18,6 +18,7 @@ import { useSession } from "@/lib/session";
 import { joinWaitlist, reservationErrorMessage } from "@/lib/reservations";
 import { useCartStore } from "@/lib/cart";
 import { getSubdomain, getStoreFullUrl } from "@/lib/subdomain";
+import { BrandMiniaturesMarquee } from "@/components/store/BrandMiniaturesMarquee";
 
 const fetchProductBySlugs = createServerFn({ method: "GET" })
   .validator((d: { slug: string; itemSlug: string }) => d)
@@ -322,17 +323,21 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
                 </Badge>
               )}
 
-              {product.stock === 1 ? (
+              {product.stock <= 0 ? (
+                <Badge variant="destructive" className="font-medium text-xs py-1 px-2.5">
+                  Esgotado
+                </Badge>
+              ) : product.stock === 1 ? (
                 <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium text-xs py-1 px-2.5">
                   Última unidade restante
                 </Badge>
-              ) : product.stock > 1 ? (
-                <Badge variant="outline" className="border-border/40 text-muted-foreground font-medium text-xs py-1 px-2.5">
-                  {formatStockRemaining(product)}
+              ) : formatStockRemaining(product) === "Disponível" ? (
+                <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium text-xs py-1 px-2.5">
+                  Disponível
                 </Badge>
               ) : (
-                <Badge variant="destructive" className="font-medium text-xs py-1 px-2.5">
-                  Esgotado
+                <Badge variant="outline" className="border-border/40 text-muted-foreground font-medium text-xs py-1 px-2.5">
+                  {formatStockRemaining(product)}
                 </Badge>
               )}
 
@@ -600,6 +605,17 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
             )}
           </div>
         </div>
+
+        {product?.stores?.id && (
+          <BrandMiniaturesMarquee
+            currentProductId={product.id}
+            brand={product.brand}
+            storeId={product.stores.id}
+            storeSlug={product.stores.slug || slug}
+            storeName={product.stores.name}
+            primaryColor={product.stores.primary_color}
+          />
+        )}
       </main>
       <AppFooter storeInfo={product?.stores || undefined} />
     </div>

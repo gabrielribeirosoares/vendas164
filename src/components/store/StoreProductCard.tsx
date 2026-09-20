@@ -2,6 +2,7 @@ import type { MouseEvent } from "react";
 import type { Product } from "@/lib/cart";
 import { brl, getProductInstallmentInfo, getProductSignalAmount, isProntaEntrega } from "@/lib/format";
 import { getProductUrl } from "@/lib/subdomain";
+import { formatStoreProductCardStock } from "@/lib/stock";
 import { Button } from "@/components/ui/button";
 import { Package, ShoppingCart } from "lucide-react";
 
@@ -106,21 +107,22 @@ export function StoreProductCard({
         </div>
 
         <div className="mt-auto space-y-2">
-          <p className={`text-xs font-medium ${
-            !available
-              ? "text-muted-foreground"
-              : product.stock <= 2
-                ? "text-rose-600 dark:text-rose-400"
-                : "text-emerald-600 dark:text-emerald-400"
-          }`}>
-            {!product.is_open
-              ? "Pré-venda encerrada"
-              : product.stock <= 0
-                ? "Indisponível — consulte a fila"
-                : product.stock === 1
-                  ? "Última unidade disponível"
-                  : `${product.stock} unidades disponíveis`}
-          </p>
+          {(() => {
+            const stockInfo = formatStoreProductCardStock(product);
+            return (
+              <p
+                className={`text-xs font-medium ${
+                  !available
+                    ? "text-muted-foreground"
+                    : stockInfo.isScarce
+                      ? "text-rose-600 dark:text-rose-400"
+                      : "text-emerald-600 dark:text-emerald-400"
+                }`}
+              >
+                {stockInfo.text}
+              </p>
+            );
+          })()}
 
           {available ? (
             <Button

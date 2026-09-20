@@ -27,3 +27,8 @@ test("product description has a dedicated readable section", () => {
   assert.match(page, /Sobre a miniatura/);
   assert.match(page, /whitespace-pre-line text-sm leading-6/);
 });
+
+test("displays continuous same-brand miniatures marquee below product view", () => {
+  assert.match(page, /BrandMiniaturesMarquee/);
+});
+

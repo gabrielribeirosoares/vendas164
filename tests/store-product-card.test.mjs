@@ -22,6 +22,12 @@ test("store card keeps readable labels and separate interactive elements", () =>
 test("store card exposes the key purchase information", () => {
   assert.match(card, /À vista/);
   assert.match(card, /Sinal:/);
-  assert.match(card, /unidades disponíveis/);
+  assert.match(card, /unidades disponíveis|formatStoreProductCardStock/);
   assert.match(card, /getProductInstallmentInfo/);
+});
+
+test("stock helper defines Zero51 Garage default threshold of 5 units", async () => {
+  const stockLib = await readFile(new URL("../src/lib/stock.ts", import.meta.url), "utf8");
+  assert.match(stockLib, /b2d3e709-3d0c-4dc1-be97-6c92b961f210/);
+  assert.match(stockLib, /Disponível/);
 });

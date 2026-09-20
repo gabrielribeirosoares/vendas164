@@ -841,7 +841,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
 
                                   <div className="flex items-center gap-2 pt-0.5 flex-wrap text-xs">
                                     <Badge variant={p.is_open ? "secondary" : "outline"} className="text-[10px] px-1.5 py-0">
-                                      {formatStockRemaining(p)}
+                                      {formatStockRemaining(p, store.id)}
                                     </Badge>
 
                                     {signal.isSemSinal ? (

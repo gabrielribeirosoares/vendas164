@@ -230,3 +230,39 @@
 @utility border-subtle {
   border-color: var(--color-border);
 }
+
+/* Marquee contínuo suave e lento para vitrine de miniaturas */
+@keyframes marquee-scroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.animate-marquee-slow {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: marquee-scroll 45s linear infinite;
+}
+
+.animate-marquee-slow:hover,
+.animate-marquee-slow:focus-within {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee-slow {
+    animation: none;
+  }
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
