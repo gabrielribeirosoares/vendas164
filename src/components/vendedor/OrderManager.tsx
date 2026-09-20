@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw, FileSpreadsheet, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { notifyCustomerOrderUpdateServer } from '@/lib/push';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -461,11 +462,27 @@ export function OrdersTab({
     patch: Partial<Pick<Tables<"orders">, "down_payment" | "payment_status" | "delivery_status" | "reservation_expires_at">>,
   ) {
     const chunkSize = 40;
+    
+    // Pega os customer_ids antes de atualizar, pra notificar
+    const { data: ordersData } = await supabase.from("orders").select("customer_id, id").in("id", ids);
+    
     for (let i = 0; i < ids.length; i += chunkSize) {
       const chunk = ids.slice(i, i + chunkSize);
       const { error } = await supabase.from("orders").update(patch).in("id", chunk);
       if (error) return toast.error("Não foi possível atualizar a reserva.");
     }
+    
+    // Notifica os clientes afetados
+    if (ordersData && (patch.payment_status || patch.delivery_status)) {
+      const statusLabel = patch.payment_status || patch.delivery_status || "atualizado";
+      const customerIds = [...new Set(ordersData.map(o => o.customer_id).filter(Boolean))];
+      customerIds.forEach(customerId => {
+        if (customerId) {
+          notifyCustomerOrderUpdateServer({ data: { customerId, status: statusLabel } }).catch(console.error);
+        }
+      });
+    }
+
     queryClient.invalidateQueries();
   }
 

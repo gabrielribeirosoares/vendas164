@@ -14,6 +14,7 @@ import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { OnboardingTour, TourTriggerButton } from "@/components/OnboardingTour";
 import { CartDrawer } from "@/components/CartDrawer";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { PushNotificationManager } from "@/components/PushNotificationManager";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/lib/session";
 import { updateAppFavicon } from "@/lib/favicon";
@@ -197,6 +198,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                 </div>
 
                 <div className="flex items-center gap-1 sm:gap-1.5">
+                  <PushNotificationManager storeId={currentStore?.id} />
                   <ThemeToggle />
                   <CartDrawer />
                   <div className="hidden md:flex"><TourTriggerButton /></div>

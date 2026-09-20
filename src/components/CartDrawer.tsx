@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useCartStore } from '@/lib/cart';
 import { checkoutCart, reservationErrorMessage } from '@/lib/reservations';
+import { notifySellerNewOrderServer } from '@/lib/push';
 import { brl } from '@/lib/format';
 import { ShoppingBag, Trash2, Loader2, ChevronRight, Minus, Plus, RefreshCw, Store as StoreIcon } from 'lucide-react';
 import { toast } from 'sonner';
@@ -82,6 +83,13 @@ export function CartDrawer() {
       cart.clearCart();
       setIsOpen(false);
       toast.success('Reservas confirmadas! Acompanhe os pagamentos no seu painel.');
+      
+      // Notify sellers
+      const storeIds = [...new Set(cart.items.map(i => i.storeId))];
+      storeIds.forEach(storeId => {
+        if (storeId) notifySellerNewOrderServer({ data: storeId }).catch(console.error);
+      });
+
       await queryClient.invalidateQueries();
       navigate({ to: '/painel' });
     } catch (error) {

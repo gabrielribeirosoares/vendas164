@@ -48,3 +48,44 @@ self.addEventListener("fetch", (event) => {
       .catch(() => caches.match(request)),
   );
 });
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+
+  try {
+    const data = event.data.json();
+    const options = {
+      body: data.body || "Você tem uma nova atualização.",
+      icon: "/icons/pwa-icon-192.png",
+      badge: "/icons/pwa-icon.svg",
+      vibrate: [100, 50, 100],
+      data: {
+        url: data.url || "/",
+      },
+    };
+
+    event.waitUntil(self.registration.showNotification(data.title || "Vendas 164", options));
+  } catch (error) {
+    console.error("[SW] Erro ao processar notificação push:", error);
+  }
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || "/";
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      // Tenta encontrar uma janela aberta com a URL ou da mesma origem
+      for (const client of clientList) {
+        if (client.url.includes(targetUrl) && "focus" in client) {
+          return client.focus();
+        }
+      }
+      // Se não encontrou, abre uma nova
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
+    }),
+  );
+});

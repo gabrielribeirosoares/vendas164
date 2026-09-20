@@ -1,5 +1,5 @@
 export function registerPwa() {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator) || !import.meta.env.PROD) {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
     return () => undefined;
   }
 
