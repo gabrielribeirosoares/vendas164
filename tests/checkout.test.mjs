@@ -49,6 +49,7 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/20260905192000_catalog_pagination.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260905193000_atomic_manual_reservations.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260907143000_harden_platform_authorization.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260920145545_keep_presale_open_and_cleanup_customer_waitlist.sql', import.meta.url), 'utf8'));
 });
 after(() => db.close());
 test('checkout commits stock, order and exact-cent installments; retry returns same IDs', async () => {
@@ -84,6 +85,24 @@ test('applies quantity discount on the server and distributes rounding remainder
 test('last unit can only be reserved once',async()=>{
   const id=await product({stock:1}); await checkout([item(id)]);
   await assert.rejects(checkout([item(id)]),/presale_closed|out_of_stock/); assert.equal(await stock(id),0);
+});
+test('customer checkout clears waitlist and keeps a zero-stock presale open',async()=>{
+  const id=await product({stock:1}); const key=randomUUID(); const items=[item(id)];
+  await db.exec('RESET ROLE');
+  await db.query('INSERT INTO waitlist(user_id,product_id,store_id) VALUES($1,$2,$3)',[customer,id,store]);
+  await asUser(customer);
+  await checkout(items,key);
+  const state=(await db.query('SELECT stock,is_open FROM products WHERE id=$1',[id])).rows[0];
+  assert.equal(state.stock,0); assert.equal(state.is_open,true);
+  assert.equal((await db.query('SELECT id FROM waitlist WHERE user_id=$1 AND product_id=$2',[customer,id])).rows.length,0);
+
+  // A retry after a lost response repairs a stale row without creating another order.
+  await db.exec('RESET ROLE');
+  await db.query('INSERT INTO waitlist(user_id,product_id,store_id) VALUES($1,$2,$3)',[customer,id,store]);
+  await asUser(customer);
+  const originalIds=await checkout(items,key);
+  assert.equal((await db.query('SELECT id FROM waitlist WHERE user_id=$1 AND product_id=$2',[customer,id])).rows.length,0);
+  assert.equal((await db.query('SELECT id FROM orders WHERE product_id=$1 AND user_id=$2',[id,customer])).rows.length,originalIds.length);
 });
 test('customers cannot read other installments or write financial rows directly',async()=>{
   const id=await product(); const [orderId]=await checkout([item(id)]);
