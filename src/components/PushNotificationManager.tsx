@@ -53,8 +53,14 @@ export function PushNotificationManager({ storeId }: { storeId?: string }) {
       const permission = await Notification.requestPermission();
       console.log("[Push] Permission result:", permission);
       
-      if (permission !== "granted") {
-        toast.error("Permissão negada. Ative as notificações nas configurações do navegador/celular.");
+      if (permission === "denied") {
+        toast.error("Notificações bloqueadas pelo navegador. Clique no cadeado (🔒) na barra de endereços → Notificações → Permitir, e recarregue a página.", { duration: 8000 });
+        setIsLoading(false);
+        return;
+      }
+      
+      if (permission === "default") {
+        toast.error("O navegador suprimiu o popup de permissão. Clique no cadeado (🔒) na barra de endereços → Notificações → Permitir, e recarregue a página.", { duration: 8000 });
         setIsLoading(false);
         return;
       }
@@ -106,14 +112,38 @@ export function PushNotificationManager({ storeId }: { storeId?: string }) {
     }
   }
 
+  async function sendTestNotification() {
+    try {
+      const { testPushNotificationServer } = await import("@/lib/push");
+      toast.info("Enviando notificação de teste...");
+      const result = await testPushNotificationServer();
+      console.log("[Test Push Result]", result);
+      if (result.subscriptionsFound === 0) {
+        toast.error(`Nenhuma inscrição encontrada no banco para o usuário ${result.userId?.substring(0, 8)}. Tente desativar e ativar novamente.`, { duration: 10000 });
+      } else if (result.dbError) {
+        toast.error(`Erro no banco: ${result.dbError}`, { duration: 10000 });
+      } else {
+        toast.success(`Notificação enviada para ${result.subscriptionsFound} inscrição(ões)! Aguarde alguns segundos...`, { duration: 8000 });
+      }
+    } catch (error: any) {
+      console.error("Test notification error", error);
+      toast.error(`Erro no teste: ${error.message}`);
+    }
+  }
+
   if (!isSupported) return null;
 
   if (isSubscribed) {
     return (
-      <Button variant="ghost" size="sm" className="gap-1 px-3 text-emerald-600 dark:text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950" disabled>
-        <Bell className="size-4" />
-        <span className="hidden sm:inline">Notificações Ativas</span>
-      </Button>
+      <div className="flex items-center gap-1">
+        <Button variant="ghost" size="sm" className="gap-1 px-3 text-emerald-600 dark:text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950" disabled>
+          <Bell className="size-4" />
+          <span className="hidden sm:inline">Ativas</span>
+        </Button>
+        <Button variant="outline" size="sm" className="gap-1 px-2 text-xs" onClick={sendTestNotification}>
+          🔔 Testar
+        </Button>
+      </div>
     );
   }
 
