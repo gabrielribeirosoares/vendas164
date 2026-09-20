@@ -32,3 +32,10 @@ test("service worker não armazena páginas autenticadas", async () => {
   assert.match(worker, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.doesNotMatch(worker, /cache\.put\(request[\s\S]{0,120}request\.mode === "navigate"/);
 });
+
+test("cabeçalho respeita a área segura da barra de status no iOS", async () => {
+  const header = await read("src/components/AppHeader.tsx");
+
+  assert.match(header, /pt-\[env\(safe-area-inset-top\)\]/);
+  assert.match(header, /sticky top-0/);
+});
