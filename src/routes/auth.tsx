@@ -61,25 +61,30 @@ export const Route = createFileRoute("/auth")({
       ? (store.description || `Acesse sua conta para ver as pré-vendas e fazer reservas na ${store.name}.`)
       : "Acesse sua conta para reservar miniaturas ou gerenciar sua loja.";
     
-    // Sanitize Supabase signed URLs to public URLs for crawlers (WhatsApp/Facebook)
-    const sanitizeImageUrl = (url?: string | null) => {
+    // Convert Supabase storage URLs to optimised public URLs for crawlers (WhatsApp, Facebook, etc.)
+    const optimizeImageUrl = (url?: string | null) => {
       if (!url) return undefined;
       try {
         const urlObj = new URL(url);
-        if (urlObj.pathname.includes('/storage/v1/object/sign/')) {
-          urlObj.pathname = urlObj.pathname.replace('/object/sign/', '/object/public/');
-          urlObj.search = ''; 
-        }
+        const isSupabaseStorage = urlObj.pathname.includes('/storage/v1/');
+        if (!isSupabaseStorage) return url;
+        const signMatch = urlObj.pathname.match(/\/storage\/v1\/object\/sign\/(.+)/);
+        const publicMatch = urlObj.pathname.match(/\/storage\/v1\/object\/public\/(.+)/);
+        const renderMatch = urlObj.pathname.match(/\/storage\/v1\/render\/image\/public\/(.+)/);
+        const bucketPath = signMatch?.[1] || publicMatch?.[1] || renderMatch?.[1];
+        if (!bucketPath) return url;
+        urlObj.pathname = `/storage/v1/render/image/public/${bucketPath}`;
+        urlObj.search = '?width=400&height=400&resize=contain&quality=75';
         return urlObj.toString();
       } catch {
         return url;
       }
     };
 
-    const sanitizedLogo = sanitizeImageUrl(store?.logo_url);
-    const sanitizedFavicon = sanitizeImageUrl(store?.favicon_url);
-    const img = sanitizedLogo || sanitizedFavicon || "https://vendas164.com.br/og-image.png";
-    const favicon = sanitizedFavicon || sanitizedLogo || undefined;
+    const optimizedLogo = optimizeImageUrl(store?.logo_url);
+    const optimizedFavicon = optimizeImageUrl(store?.favicon_url);
+    const img = optimizedLogo || optimizedFavicon || "https://vendas164.com.br/og-image.png";
+    const favicon = optimizedFavicon || optimizedLogo || undefined;
 
     return {
       meta: [

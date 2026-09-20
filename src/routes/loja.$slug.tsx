@@ -47,26 +47,36 @@ export const Route = createFileRoute("/loja/$slug")({
     const title = store?.name ? `${store.name} — Pré-vendas de Miniaturas 1:64` : `Loja ${params.slug} — Vendas 1:64`;
     const desc = store?.description || `Veja as pré-vendas abertas e reserve suas miniaturas na loja ${store?.name || params.slug}.`;
     
-    // Sanitize Supabase signed URLs to public URLs for crawlers (WhatsApp/Facebook)
-    const sanitizeImageUrl = (url?: string | null) => {
+    // Convert Supabase storage URLs to optimised public URLs for crawlers (WhatsApp, Facebook, etc.)
+    // Signed URLs break crawlers; large images (>300KB) get ignored by WhatsApp.
+    // We convert to /render/image/public/ which both makes it public AND applies resize/quality.
+    const optimizeImageUrl = (url?: string | null) => {
       if (!url) return undefined;
       try {
         const urlObj = new URL(url);
-        // If it's a signed supabase storage URL, convert to public
-        if (urlObj.pathname.includes('/storage/v1/object/sign/')) {
-          urlObj.pathname = urlObj.pathname.replace('/object/sign/', '/object/public/');
-          urlObj.search = ''; // Strip token=...
-        }
+        const isSupabaseStorage = urlObj.pathname.includes('/storage/v1/');
+        if (!isSupabaseStorage) return url;
+
+        // Extract the bucket path from either signed or public URLs
+        const signMatch = urlObj.pathname.match(/\/storage\/v1\/object\/sign\/(.+)/);
+        const publicMatch = urlObj.pathname.match(/\/storage\/v1\/object\/public\/(.+)/);
+        const renderMatch = urlObj.pathname.match(/\/storage\/v1\/render\/image\/public\/(.+)/);
+        const bucketPath = signMatch?.[1] || publicMatch?.[1] || renderMatch?.[1];
+        if (!bucketPath) return url;
+
+        // Use Supabase image transform endpoint for resized, compressed output
+        urlObj.pathname = `/storage/v1/render/image/public/${bucketPath}`;
+        urlObj.search = '?width=400&height=400&resize=contain&quality=75';
         return urlObj.toString();
       } catch {
         return url;
       }
     };
 
-    const sanitizedLogo = sanitizeImageUrl(store?.logo_url);
-    const sanitizedFavicon = sanitizeImageUrl(store?.favicon_url);
-    const img = sanitizedLogo || sanitizedFavicon || "https://vendas164.com.br/og-image.png";
-    const favicon = sanitizedFavicon || sanitizedLogo || undefined;
+    const optimizedLogo = optimizeImageUrl(store?.logo_url);
+    const optimizedFavicon = optimizeImageUrl(store?.favicon_url);
+    const img = optimizedLogo || optimizedFavicon || "https://vendas164.com.br/og-image.png";
+    const favicon = optimizedFavicon || optimizedLogo || undefined;
 
     return {
       meta: [
