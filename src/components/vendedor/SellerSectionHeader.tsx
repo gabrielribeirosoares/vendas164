@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Car,
+  Clock,
   Package,
   Palette,
   ShieldCheck,
@@ -46,6 +47,13 @@ const SECTIONS: Record<string, SellerSection> = {
     description: "Consulte o histórico e mantenha o relacionamento com seus colecionadores.",
     icon: UserRound,
     accent: "text-violet-500 bg-violet-500/10",
+  },
+  fila_espera: {
+    group: "Operação",
+    title: "Fila de espera",
+    description: "Acompanhe clientes interessados em miniaturas esgotadas e atenda por ordem de chegada.",
+    icon: Clock,
+    accent: "text-amber-500 bg-amber-500/10",
   },
   rastreamento: {
     group: "Operação",

@@ -47,6 +47,7 @@ interface ManualReservationDialogProps {
   onClose: () => void;
   onSuccess?: () => void;
   preSelectedProduct?: Product | null;
+  preSelectedUser?: { id: string; name?: string | null; phone?: string | null } | null;
 }
 
 
@@ -59,6 +60,7 @@ export function ManualReservationDialog({
   onClose,
   onSuccess,
   preSelectedProduct,
+  preSelectedUser,
 }: ManualReservationDialogProps) {
   const manualAttempt = useRef<{ fingerprint: string; id: string; expiresAt: string | null } | null>(null);
   const themeColor = storeColor || "#e11d48";
@@ -182,6 +184,15 @@ export function ManualReservationDialog({
       setSelectedProductId(sortedProducts[0].id);
     }
   }, [preSelectedProduct, sortedProducts, open]);
+
+  useEffect(() => {
+    if (preSelectedUser && open) {
+      setSelectedClientMode("existing");
+      setSelectedUserId(preSelectedUser.id);
+      if (preSelectedUser.name) setClientName(preSelectedUser.name);
+      if (preSelectedUser.phone) setClientPhone(preSelectedUser.phone);
+    }
+  }, [preSelectedUser, open]);
 
   useEffect(() => {
     if (selectedProductId && products.length > 0) {

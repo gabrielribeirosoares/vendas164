@@ -18,6 +18,7 @@ import {
   Calendar,
   Plus,
   Car,
+  Clock,
   User,
   RefreshCw,
   Trash2,
@@ -52,6 +53,8 @@ import { ProductsTab } from "@/components/vendedor/ProductManager";
 import { SellerOverview } from "@/components/vendedor/SellerOverview";
 import { SellerSectionHeader } from "@/components/vendedor/SellerSectionHeader";
 import { TrackingIntegration } from "@/components/vendedor/TrackingIntegration";
+import { WaitlistManager, type WaitlistRow } from "@/components/vendedor/WaitlistManager";
+import { ManualReservationDialog } from "@/components/vendedor/ManualReservationDialog";
 import { SpreadsheetImporterDialog } from "@/components/vendedor/SpreadsheetImporterDialog";
 import { undoSpreadsheetImport } from "@/lib/importSpreadsheet";
 import { getLastActiveImport, markImportAsUndone } from "@/lib/importHistory";
@@ -176,6 +179,10 @@ function SellerDashboard() {
   const [onlyOutOfStock, setOnlyOutOfStock] = useState(false);
   const [orderFocus, setOrderFocus] = useState<"atrasado" | "envios" | undefined>();
   const [trialDismissed, setTrialDismissed] = useState(false);
+  const [manualReservationWaitlist, setManualReservationWaitlist] = useState<{
+    product: any;
+    user: { id: string; name?: string | null; phone?: string | null };
+  } | null>(null);
 
   // If accessed from a store subdomain (e.g. teste.localhost:8080/vendedor),
   // redirect back to the main platform domain.
@@ -218,8 +225,10 @@ function SellerDashboard() {
         document.title = `${store.name} — Personalização`;
       } else if (activeTab === "pronta_entrega") {
         document.title = `${store.name} — Pronta Entrega`;
-       } else if (activeTab === "clientes") {
+      } else if (activeTab === "clientes") {
         document.title = `${store.name} — Clientes`;
+      } else if (activeTab === "fila_espera") {
+        document.title = `${store.name} — Fila de Espera`;
       } else if (activeTab === "rastreamento") {
         document.title = `${store.name} — Rastreamento`;
       } else {
@@ -294,6 +303,55 @@ function SellerDashboard() {
       });
     },
   });
+
+  const {
+    data: waitlist = [],
+    isLoading: waitlistLoading,
+    refetch: refetchWaitlist,
+  } = useQuery({
+    queryKey: ["store-waitlist", store?.id],
+    enabled: !!store,
+    queryFn: async (): Promise<WaitlistRow[]> => {
+      const { data, error } = await supabase
+        .from("waitlist")
+        .select("*, products(*)")
+        .eq("store_id", store!.id)
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+      const rows = (data ?? []) as any[];
+      const userIds = [...new Set(rows.map((r) => r.user_id))];
+      const { data: people } = userIds.length
+        ? await supabase.from("profiles").select("id, name, email, phone").in("id", userIds)
+        : { data: [] };
+      const byId = new Map((people ?? []).map((p) => [p.id, p]));
+      return rows.map((r) => {
+        const p = byId.get(r.user_id);
+        const cached = getCustomerFromCache(r.user_id);
+        const name = p?.name || cached?.name || null;
+        const email = p?.email || cached?.email || null;
+        const phone = p?.phone || cached?.phone || null;
+
+        const profileData = (p || cached)
+          ? {
+              name,
+              email,
+              phone,
+            }
+          : null;
+
+        return { ...r, profiles: profileData };
+      });
+    },
+  });
+
+  const waitlistCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of waitlist) {
+      counts[item.product_id] = (counts[item.product_id] || 0) + 1;
+    }
+    return counts;
+  }, [waitlist]);
 
   const totals = useMemo(() => {
     const active = (orders ?? []).filter((o) => o.payment_status !== "cancelado");
@@ -498,7 +556,14 @@ function SellerDashboard() {
           </div>
         </div>
 
-        <SmartNotifications products={products ?? []} orders={orders ?? []} onOpenOrders={filter => { setOrderFocus(filter); setActiveTab("reservas"); }} onOpenProducts={() => { setOnlyOutOfStock(true); setActiveTab("produtos"); }} />
+        <SmartNotifications
+          products={products ?? []}
+          orders={orders ?? []}
+          waitlistCount={waitlist.length}
+          onOpenOrders={filter => { setOrderFocus(filter); setActiveTab("reservas"); }}
+          onOpenProducts={() => { setOnlyOutOfStock(true); setActiveTab("produtos"); }}
+          onOpenWaitlist={() => setActiveTab("fila_espera")}
+        />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="mt-8 md:grid md:grid-cols-[190px_minmax(0,1fr)] md:items-start md:gap-6">
           <TabsList className="hidden md:flex md:sticky md:top-24 h-auto w-full flex-col items-stretch justify-start gap-1 rounded-xl border border-border/50 bg-card/70 p-2 shadow-sm [&>button]:min-h-11 [&>button]:justify-start">
@@ -516,6 +581,15 @@ function SellerDashboard() {
             </TabsTrigger>
             <TabsTrigger value="clientes" className="gap-1.5 text-xs sm:text-sm">
               <User className="size-3.5 text-emerald-500" /> Clientes
+            </TabsTrigger>
+            <TabsTrigger value="fila_espera" className="gap-1.5 text-xs sm:text-sm">
+              <Clock className="size-3.5 text-amber-500" />
+              <span>Fila de Espera</span>
+              {waitlist.length > 0 && (
+                <Badge className="ml-auto bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[10px] px-1.5 py-0 h-4 font-bold">
+                  {waitlist.length}
+                </Badge>
+              )}
             </TabsTrigger>
             <TabsTrigger value="rastreamento" className="gap-1.5 text-xs sm:text-sm text-blue-600 dark:text-blue-400">
               <RefreshCw className="size-3.5 text-blue-500" /> Rastreamento
@@ -535,14 +609,86 @@ function SellerDashboard() {
           </TabsList>
 
           <div className="min-w-0">
+            {/* Navegação de Abas no Mobile (Scroll Horizontal) */}
+            <div className="flex md:hidden items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none mb-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={activeTab === "produtos" ? "default" : "outline"}
+                onClick={() => setActiveTab("produtos")}
+                className="h-8 text-xs shrink-0 gap-1.5"
+              >
+                <Package className="size-3 text-amber-500" /> Pré-vendas
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={activeTab === "pronta_entrega" ? "default" : "outline"}
+                onClick={() => setActiveTab("pronta_entrega")}
+                className="h-8 text-xs shrink-0 gap-1.5"
+              >
+                <Zap className="size-3 text-emerald-500" /> Pronta Entrega
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={activeTab === "reservas" ? "default" : "outline"}
+                onClick={() => setActiveTab("reservas")}
+                className="h-8 text-xs shrink-0 gap-1.5"
+              >
+                <Car className="size-3 text-emerald-500" /> Reservas
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={activeTab === "clientes" ? "default" : "outline"}
+                onClick={() => setActiveTab("clientes")}
+                className="h-8 text-xs shrink-0 gap-1.5"
+              >
+                <User className="size-3 text-emerald-500" /> Clientes
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={activeTab === "fila_espera" ? "default" : "outline"}
+                onClick={() => setActiveTab("fila_espera")}
+                className="h-8 text-xs shrink-0 gap-1.5"
+              >
+                <Clock className="size-3 text-amber-500" /> Fila
+                {waitlist.length > 0 && (
+                  <span className="rounded-full bg-amber-500 text-amber-950 px-1 py-0.2 text-[9px] font-bold">
+                    {waitlist.length}
+                  </span>
+                )}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={activeTab === "rastreamento" ? "default" : "outline"}
+                onClick={() => setActiveTab("rastreamento")}
+                className="h-8 text-xs shrink-0 gap-1.5"
+              >
+                <RefreshCw className="size-3 text-blue-500" /> Rastreamento
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={activeTab === "loja" ? "default" : "outline"}
+                onClick={() => setActiveTab("loja")}
+                className="h-8 text-xs shrink-0 gap-1.5"
+              >
+                <Palette className="size-3 text-emerald-500" /> Loja
+              </Button>
+            </div>
+
             <SellerSectionHeader activeSection={activeTab} storeName={store.name} />
 
           <TabsContent value="produtos" className="mt-5">
-            <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pre_venda" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} />
+            <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pre_venda" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} waitlistCounts={waitlistCounts} />
           </TabsContent>
 
           <TabsContent value="pronta_entrega" className="mt-5">
-            <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pronta_entrega" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} />
+            <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pronta_entrega" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} waitlistCounts={waitlistCounts} />
           </TabsContent>
 
           <TabsContent value="reservas" className="mt-5 space-y-6">
@@ -550,8 +696,21 @@ function SellerDashboard() {
             <OrdersTab focusFilter={orderFocus} onClearFocus={() => setOrderFocus(undefined)} storeId={store.id} storeColor={store.primary_color} products={products ?? []} orders={orders ?? []} />
           </TabsContent>
 
-           <TabsContent value="clientes" className="mt-5">
+          <TabsContent value="clientes" className="mt-5">
             <ClientsTab orders={orders ?? []} storeId={store?.id} />
+          </TabsContent>
+
+          <TabsContent value="fila_espera" className="mt-5">
+            <WaitlistManager
+              store={store}
+              waitlist={waitlist}
+              products={products ?? []}
+              isLoading={waitlistLoading}
+              onRefresh={() => refetchWaitlist()}
+              onOpenManualReservation={(product, user) => {
+                setManualReservationWaitlist({ product, user });
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="rastreamento" className="mt-5 space-y-6">
@@ -569,6 +728,25 @@ function SellerDashboard() {
           )}
           </div>
         </Tabs>
+
+        {manualReservationWaitlist && (
+          <ManualReservationDialog
+            open={!!manualReservationWaitlist}
+            onClose={() => setManualReservationWaitlist(null)}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ["store-orders", store?.id] });
+              queryClient.invalidateQueries({ queryKey: ["store-products", store?.id] });
+              queryClient.invalidateQueries({ queryKey: ["store-waitlist", store?.id] });
+              setManualReservationWaitlist(null);
+            }}
+            storeId={store.id}
+            storeColor={store.primary_color}
+            storePixKey={store.pix_key}
+            products={products ?? []}
+            preSelectedProduct={manualReservationWaitlist.product}
+            preSelectedUser={manualReservationWaitlist.user}
+          />
+        )}
       </main>
     </div>
   );

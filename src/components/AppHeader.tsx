@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Car, ChevronDown, LogOut, Menu, Package, Palette, ShieldCheck, Store as StoreIcon, User, Zap, RefreshCw } from "lucide-react";
+import { Car, ChevronDown, Clock, LogOut, Menu, Package, Palette, ShieldCheck, Store as StoreIcon, User, Zap, RefreshCw } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -244,6 +244,11 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                                 <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "clientes")} onClick={() => setMobileMenuOpen(false)}>
                                   <Link to="/vendedor" search={{ tab: "clientes" }} aria-current={activeSellerTab === "clientes" ? "page" : undefined}>
                                     <User className="size-4 text-emerald-500" /> Clientes
+                                  </Link>
+                                </Button>
+                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "fila_espera")} onClick={() => setMobileMenuOpen(false)}>
+                                  <Link to="/vendedor" search={{ tab: "fila_espera" }} aria-current={activeSellerTab === "fila_espera" ? "page" : undefined}>
+                                    <Clock className="size-4 text-amber-500" /> Fila de Espera
                                   </Link>
                                 </Button>
                                 <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "rastreamento")} onClick={() => setMobileMenuOpen(false)}>

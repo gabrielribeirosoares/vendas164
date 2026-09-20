@@ -1,5 +1,5 @@
 import { ManualReservationDialog } from "./ManualReservationDialog";
-import { BookmarkCheck, CopyPlus, Zap, Sparkles } from "lucide-react";
+import { BookmarkCheck, CopyPlus, Zap, Sparkles, Clock } from "lucide-react";
 import { formatDeadlineHours, getProductInstallmentInfo, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import { getProductBadge, saveProductBadge, saveProductCategory, PRESET_BADGES }
 import { BlingIntegrationDialog } from "@/components/vendedor/BlingIntegrationDialog";
 import { InterfaceState } from "@/components/InterfaceState";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -77,6 +78,7 @@ export function ProductsTab({
   onSelectTab,
   onlyOutOfStock = false,
   onClearStockFilter,
+  waitlistCounts,
 }: {
   store: Store;
   products: Product[];
@@ -85,6 +87,7 @@ export function ProductsTab({
   onSelectTab?: (tab: string) => void;
   onlyOutOfStock?: boolean;
   onClearStockFilter?: () => void;
+  waitlistCounts?: Record<string, number>;
 }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ ...emptyProduct, category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda" });
@@ -1054,9 +1057,36 @@ export function ProductsTab({
                               ) : p.stock <= 2 ? (
                                 <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Últimas unidades!</span>
                               ) : null}
+
+                              {Boolean(waitlistCounts?.[p.id]) && (
+                                <Badge
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onSelectTab?.("fila_espera");
+                                  }}
+                                  className="gap-1 text-[11px] border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 cursor-pointer hover:bg-amber-500/20 font-semibold"
+                                  title="Clique para ver os clientes na fila de espera desta miniatura"
+                                >
+                                  <Clock className="size-3" />
+                                  <span>{waitlistCounts![p.id]} {waitlistCounts![p.id] === 1 ? "na fila" : "na fila"}</span>
+                                </Badge>
+                              )}
                             </div>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
+                            {Boolean(waitlistCounts?.[p.id]) && onSelectTab && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onSelectTab("fila_espera")}
+                                className="gap-1.5 text-xs border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 font-semibold"
+                                title="Ver clientes na fila de espera desta miniatura"
+                              >
+                                <Clock className="size-3.5 text-amber-500" />
+                                <span>Fila ({waitlistCounts![p.id]})</span>
+                              </Button>
+                            )}
                             <Button
                               variant="default"
                               size="sm"
