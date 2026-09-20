@@ -463,8 +463,8 @@ export function OrdersTab({
   ) {
     const chunkSize = 40;
     
-    // Pega os customer_ids antes de atualizar, pra notificar
-    const { data: ordersData } = await supabase.from("orders").select("customer_id, id").in("id", ids);
+    // Pega os user_ids antes de atualizar, pra notificar
+    const { data: ordersData } = await supabase.from("orders").select("user_id, id").in("id", ids);
     
     for (let i = 0; i < ids.length; i += chunkSize) {
       const chunk = ids.slice(i, i + chunkSize);
@@ -475,7 +475,7 @@ export function OrdersTab({
     // Notifica os clientes afetados
     if (ordersData && (patch.payment_status || patch.delivery_status)) {
       const statusLabel = patch.payment_status || patch.delivery_status || "atualizado";
-      const customerIds = [...new Set(ordersData.map(o => o.customer_id).filter(Boolean))];
+      const customerIds = [...new Set(ordersData.map(o => o.user_id).filter(Boolean))];
       customerIds.forEach(customerId => {
         if (customerId) {
           notifyCustomerOrderUpdateServer({ data: { customerId, status: statusLabel } }).catch(console.error);
