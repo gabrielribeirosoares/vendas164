@@ -105,7 +105,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <Link to="/" data-tour="header-logo" className="flex items-center gap-2 min-w-0">
             {currentStore ? (
