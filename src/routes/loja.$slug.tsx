@@ -46,8 +46,27 @@ export const Route = createFileRoute("/loja/$slug")({
     const store = loaderData?.store;
     const title = store?.name ? `${store.name} — Pré-vendas de Miniaturas 1:64` : `Loja ${params.slug} — Vendas 1:64`;
     const desc = store?.description || `Veja as pré-vendas abertas e reserve suas miniaturas na loja ${store?.name || params.slug}.`;
-    const img = store?.logo_url || store?.favicon_url || "https://vendas164.com.br/og-image.png";
-    const favicon = store?.favicon_url || store?.logo_url || undefined;
+    
+    // Sanitize Supabase signed URLs to public URLs for crawlers (WhatsApp/Facebook)
+    const sanitizeImageUrl = (url?: string | null) => {
+      if (!url) return undefined;
+      try {
+        const urlObj = new URL(url);
+        // If it's a signed supabase storage URL, convert to public
+        if (urlObj.pathname.includes('/storage/v1/object/sign/')) {
+          urlObj.pathname = urlObj.pathname.replace('/object/sign/', '/object/public/');
+          urlObj.search = ''; // Strip token=...
+        }
+        return urlObj.toString();
+      } catch {
+        return url;
+      }
+    };
+
+    const sanitizedLogo = sanitizeImageUrl(store?.logo_url);
+    const sanitizedFavicon = sanitizeImageUrl(store?.favicon_url);
+    const img = sanitizedLogo || sanitizedFavicon || "https://vendas164.com.br/og-image.png";
+    const favicon = sanitizedFavicon || sanitizedLogo || undefined;
 
     return {
       meta: [
