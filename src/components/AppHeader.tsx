@@ -92,9 +92,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
 
   useEffect(() => {
     const icon = currentStore?.favicon_url || currentStore?.logo_url;
-    if (icon) {
-      updateAppFavicon(icon);
-    }
+    updateAppFavicon(icon);
   }, [currentStore?.favicon_url, currentStore?.logo_url]);
 
   async function signOut() {
@@ -119,12 +117,11 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                     loading="lazy"
                   />
                 ) : (
-                  <span
-                    className="flex size-8 sm:size-9 items-center justify-center rounded-xl font-bold text-white text-xs sm:text-sm shrink-0"
-                    style={{ backgroundColor: currentStore.primary_color || "#e11d48" }}
-                  >
-                    {currentStore.name ? currentStore.name[0].toUpperCase() : "L"}
-                  </span>
+                  <img
+                    src="/icons/vendas164-default.png"
+                    alt="Vendas 1:64"
+                    className="size-8 sm:size-9 rounded-xl object-cover border border-border/50 shrink-0"
+                  />
                 )}
                 <span className="font-display text-sm sm:text-lg font-bold tracking-tight truncate max-w-[140px] sm:max-w-xs">
                   {currentStore.name}
@@ -132,9 +129,11 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
               </>
             ) : (
               <>
-                <span className="flex size-8 sm:size-9 items-center justify-center rounded-xl bg-primary/15 text-primary shrink-0">
-                  <Car className="size-4 sm:size-5" />
-                </span>
+                <img
+                  src="/icons/vendas164-default.png"
+                  alt="Vendas 1:64"
+                  className="size-8 sm:size-9 rounded-xl object-cover border border-border/50 shrink-0"
+                />
                 <span className="font-display text-base sm:text-lg font-bold tracking-tight">Vendas 1:64</span>
               </>
             )}
