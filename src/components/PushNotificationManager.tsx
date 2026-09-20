@@ -51,7 +51,7 @@ export function PushNotificationManager({ storeId }: { storeId?: string }) {
       
       // Chave pública VAPID (deve ser a mesma do servidor)
       const applicationServerKey = urlB64ToUint8Array(
-        import.meta.env.VITE_VAPID_PUBLIC_KEY || "BJj-tXpC_p_v8FcmOMDBP4ueTHIYI_DJcNBjlodASR9Iu3oR94nbAbEBPHpHZrE64KhyNDdS0aW3UNGtIIOBhfQ"
+        import.meta.env.VITE_VAPID_PUBLIC_KEY || "BDdwrBpz-nGKX2I5uZL4LpQ8oY57fdNSmqpiZyUTo9DnAxUsW2Pxp_2k7aPyXAAUksfWwYW60uIjH7BB7yUMnNs"
       );
 
       const subscription = await registration.pushManager.subscribe({

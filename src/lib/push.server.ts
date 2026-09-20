@@ -2,8 +2,8 @@ import webpush from "web-push";
 import { supabaseAdmin } from "../integrations/supabase/client.server";
 
 // Configure Web Push Keys
-const vapidPublicKey = process.env.VITE_VAPID_PUBLIC_KEY || "BJj-tXpC_p_v8FcmOMDBP4ueTHIYI_DJcNBjlodASR9Iu3oR94nbAbEBPHpHZrE64KhyNDdS0aW3UNGtIIOBhfQ";
-const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "JfI4fNvRRJ9iqfzbEJ5ArOvq04d9XcPr1Yd6pSLDjZ0";
+const vapidPublicKey = process.env.VITE_VAPID_PUBLIC_KEY || "BDdwrBpz-nGKX2I5uZL4LpQ8oY57fdNSmqpiZyUTo9DnAxUsW2Pxp_2k7aPyXAAUksfWwYW60uIjH7BB7yUMnNs";
+const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "K72Ai7yO_rdAJ0mtwwwHV9vzytuvukF8qKOLFrtJDNE";
 const contactEmail = "mailto:contato@vendas164.com.br";
 
 try {
