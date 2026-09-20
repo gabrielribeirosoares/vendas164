@@ -895,7 +895,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                   {currentSelectedClient?.remainingBalance > 0 && (
                     <Button
                       size="sm"
-                      className="h-8 text-xs bg-amber-600 hover:bg-amber-700 text-white gap-1.5 shadow-sm font-semibold"
+                      className="h-8 text-xs bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 shadow-sm font-semibold"
                       onClick={() => {
                         setGlobalAmount("");
                         setGlobalPaymentOpen(true);

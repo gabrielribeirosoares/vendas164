@@ -333,7 +333,7 @@ export function BlingIntegrationDialog({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8 text-xs gap-1.5 shrink-0 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 font-semibold"
+                  className="h-8 text-xs gap-1.5 shrink-0 border-primary/40 text-primary hover:bg-primary/5 font-semibold"
                   onClick={() => fetchBlingProducts()}
                   disabled={loadingProducts}
                 >

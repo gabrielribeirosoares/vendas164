@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Copy,
@@ -28,6 +28,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { getStoreFullUrl, getStoreDisplayDomain, redirectToMainIfOnSubdomain } from "@/lib/subdomain";
 import { PhoneInput } from "@/components/PhoneInput";
 import { getCustomerFromCache } from "@/lib/customerCache";
+import { getReadableTextColor } from "@/lib/storeCustomizations";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -450,8 +451,15 @@ function SellerDashboard() {
     );
   }
 
+  const storeThemeColor = store.primary_color || "#e11d48";
+  const storeThemeStyle = {
+    "--primary": storeThemeColor,
+    "--ring": storeThemeColor,
+    "--primary-foreground": getReadableTextColor(storeThemeColor),
+  } as CSSProperties;
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" style={storeThemeStyle}>
       <AppHeader store={store} />
       <main className="mx-auto max-w-6xl px-4 py-10">
         {isAdminCheckError && (
@@ -522,7 +530,7 @@ function SellerDashboard() {
             {isAdmin && (
               <Button
                 variant={activeTab === "admin_moderation" ? "default" : "outline"}
-                className="gap-2 border-amber-500/30 text-amber-600 hover:text-amber-500 text-xs"
+                className="gap-2 border-primary/40 text-primary hover:bg-primary/5 text-xs"
                 onClick={() => setActiveTab("admin_moderation")}
               >
                 <ShieldCheck className="size-4" /> Moderação ({activeTab === "admin_moderation" ? "Aberta" : "Admin"})

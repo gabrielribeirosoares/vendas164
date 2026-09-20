@@ -28,3 +28,12 @@ test("indicadores permanecem compactos e legíveis no celular", async () => {
   assert.match(overview, /break-words/);
   assert.doesNotMatch(overview, /md:grid-cols-2 gap-4/);
 });
+
+test("painel inteiro herda a cor configurada pela loja", async () => {
+  const route = await readFile(routePath, "utf8");
+
+  assert.match(route, /"--primary": storeThemeColor/);
+  assert.match(route, /"--primary-foreground": getReadableTextColor\(storeThemeColor\)/);
+  assert.match(route, /style=\{storeThemeStyle\}/);
+  assert.doesNotMatch(route, /border-amber-500\/30 text-amber-600 hover:text-amber-500/);
+});
