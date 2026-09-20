@@ -269,7 +269,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
 
   function copyInvite() {
     if (!data?.store) return;
-    const url = `${window.location.origin}/auth?loja=${data.store.id}&next=/loja/${slug}`;
+    const url = getStoreFullUrl(slug);
     navigator.clipboard.writeText(url);
     toast.success("Link de convite copiado!");
   }
