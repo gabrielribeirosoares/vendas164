@@ -28,3 +28,15 @@ test('admin authorization failures remain visible and retryable', async () => {
   assert.match(sellerRoute, /Não foi possível verificar suas permissões administrativas/);
   assert.match(sellerRoute, /Tentar novamente/);
 });
+
+test('manual reservation removes the customer from the waitlist atomically', async () => {
+  const migration = await read('supabase/migrations/20260920213000_remove_waitlist_after_manual_reservation.sql');
+  const deleteStatement = /DELETE FROM public\.waitlist\s+WHERE user_id=customer AND product_id=p\.id AND store_id=p\.store_id;/;
+
+  assert.match(migration, deleteStatement);
+  assert.ok(
+    migration.indexOf('DELETE FROM public.waitlist') <
+      migration.indexOf('INSERT INTO public.checkout_requests'),
+    'waitlist removal must happen inside the reservation transaction before idempotency is recorded',
+  );
+});
