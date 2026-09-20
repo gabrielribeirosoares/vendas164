@@ -38,15 +38,11 @@ export async function sendPushNotification(
   userId: string,
   payload: { title: string; body: string; url?: string }
 ) {
-  console.log(`[PUSH SERVER] Trying to send push to user: ${userId} with payload:`, payload);
-
   // Fetch subscriptions for this user
   const { data: subscriptions, error } = await supabaseAdmin
     .from("push_subscriptions")
     .select("endpoint, p256dh, auth")
     .eq("user_id", userId);
-
-  console.log(`[PUSH SERVER] Subscriptions found:`, subscriptions?.length, `Error:`, error?.message);
 
   if (error || !subscriptions || subscriptions.length === 0) {
     return; // User has no subscriptions, silently return
