@@ -87,6 +87,23 @@ export function getStoreFullUrl(slug: string): string {
 }
 
 /**
+ * Versions a shared store URL using its current logo. Social networks cache link
+ * previews aggressively, so a new logo must produce a new URL to refresh the card.
+ */
+export function withStorePreviewVersion(url: string, logoUrl?: string | null): string {
+  if (!logoUrl) return url;
+
+  let hash = 2166136261;
+  for (let index = 0; index < logoUrl.length; index += 1) {
+    hash ^= logoUrl.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}preview=${(hash >>> 0).toString(36)}`;
+}
+
+/**
  * Returns user-friendly domain text representation for display.
  * e.g. "vendas164.com.br/loja/teste"
  */

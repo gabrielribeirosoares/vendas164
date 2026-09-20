@@ -24,7 +24,7 @@ import { saveCustomerToCache } from "@/lib/customerCache";
 import { getReadableTextColor, getStoreBanner, getProductBadge } from "@/lib/storeCustomizations";
 import { StoreReviewsSection } from "@/components/StoreReviewsSection";
 import { StoreProductCard } from "@/components/store/StoreProductCard";
-import { getSubdomain, getStoreFullUrl, getProductUrl } from "@/lib/subdomain";
+import { getSubdomain, getStoreFullUrl, getProductUrl, withStorePreviewVersion } from "@/lib/subdomain";
 
 const fetchStoreBySlug = createServerFn({ method: "GET" })
   .validator((d: { slug: string }) => d)
@@ -269,7 +269,10 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
 
   function copyInvite() {
     if (!data?.store) return;
-    const url = getStoreFullUrl(slug);
+    const url = withStorePreviewVersion(
+      getStoreFullUrl(slug),
+      data.store.logo_url || data.store.favicon_url,
+    );
     navigator.clipboard.writeText(url);
     toast.success("Link de convite copiado!");
   }
