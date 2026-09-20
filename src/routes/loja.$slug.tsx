@@ -21,7 +21,7 @@ import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 import { useCartStore } from "@/lib/cart";
 import { saveCustomerToCache } from "@/lib/customerCache";
-import { getStoreBanner, getProductBadge } from "@/lib/storeCustomizations";
+import { getStoreBanner, getProductBadge, getStoreTabColors } from "@/lib/storeCustomizations";
 import { StoreReviewsSection } from "@/components/StoreReviewsSection";
 import { StoreProductCard } from "@/components/store/StoreProductCard";
 import { getSubdomain, getStoreFullUrl, getProductUrl } from "@/lib/subdomain";
@@ -321,6 +321,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
   const products = data?.products ?? [];
   const isOwner = !!(user && store?.owner_id === user.id);
   const storeStatus = (store as any)?.status || "active";
+  const tabColors = useMemo(() => getStoreTabColors(store?.id), [store?.id]);
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -633,7 +634,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                       ? "text-white shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
-                  style={selectedType === "pre" ? { backgroundColor: store.primary_color } : undefined}
+                  style={selectedType === "pre" ? { backgroundColor: tabColors.preVendaColor } : undefined}
                 >
                   Pré-venda
                </button>
@@ -645,7 +646,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                       ? "text-white shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
-                  style={selectedType === "pronta" ? { backgroundColor: store.primary_color } : undefined}
+                  style={selectedType === "pronta" ? { backgroundColor: tabColors.prontaEntregaColor } : undefined}
                 >
                   Pronta entrega
                </button>
@@ -902,6 +903,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                           storeSlug={slug || "loja"}
                           primaryColor={store.primary_color}
                           customBadge={getProductBadge(p.id)}
+                          tabColors={tabColors}
                           onAdd={handleQuickAdd}
                         />
                       ))}

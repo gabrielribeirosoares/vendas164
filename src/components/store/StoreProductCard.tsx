@@ -3,6 +3,7 @@ import type { Product } from "@/lib/cart";
 import { brl, getProductInstallmentInfo, getProductSignalAmount, isProntaEntrega } from "@/lib/format";
 import { getProductUrl } from "@/lib/subdomain";
 import { formatStoreProductCardStock } from "@/lib/stock";
+import { getStoreTabColors, type StoreTabColors } from "@/lib/storeCustomizations";
 import { Button } from "@/components/ui/button";
 import { Package, ShoppingCart } from "lucide-react";
 
@@ -11,6 +12,7 @@ interface StoreProductCardProps {
   storeSlug: string;
   primaryColor?: string | null;
   customBadge?: string | null;
+  tabColors?: StoreTabColors | null;
   onAdd: (event: MouseEvent, product: Product) => void;
 }
 
@@ -19,8 +21,10 @@ export function StoreProductCard({
   storeSlug,
   primaryColor,
   customBadge,
+  tabColors: propTabColors,
   onAdd,
 }: StoreProductCardProps) {
+  const resolvedTabColors = propTabColors || getStoreTabColors(product.store_id);
   const available = product.is_open && product.stock > 0;
   const ready = isProntaEntrega(product);
   const signal = getProductSignalAmount(product);
@@ -51,9 +55,8 @@ export function StoreProductCard({
         )}
 
         <span
-          className={`absolute left-2 top-2 max-w-[calc(100%-1rem)] truncate rounded-full px-2 py-1 text-xs font-semibold text-white shadow-sm sm:left-3 sm:top-3 ${
-            ready ? "bg-emerald-600" : "bg-amber-600"
-          }`}
+          className="absolute left-2 top-2 max-w-[calc(100%-1rem)] truncate rounded-full px-2 py-1 text-xs font-semibold text-white shadow-sm sm:left-3 sm:top-3"
+          style={{ backgroundColor: ready ? (resolvedTabColors?.prontaEntregaColor || "#059669") : (resolvedTabColors?.preVendaColor || "#ea580c") }}
         >
           {ready ? "Pronta entrega" : "Pré-venda"}
         </span>

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Pencil, Plus, Search, Share2, Trash2, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { toast } from "sonner";
-import { getProductBadge, saveProductBadge, saveProductCategory, PRESET_BADGES } from "@/lib/storeCustomizations";
+import { getProductBadge, saveProductBadge, saveProductCategory, PRESET_BADGES, getStoreTabColors } from "@/lib/storeCustomizations";
 import { BlingIntegrationDialog } from "@/components/vendedor/BlingIntegrationDialog";
 import { InterfaceState } from "@/components/InterfaceState";
 import { Button } from "@/components/ui/button";
@@ -102,6 +102,24 @@ export function ProductsTab({
   const [blingOpen, setBlingOpen] = useState(false);
 
   const isBlingEligible = true;
+
+  const storeThemeColor = store.primary_color || "#e11d48";
+  const [tabColors, setTabColors] = useState(() => getStoreTabColors(store.id, store.primary_color));
+
+  useEffect(() => {
+    setTabColors(getStoreTabColors(store.id, store.primary_color));
+    const handler = (e: any) => {
+      if (!e.detail || e.detail.storeId === store.id) {
+        setTabColors(getStoreTabColors(store.id, store.primary_color));
+      }
+    };
+    window.addEventListener("store_customizations_updated", handler);
+    return () => window.removeEventListener("store_customizations_updated", handler);
+  }, [store.id, store.primary_color]);
+
+  const activeColor = mode === "pronta_entrega"
+    ? (tabColors.prontaEntregaColor || "#059669")
+    : (tabColors.preVendaColor || storeThemeColor);
 
   const displayedProducts = useMemo(() => {
     let list = products;
@@ -823,7 +841,7 @@ export function ProductsTab({
                 />
                 {form.image_url && <p className="text-xs text-success">Foto pronta para publicar.</p>}
               </div>
-              <Button type="submit" className="w-full" disabled={saving}>
+              <Button type="submit" className="w-full text-white font-semibold hover:opacity-90" style={{ backgroundColor: activeColor }} disabled={saving}>
                 {saving && <Loader2 className="size-4 animate-spin" />} {mode === "pronta_entrega" ? "Publicar a pronta entrega" : "Publicar pré-venda"}
               </Button>
             </form>
@@ -853,7 +871,12 @@ export function ProductsTab({
                 size="sm"
                 variant="outline"
                 onClick={() => setBlingOpen(true)}
-                className="gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 font-semibold"
+                className="gap-1.5 font-semibold transition-colors hover:opacity-90"
+                style={{
+                  borderColor: `${activeColor}66`,
+                  color: activeColor,
+                  backgroundColor: `${activeColor}12`,
+                }}
                 title="Sincronizar e importar catálogo do Bling ERP"
               >
                 <Sparkles className="size-3.5 fill-current" />
@@ -864,7 +887,8 @@ export function ProductsTab({
               type="button"
               size="sm"
               onClick={() => { setForm({ ...emptyProduct, category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda", badge: mode === "pronta_entrega" ? "Pronta Entrega" : "" }); setIsCustomBrand(false); setSheetOpen(true); }}
-              className={`gap-1.5 ${mode === "pronta_entrega" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
+              className="gap-1.5 text-white font-semibold shadow-xs transition-opacity hover:opacity-90"
+              style={{ backgroundColor: activeColor }}
             >
               <Plus className="size-4" /> {mode === "pronta_entrega" ? "Nova pronta entrega" : "Nova pré-venda"}
             </Button>
@@ -911,22 +935,35 @@ export function ProductsTab({
                 size="sm"
                 variant={selectedBrand === "all" ? "default" : "outline"}
                 onClick={() => setSelectedBrand("all")}
-                className="h-7 px-3 text-xs rounded-full font-medium"
+                className="h-7 px-3 text-xs rounded-full font-medium transition-colors"
+                style={
+                  selectedBrand === "all"
+                    ? { backgroundColor: activeColor, borderColor: activeColor, color: "#ffffff" }
+                    : undefined
+                }
               >
                 Todas ({displayedProducts.length})
               </Button>
-              {brandList.map((b) => (
-                <Button
-                  key={b}
-                  type="button"
-                  size="sm"
-                  variant={selectedBrand === b ? "default" : "outline"}
-                  onClick={() => setSelectedBrand(b)}
-                  className="h-7 px-3 text-xs rounded-full font-medium"
-                >
-                  {b} ({brandsMap[b].length})
-                </Button>
-              ))}
+              {brandList.map((b) => {
+                const isSelected = selectedBrand === b;
+                return (
+                  <Button
+                    key={b}
+                    type="button"
+                    size="sm"
+                    variant={isSelected ? "default" : "outline"}
+                    onClick={() => setSelectedBrand(b)}
+                    className="h-7 px-3 text-xs rounded-full font-medium transition-colors"
+                    style={
+                      isSelected
+                        ? { backgroundColor: activeColor, borderColor: activeColor, color: "#ffffff" }
+                        : undefined
+                    }
+                  >
+                    {b} ({brandsMap[b].length})
+                  </Button>
+                );
+              })}
             </div>
           )}
 
@@ -1065,10 +1102,15 @@ export function ProductsTab({
                                     e.stopPropagation();
                                     onSelectTab?.("fila_espera");
                                   }}
-                                  className="gap-1 text-[11px] border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 cursor-pointer hover:bg-amber-500/20 font-semibold"
+                                  className="gap-1 text-[11px] cursor-pointer font-semibold transition-colors"
+                                  style={{
+                                    borderColor: `${activeColor}66`,
+                                    backgroundColor: `${activeColor}15`,
+                                    color: activeColor,
+                                  }}
                                   title="Clique para ver os clientes na fila de espera desta miniatura"
                                 >
-                                  <Clock className="size-3" />
+                                  <Clock className="size-3" style={{ color: activeColor }} />
                                   <span>{waitlistCounts![p.id]} {waitlistCounts![p.id] === 1 ? "na fila" : "na fila"}</span>
                                 </Badge>
                               )}
@@ -1080,10 +1122,15 @@ export function ProductsTab({
                                 variant="outline"
                                 size="sm"
                                 onClick={() => onSelectTab("fila_espera")}
-                                className="gap-1.5 text-xs border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 font-semibold"
+                                className="gap-1.5 text-xs font-semibold transition-colors"
+                                style={{
+                                  borderColor: `${activeColor}66`,
+                                  color: activeColor,
+                                  backgroundColor: `${activeColor}10`,
+                                }}
                                 title="Ver clientes na fila de espera desta miniatura"
                               >
-                                <Clock className="size-3.5 text-amber-500" />
+                                <Clock className="size-3.5" style={{ color: activeColor }} />
                                 <span>Fila ({waitlistCounts![p.id]})</span>
                               </Button>
                             )}
@@ -1092,14 +1139,19 @@ export function ProductsTab({
                               size="sm"
                               disabled={!p.is_open || p.stock <= 0}
                               onClick={() => handleReserveUnidade(p)}
-                              className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold"
+                              className="gap-1 text-white hover:opacity-90 text-xs font-semibold transition-opacity"
+                              style={p.is_open && p.stock > 0 ? { backgroundColor: activeColor } : undefined}
                               title="Fazer reserva para cliente nesta unidade"
                             >
                               <BookmarkCheck className="size-3.5" />
                               <span>Reservar para cliente</span>
                             </Button>
                             <div className="flex items-center gap-2 text-xs text-muted-foreground ml-1">
-                              <Switch checked={p.is_open} onCheckedChange={() => toggleOpen(p)} />
+                              <Switch
+                                checked={p.is_open}
+                                onCheckedChange={() => toggleOpen(p)}
+                                style={p.is_open ? { backgroundColor: activeColor } : undefined}
+                              />
                               {p.is_open ? "Aberta" : "Fechada"}
                             </div>
                             <Button
@@ -1116,7 +1168,7 @@ export function ProductsTab({
                               title="Duplicar miniatura"
                               onClick={() => handleDuplicateProduct(p)}
                             >
-                              <CopyPlus className="size-4 text-primary" />
+                              <CopyPlus className="size-4" style={{ color: activeColor }} />
                             </Button>
                             <Button
                               variant="ghost"
@@ -1184,6 +1236,8 @@ export function ProductsTab({
                         setIsCustomBrand(false);
                         setSheetOpen(true);
                       }}
+                      className="text-white hover:opacity-90 font-semibold"
+                      style={{ backgroundColor: activeColor }}
                     >
                       <Plus className="size-4" />
                       {mode === "pronta_entrega" ? "Cadastrar pronta entrega" : "Cadastrar pré-venda"}
@@ -1213,8 +1267,9 @@ export function ProductsTab({
                         size="sm"
                         variant={pageSize === opt ? "default" : "outline"}
                         className={`h-7 px-2 text-xs font-semibold ${
-                          pageSize === opt ? "shadow-xs" : "bg-background/80"
+                          pageSize === opt ? "shadow-xs text-white" : "bg-background/80"
                         }`}
+                        style={pageSize === opt ? { backgroundColor: activeColor, borderColor: activeColor, color: "#fff" } : undefined}
                         onClick={() => {
                           setPageSize(opt);
                           setPage(0);
@@ -1271,8 +1326,9 @@ export function ProductsTab({
                           size="sm"
                           variant={isCurrent ? "default" : "outline"}
                           className={`h-8 w-8 p-0 text-xs font-semibold ${
-                            isCurrent ? "shadow-xs scale-105" : "bg-background/80"
+                            isCurrent ? "shadow-xs scale-105 text-white" : "bg-background/80"
                           }`}
+                          style={isCurrent ? { backgroundColor: activeColor, borderColor: activeColor, color: "#fff" } : undefined}
                           onClick={() => {
                             setPage(i);
                             window.scrollTo({ top: 300, behavior: "smooth" });

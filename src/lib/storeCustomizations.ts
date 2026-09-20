@@ -162,3 +162,54 @@ export async function saveStoreReviewToSupabase(storeId: string, review: Omit<St
   }
   return localUpdated;
 }
+
+export interface StoreTabColors {
+  preVendaColor: string; // Padrão: Laranja "#ea580c"
+  prontaEntregaColor: string; // Padrão: Verde "#059669"
+}
+
+export const DEFAULT_TAB_COLORS: StoreTabColors = {
+  preVendaColor: "#ea580c",
+  prontaEntregaColor: "#059669",
+};
+
+export function getStoreTabColors(storeId: string | null | undefined, fallbackThemeColor?: string | null): StoreTabColors {
+  const defaultPreVenda = fallbackThemeColor || DEFAULT_TAB_COLORS.preVendaColor;
+  if (!storeId) {
+    return {
+      preVendaColor: defaultPreVenda,
+      prontaEntregaColor: DEFAULT_TAB_COLORS.prontaEntregaColor,
+    };
+  }
+  try {
+    const raw = localStorage.getItem(`minipre_store_tab_colors_${storeId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        preVendaColor: parsed.preVendaColor || defaultPreVenda,
+        prontaEntregaColor: parsed.prontaEntregaColor || DEFAULT_TAB_COLORS.prontaEntregaColor,
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return {
+    preVendaColor: defaultPreVenda,
+    prontaEntregaColor: DEFAULT_TAB_COLORS.prontaEntregaColor,
+  };
+}
+
+export function saveStoreTabColors(storeId: string, colors: Partial<StoreTabColors>) {
+  if (!storeId) return;
+  try {
+    const current = getStoreTabColors(storeId);
+    const updated = { ...current, ...colors };
+    localStorage.setItem(`minipre_store_tab_colors_${storeId}`, JSON.stringify(updated));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("store_customizations_updated", { detail: { storeId } }));
+    }
+  } catch {
+    // ignore
+  }
+}
+

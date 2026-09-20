@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { brl, isProntaEntrega, getProductSignalAmount } from "@/lib/format";
 import { getProductUrl } from "@/lib/subdomain";
 import { formatStoreProductCardStock } from "@/lib/stock";
+import { getStoreTabColors } from "@/lib/storeCustomizations";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight, Pause, Play, Sparkles, Package, ArrowUpRight } from "lucide-react";
@@ -27,6 +28,7 @@ export function BrandMiniaturesMarquee({
 }: BrandMiniaturesMarqueeProps) {
   const [userPaused, setUserPaused] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const tabColors = getStoreTabColors(storeId);
 
   const cleanBrand = brand?.trim() || "";
 
@@ -224,9 +226,8 @@ export function BrandMiniaturesMarquee({
 
                       {/* Badge Pronta Entrega / Pré-Venda */}
                       <span
-                        className={`absolute left-1.5 top-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm ${
-                          ready ? "bg-emerald-600" : "bg-amber-600"
-                        }`}
+                        className="absolute left-1.5 top-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm"
+                        style={{ backgroundColor: ready ? tabColors.prontaEntregaColor : tabColors.preVendaColor }}
                       >
                         {ready ? "Pronta entrega" : "Pré-venda"}
                       </span>

@@ -18,6 +18,7 @@ import { useSession } from "@/lib/session";
 import { joinWaitlist, reservationErrorMessage } from "@/lib/reservations";
 import { useCartStore } from "@/lib/cart";
 import { getSubdomain, getStoreFullUrl } from "@/lib/subdomain";
+import { getStoreTabColors } from "@/lib/storeCustomizations";
 import { BrandMiniaturesMarquee } from "@/components/store/BrandMiniaturesMarquee";
 
 const fetchProductBySlugs = createServerFn({ method: "GET" })
@@ -162,6 +163,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
   const isPronta = isProntaEntrega(product);
   const hasNoSignal = hasNoSignalRequirement(product);
   const signalInfo = getProductSignalAmount(product, quantity);
+  const tabColors = getStoreTabColors(product?.stores?.id || product?.store_id);
 
   // Cálculo de parcelamento e total com base no produto e quantidade selecionada
   const installmentOptions = getInstallmentOptions(product, quantity);
@@ -314,11 +316,19 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
             {/* Badges de Status (Limpos e Sem Repetição) */}
             <div className="mt-4 flex flex-wrap items-center gap-2">
               {isPronta ? (
-                <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium text-xs gap-1.5 py-1 px-2.5">
+                <Badge
+                  variant="secondary"
+                  className="text-white font-medium text-xs gap-1.5 py-1 px-2.5 shadow-xs"
+                  style={{ backgroundColor: tabColors.prontaEntregaColor }}
+                >
                   <Zap className="size-3.5 fill-current" /> Pronta Entrega — Envio Imediato
                 </Badge>
               ) : (
-                <Badge variant="secondary" className="bg-primary/10 text-primary border border-primary/20 font-medium text-xs gap-1.5 py-1 px-2.5">
+                <Badge
+                  variant="secondary"
+                  className="text-white font-medium text-xs gap-1.5 py-1 px-2.5 shadow-xs"
+                  style={{ backgroundColor: tabColors.preVendaColor }}
+                >
                   <Package className="size-3.5" /> Pré-venda
                 </Badge>
               )}
