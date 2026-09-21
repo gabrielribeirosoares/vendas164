@@ -5,6 +5,7 @@ import { brl, isProntaEntrega, getProductSignalAmount } from "@/lib/format";
 import { getProductUrl } from "@/lib/subdomain";
 import { formatStoreProductCardStock } from "@/lib/stock";
 import { getReadableTextColor } from "@/lib/storeCustomizations";
+import { getProductCardImageUrl } from "@/lib/imageUrls";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight, Pause, Play, Sparkles, Package, ArrowUpRight } from "lucide-react";
@@ -213,7 +214,7 @@ export function BrandMiniaturesMarquee({
                     <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg bg-muted/40 transition-colors group-hover:bg-muted/60">
                       {item.image_url ? (
                         <img
-                          src={item.image_url}
+                          src={getProductCardImageUrl(item.image_url)}
                           alt={`${item.brand} ${item.model}`}
                           loading="lazy"
                           className="h-full w-full object-contain p-2 transition-transform duration-300 motion-safe:group-hover:scale-105"

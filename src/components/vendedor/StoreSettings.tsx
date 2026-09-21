@@ -14,6 +14,7 @@ import { DEFAULT_PRESET_BRANDS, getStoreBrands, saveStoreBrands } from '@/lib/br
 import { getReadableTextColor, getStoreBanner, saveStoreBanner } from '@/lib/storeCustomizations';
 import { getStoreStockDisplayThreshold, saveStoreStockDisplayThreshold } from '@/lib/stock';
 import { uploadImage } from '@/lib/upload';
+import { getImageUploadErrorMessage } from '@/lib/imageOptimization';
 import { updateAppFavicon } from '@/lib/favicon';
 import type { Tables } from '@/integrations/supabase/types';
 
@@ -158,13 +159,13 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
 
   async function onLogoFile(file: File) {
     try {
-      const url = await uploadImage(userId, file);
+      const url = await uploadImage(userId, file, "logo");
       // Atualiza tanto o logo quanto o favicon automaticamente com a mesma imagem
       setForm((f) => ({ ...f, logo_url: url, favicon_url: url }));
       updateAppFavicon(url);
       toast.success("Logotipo enviado! (definido como favicon)");
-    } catch {
-      toast.error("Falha ao enviar o logotipo.");
+    } catch (error) {
+      toast.error(getImageUploadErrorMessage(error));
     }
   }
 
@@ -523,4 +524,3 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
     </div>
   );
 }
-

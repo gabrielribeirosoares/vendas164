@@ -1,4 +1,6 @@
 const CACHE_NAME = "vendas164-pwa-v1";
+const IMAGE_CACHE_NAME = "vendas164-images-v1";
+const IMAGE_CACHE_LIMIT = 300;
 const PRECACHE_URLS = [
   "/offline.html",
   "/manifest.webmanifest",
@@ -26,6 +28,31 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
+  const isSupabaseStorageImage =
+    request.destination === "image" &&
+    url.hostname.endsWith(".supabase.co") &&
+    url.pathname.startsWith("/storage/v1/object/");
+
+  if (isSupabaseStorageImage) {
+    event.respondWith(
+      caches.open(IMAGE_CACHE_NAME).then(async (cache) => {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+
+        const response = await fetch(request);
+        if (response.ok || response.type === "opaque") {
+          await cache.put(request, response.clone());
+          const keys = await cache.keys();
+          if (keys.length > IMAGE_CACHE_LIMIT) {
+            await Promise.all(keys.slice(0, keys.length - IMAGE_CACHE_LIMIT).map((key) => cache.delete(key)));
+          }
+        }
+        return response;
+      }),
+    );
+    return;
+  }
+
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {

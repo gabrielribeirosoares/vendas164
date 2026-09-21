@@ -24,6 +24,7 @@ import { saveCustomerToCache } from "@/lib/customerCache";
 import { getReadableTextColor, getStoreBanner, getProductBadge } from "@/lib/storeCustomizations";
 import { StoreReviewsSection } from "@/components/StoreReviewsSection";
 import { StoreProductCard } from "@/components/store/StoreProductCard";
+import { getProductCardImageUrl } from "@/lib/imageUrls";
 import { getSubdomain, getStoreFullUrl, getProductUrl, withStorePreviewVersion } from "@/lib/subdomain";
 
 const fetchStoreBySlug = createServerFn({ method: "GET" })
@@ -829,7 +830,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                                 <div className="relative size-16 sm:size-20 shrink-0 rounded-lg overflow-hidden bg-muted border border-border/20">
                                   {p.image_url ? (
                                     <img
-                                      src={p.image_url}
+                                      src={getProductCardImageUrl(p.image_url)}
                                       alt={p.model}
                                       loading="lazy"
                                       className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"

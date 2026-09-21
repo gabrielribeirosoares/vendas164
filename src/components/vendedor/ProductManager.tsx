@@ -38,6 +38,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { brl, slugify } from "@/lib/format";
 import { getStoreFullUrl } from "@/lib/subdomain";
 import { uploadImage } from "@/lib/upload";
+import { getImageUploadErrorMessage } from "@/lib/imageOptimization";
 import { getStoreBrands, saveStoreBrands } from "@/lib/brands";
 import { getProductTotalStock } from "@/lib/stock";
 import type { Tables } from "@/integrations/supabase/types";
@@ -432,11 +433,11 @@ export function ProductsTab({
 
   async function onFile(file: File) {
     try {
-      const url = await uploadImage(userId, file);
+      const url = await uploadImage(userId, file, "product");
       setForm((f) => ({ ...f, image_url: url }));
-      toast.success("Foto enviada!");
-    } catch {
-      toast.error("Falha ao enviar a foto.");
+      toast.success("Foto otimizada e enviada!");
+    } catch (error) {
+      toast.error(getImageUploadErrorMessage(error));
     }
   }
 
@@ -1622,11 +1623,11 @@ function EditProductDialog({
 
   async function onFile(file: File) {
     try {
-      const url = await uploadImage(userId, file);
+      const url = await uploadImage(userId, file, "product");
       setForm((f) => ({ ...f, image_url: url }));
-      toast.success("Foto da miniatura enviada!");
-    } catch {
-      toast.error("Falha ao enviar a foto.");
+      toast.success("Foto otimizada e enviada!");
+    } catch (error) {
+      toast.error(getImageUploadErrorMessage(error));
     }
   }
 

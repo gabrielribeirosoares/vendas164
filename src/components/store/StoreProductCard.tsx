@@ -4,6 +4,7 @@ import { brl, getProductInstallmentInfo, getProductSignalAmount, isProntaEntrega
 import { getProductUrl } from "@/lib/subdomain";
 import { formatStoreProductCardStock } from "@/lib/stock";
 import { getReadableTextColor } from "@/lib/storeCustomizations";
+import { getProductCardImageUrl } from "@/lib/imageUrls";
 import { Button } from "@/components/ui/button";
 import { Package, ShoppingCart } from "lucide-react";
 
@@ -39,7 +40,7 @@ export function StoreProductCard({
       >
         {product.image_url ? (
           <img
-            src={product.image_url}
+            src={getProductCardImageUrl(product.image_url)}
             alt={`${product.brand} ${product.model}`}
             loading="lazy"
             width="480"

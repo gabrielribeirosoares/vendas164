@@ -7,7 +7,8 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 test("vitrine publica a logo personalizada na prévia social", async () => {
   const storeRoute = await read("src/routes/loja.$slug.tsx");
 
-  assert.match(storeRoute, /store\?\.logo_url \|\| store\?\.favicon_url/);
+  assert.match(storeRoute, /optimizeImageUrl\(store\?\.logo_url\)/);
+  assert.match(storeRoute, /optimizedLogo \|\| optimizedFavicon/);
   assert.match(storeRoute, /property: "og:image", content: img/);
   assert.match(storeRoute, /name: "twitter:image", content: img/);
 });

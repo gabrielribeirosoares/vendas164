@@ -72,6 +72,16 @@ test("service worker não armazena páginas autenticadas", async () => {
   assert.doesNotMatch(worker, /cache\.put\(request[\s\S]{0,120}request\.mode === "navigate"/);
 });
 
+test("service worker mantém cache local limitado para imagens do Supabase", async () => {
+  const worker = await read("public/sw.js");
+
+  assert.match(worker, /IMAGE_CACHE_NAME = "vendas164-images-v1"/);
+  assert.match(worker, /request\.destination === "image"/);
+  assert.match(worker, /url\.hostname\.endsWith\("\.supabase\.co"\)/);
+  assert.match(worker, /IMAGE_CACHE_LIMIT = 300/);
+  assert.match(worker, /cache\.match\(request\)/);
+});
+
 test("cabeçalho respeita a área segura da barra de status no iOS", async () => {
   const header = await read("src/components/AppHeader.tsx");
 

@@ -22,6 +22,7 @@ import { getStoreFullUrl } from "@/lib/subdomain";
 
 interface AppHeaderProps {
   store?: {
+    id?: string;
     name: string;
     logo_url?: string | null;
     favicon_url?: string | null;
@@ -55,7 +56,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
     queryFn: async () => {
       const { data } = await supabase
         .from("stores")
-        .select("name, logo_url, favicon_url, primary_color")
+        .select("id, name, logo_url, favicon_url, primary_color")
         .eq("owner_id", user!.id)
         .maybeSingle();
       return data;
