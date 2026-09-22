@@ -38,6 +38,28 @@ interface OrderInstallmentsDialogProps {
   isCustomer?: boolean;
 }
 
+function isMissingFinancialRpc(error: { code?: string; message?: string } | null) {
+  return !!error && (
+    error.code === "PGRST202" ||
+    error.code === "42883" ||
+    error.message?.includes("Could not find the function")
+  );
+}
+
+function financialErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String((error as any)?.message || "");
+  if (message.includes("paid_installments_exist")) {
+    return "Existem pagamentos já confirmados. Remova ou ajuste esses lançamentos antes de recriar as parcelas.";
+  }
+  if (message.includes("payment_exceeds_balance")) {
+    return "O valor ultrapassa o saldo disponível dos pedidos selecionados.";
+  }
+  if (message.includes("order_access_denied")) {
+    return "Você não tem permissão para alterar um dos pedidos selecionados.";
+  }
+  return message || "Não foi possível concluir a operação financeira.";
+}
+
 export function OrderInstallmentsDialog({
   orderId,
   orderIds,
@@ -137,6 +159,15 @@ export function OrderInstallmentsDialog({
   const generateInstallments = useMutation({
     mutationFn: async () => {
       const count = customCount;
+      const { error: rpcError } = await supabase.rpc("replace_order_installments", {
+        _order_ids: targetIds,
+        _count: count,
+      });
+
+      if (!rpcError) return;
+      if (!isMissingFinancialRpc(rpcError)) throw rpcError;
+
+      // Compatibilidade temporária enquanto a migração é aplicada no ambiente.
       const orderData = orderMeta;
       const expectedSig = getProductSignalAmount(orderData?.products, qty).amount;
       const unitSig = orderData?.down_payment != null ? Number(orderData.down_payment) : Number(downPayment || 0);
@@ -184,7 +215,7 @@ export function OrderInstallmentsDialog({
       invalidateAll();
     },
     onError: (err: any) => {
-      toast.error("Erro ao gerar parcelas: " + err.message);
+      toast.error(financialErrorMessage(err));
     }
   });
 
@@ -203,6 +234,18 @@ export function OrderInstallmentsDialog({
       if (val > (remainingBalance + 0.009)) {
         throw new Error(`O valor informado (${brl(val)}) ultrapassa o saldo restante de ${brl(remainingBalance)}.`);
       }
+
+      const { error: rpcError } = await supabase.rpc("record_order_payment", {
+        _order_ids: targetIds,
+        _amount: val,
+        _due_date: newPaymentDate || new Date().toISOString().slice(0, 10),
+        _status: newPaymentStatus,
+      });
+
+      if (!rpcError) return;
+      if (!isMissingFinancialRpc(rpcError)) throw rpcError;
+
+      // Compatibilidade temporária enquanto a migração é aplicada no ambiente.
 
       const nextNumber = currentList.length + 1;
       const dueDate = newPaymentDate ? new Date(newPaymentDate + "T12:00:00").toISOString() : new Date().toISOString();
@@ -229,7 +272,7 @@ export function OrderInstallmentsDialog({
       invalidateAll();
     },
     onError: (err: any) => {
-      toast.error(err.message || "Erro ao registrar pagamento");
+      toast.error(financialErrorMessage(err));
     }
   });
 
@@ -779,4 +822,3 @@ export function OrderInstallmentsDialog({
     </Dialog>
   );
 }
-

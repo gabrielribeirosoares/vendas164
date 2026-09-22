@@ -23,6 +23,7 @@ import { getCustomerFromCache } from '@/lib/customerCache';
 import { ManualReservationDialog } from './ManualReservationDialog';
 import { OrderInstallmentsDialog } from '@/components/vendedor/OrderInstallmentsDialog';
 import { SpreadsheetImporterDialog } from '@/components/vendedor/SpreadsheetImporterDialog';
+import { ProductThumbnail } from '@/components/ProductThumbnail';
 import type { Tables } from '@/integrations/supabase/types';
 
 export type Product = Tables<'products'>;
@@ -65,7 +66,6 @@ function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: stri
   msg += `\nAgradecemos a preferência!`;
   return msg;
 }
-
 function getWhatsAppTemplates(o: OrderRow, quantity: number, displayName: string, storePixKey?: string) {
   const modelName = `${o.products?.brand || ''} ${o.products?.model || 'Miniatura'}`.trim();
   const customSignal = Number((o.products as any)?.down_payment_amount || 0);
@@ -994,7 +994,7 @@ export function OrdersTab({
                             </div>
                             <div className="size-10 shrink-0 rounded bg-muted border border-border overflow-hidden">
                                {o.products?.image_url ? (
-                                  <img src={o.products.image_url} alt={o.products.model || ""} className="w-full h-full object-cover" />
+                                  <ProductThumbnail src={o.products.image_url} alt={o.products.model || ""} className="w-full h-full object-cover" />
                                ) : <Package className="size-4 m-auto mt-3 text-muted-foreground" />}
                             </div>
                             <div className="min-w-0 flex-1">
@@ -1121,10 +1121,9 @@ export function OrdersTab({
                         <div className="flex items-start gap-3 rounded-xl bg-muted/30 p-2.5 border border-border/40">
                           <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50 mt-0.5">
                             {o.products?.image_url ? (
-                              <img
+                              <ProductThumbnail
                                 src={o.products.image_url}
                                 alt={o.products.model || "Miniatura"}
-                                loading="lazy"
                                 className="h-full w-full object-cover"
                               />
                             ) : (
@@ -1432,10 +1431,9 @@ export function OrdersTab({
                       <div className="flex items-start gap-2">
                         <div className="size-9 shrink-0 overflow-hidden rounded-md bg-muted border border-border/50 mt-0.5">
                           {o.products?.image_url ? (
-                            <img
+                            <ProductThumbnail
                               src={o.products.image_url}
                               alt={o.products.model || "Miniatura"}
-                              loading="lazy"
                               className="h-full w-full object-cover"
                             />
                           ) : (
@@ -1858,4 +1856,4 @@ export function OrdersTab({
     </div>
   );
 }
-
+

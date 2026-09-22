@@ -40,18 +40,13 @@ export function PushNotificationManager({ storeId }: { storeId?: string }) {
   async function subscribeToPush() {
     setIsLoading(true);
     try {
-      console.log("[Push] Step 1: Checking Notification API...");
-      console.log("[Push] Notification permission current:", Notification.permission);
-      
       if (Notification.permission === "denied") {
         toast.error("Notificações bloqueadas. Clique no cadeado na barra de endereços > Notificações > Permitir, e recarregue a página.");
         setIsLoading(false);
         return;
       }
 
-      console.log("[Push] Step 2: Requesting permission...");
       const permission = await Notification.requestPermission();
-      console.log("[Push] Permission result:", permission);
       
       if (permission === "denied") {
         toast.error("Notificações bloqueadas pelo navegador. Clique no cadeado (🔒) na barra de endereços → Notificações → Permitir, e recarregue a página.", { duration: 8000 });
@@ -65,31 +60,23 @@ export function PushNotificationManager({ storeId }: { storeId?: string }) {
         return;
       }
 
-      console.log("[Push] Step 3: Getting SW registration...");
       const registration = await navigator.serviceWorker.ready;
-      console.log("[Push] SW ready, scope:", registration.scope);
-      console.log("[Push] SW pushManager available:", !!registration.pushManager);
-      
-      // Chave pública VAPID (deve ser a mesma do servidor)
-      const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || "BDdwrBpz-nGKX2I5uZL4LpQ8oY57fdNSmqpiZyUTo9DnAxUsW2Pxp_2k7aPyXAAUksfWwYW60uIjH7BB7yUMnNs";
-      console.log("[Push] Step 4: VAPID key (first 20 chars):", vapidKey.substring(0, 20));
-      const applicationServerKey = urlB64ToUint8Array(vapidKey);
-      console.log("[Push] applicationServerKey length:", applicationServerKey.length);
 
-      console.log("[Push] Step 5: Calling pushManager.subscribe...");
+      // Chave pública VAPID (deve ser a mesma do servidor)
+      const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+      if (!vapidKey) throw new Error("push_not_configured");
+      const applicationServerKey = urlB64ToUint8Array(vapidKey);
+
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey,
       });
-      console.log("[Push] Step 6: Subscription obtained!", subscription.endpoint);
-
       const subscriptionData = subscription.toJSON();
 
       if (!subscriptionData.endpoint || !subscriptionData.keys) {
         throw new Error("Invalid subscription data generated");
       }
 
-      console.log("[Push] Step 7: Saving to server...");
       await savePushSubscriptionServer({
         data: {
           endpoint: subscriptionData.endpoint,
@@ -102,11 +89,13 @@ export function PushNotificationManager({ storeId }: { storeId?: string }) {
 
       setIsSubscribed(true);
       toast.success("Notificações ativadas com sucesso!");
-    } catch (error: any) {
-      console.error("Subscription error", error);
-      console.error("Error name:", error.name);
-      console.error("Error message:", error.message);
-      toast.error(`Erro ao ativar notificações: ${error.message || "Tente novamente"}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "";
+      toast.error(
+        message === "push_not_configured"
+          ? "As notificações ainda não foram configuradas para este ambiente."
+          : "Não foi possível ativar as notificações. Verifique as permissões e tente novamente."
+      );
     } finally {
       setIsLoading(false);
     }

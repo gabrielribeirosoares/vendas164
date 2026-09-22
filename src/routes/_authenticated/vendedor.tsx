@@ -254,9 +254,38 @@ function SellerDashboard() {
     },
   });
 
+  const needsProducts = ["produtos", "pronta_entrega", "reservas", "fila_espera"].includes(activeTab) || !!manualReservationWaitlist;
+  const needsOrders = ["reservas", "clientes"].includes(activeTab);
+  const needsFullWaitlist = activeTab === "fila_espera";
+  const needsWaitlistProductIds = ["produtos", "pronta_entrega"].includes(activeTab);
+
+  const { data: alertCounts = { outOfStock: 0, lateOrders: 0, pendingShipping: 0, waitlist: 0 } } = useQuery({
+    queryKey: ["store-alert-counts", store?.id],
+    enabled: !!store,
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const now = new Date().toISOString();
+      const [outOfStock, lateOrders, pendingShipping, waitlistCount] = await Promise.all([
+        supabase.from("products").select("id", { count: "exact", head: true }).eq("store_id", store!.id).eq("is_open", true).eq("stock", 0),
+        supabase.from("orders").select("id", { count: "exact", head: true }).eq("store_id", store!.id).eq("payment_status", "aguardando_sinal").lt("reservation_expires_at", now),
+        supabase.from("orders").select("id", { count: "exact", head: true }).eq("store_id", store!.id).eq("payment_status", "quitado").not("delivery_status", "in", "(enviado,em_transito,cancelado,entregue)"),
+        supabase.from("waitlist").select("id", { count: "exact", head: true }).eq("store_id", store!.id),
+      ]);
+
+      const error = outOfStock.error || lateOrders.error || pendingShipping.error || waitlistCount.error;
+      if (error) throw error;
+      return {
+        outOfStock: outOfStock.count ?? 0,
+        lateOrders: lateOrders.count ?? 0,
+        pendingShipping: pendingShipping.count ?? 0,
+        waitlist: waitlistCount.count ?? 0,
+      };
+    },
+  });
+
   const { data: products } = useQuery({
     queryKey: ["store-products", store?.id],
-    enabled: !!store,
+    enabled: !!store && needsProducts,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
@@ -270,7 +299,7 @@ function SellerDashboard() {
 
   const { data: orders } = useQuery({
     queryKey: ["store-orders", store?.id],
-    enabled: !!store,
+    enabled: !!store && needsOrders,
     queryFn: async (): Promise<OrderRow[]> => {
       const { data, error } = await supabase
         .from("orders")
@@ -305,13 +334,26 @@ function SellerDashboard() {
     },
   });
 
+  const { data: waitlistProductIds = [] } = useQuery({
+    queryKey: ["store-waitlist-product-ids", store?.id],
+    enabled: !!store && needsWaitlistProductIds,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("waitlist")
+        .select("product_id")
+        .eq("store_id", store!.id);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const {
     data: waitlist = [],
     isLoading: waitlistLoading,
     refetch: refetchWaitlist,
   } = useQuery({
     queryKey: ["store-waitlist", store?.id],
-    enabled: !!store,
+    enabled: !!store && needsFullWaitlist,
     queryFn: async (): Promise<WaitlistRow[]> => {
       const { data, error } = await supabase
         .from("waitlist")
@@ -348,11 +390,12 @@ function SellerDashboard() {
 
   const waitlistCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const item of waitlist) {
+    const rows = needsFullWaitlist ? waitlist : waitlistProductIds;
+    for (const item of rows) {
       counts[item.product_id] = (counts[item.product_id] || 0) + 1;
     }
     return counts;
-  }, [waitlist]);
+  }, [needsFullWaitlist, waitlist, waitlistProductIds]);
 
   const totals = useMemo(() => {
     const active = (orders ?? []).filter((o) => o.payment_status !== "cancelado");
@@ -568,9 +611,10 @@ function SellerDashboard() {
         </div>
 
         <SmartNotifications
-          products={products ?? []}
-          orders={orders ?? []}
-          waitlistCount={waitlist.length}
+          outOfStockCount={alertCounts.outOfStock}
+          lateOrderCount={alertCounts.lateOrders}
+          pendingShippingCount={alertCounts.pendingShipping}
+          waitlistCount={alertCounts.waitlist}
           onOpenOrders={filter => { setOrderFocus(filter); setActiveTab("reservas"); }}
           onOpenProducts={() => { setOnlyOutOfStock(true); setActiveTab("produtos"); }}
           onOpenWaitlist={() => setActiveTab("fila_espera")}
@@ -596,9 +640,9 @@ function SellerDashboard() {
             <TabsTrigger value="fila_espera" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
               <Clock className="size-3.5 text-muted-foreground" />
               <span>Fila de Espera</span>
-              {waitlist.length > 0 && (
+              {alertCounts.waitlist > 0 && (
                 <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 font-semibold text-muted-foreground border-border/50">
-                  {waitlist.length}
+                  {alertCounts.waitlist}
                 </Badge>
               )}
             </TabsTrigger>
@@ -666,9 +710,9 @@ function SellerDashboard() {
                 className="h-8 text-xs shrink-0 gap-1.5"
               >
                 <Clock className="size-3 text-muted-foreground" /> Fila
-                {waitlist.length > 0 && (
+                {alertCounts.waitlist > 0 && (
                   <span className="rounded-full bg-muted text-muted-foreground border border-border/50 px-1 py-0.2 text-[9px] font-semibold">
-                    {waitlist.length}
+                    {alertCounts.waitlist}
                   </span>
                 )}
               </Button>
@@ -759,6 +803,8 @@ function SellerDashboard() {
               queryClient.invalidateQueries({ queryKey: ["store-orders", store?.id] });
               queryClient.invalidateQueries({ queryKey: ["store-products", store?.id] });
               queryClient.invalidateQueries({ queryKey: ["store-waitlist", store?.id] });
+              queryClient.invalidateQueries({ queryKey: ["store-waitlist-product-ids", store?.id] });
+              queryClient.invalidateQueries({ queryKey: ["store-alert-counts", store?.id] });
               setManualReservationWaitlist(null);
             }}
             storeId={store.id}

@@ -50,6 +50,8 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/20260905193000_atomic_manual_reservations.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260907143000_harden_platform_authorization.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260920145545_keep_presale_open_and_cleanup_customer_waitlist.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260831122700_add_installment_due_day.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260922183409_atomic_order_financial_management.sql', import.meta.url), 'utf8'));
 });
 after(() => db.close());
 test('checkout commits stock, order and exact-cent installments; retry returns same IDs', async () => {
@@ -201,5 +203,44 @@ test('guest migration requires the caller verified phone and exact ownership', a
   await assert.rejects(
     db.query('SELECT migrate_reservations_by_phone($1,$2)', [customer, '48999999999']),
     /permission denied/,
+  );
+});
+
+test('financial management replaces schedules and records payments atomically', async () => {
+  const id = await product({ price: 100 });
+  const [orderId] = await checkout([item(id)]);
+
+  await assert.rejects(
+    db.query('SELECT replace_order_installments(ARRAY[$1]::uuid[],2)', [orderId]),
+    /order_access_denied/,
+  );
+
+  await asUser(owner);
+  await db.query('SELECT replace_order_installments(ARRAY[$1]::uuid[],2)', [orderId]);
+  const scheduled = (await db.query(
+    'SELECT amount,status FROM order_installments WHERE order_id=$1 ORDER BY installment_number',
+    [orderId],
+  )).rows;
+  assert.deepEqual(scheduled.map((entry) => Number(entry.amount)), [40, 40]);
+  assert.ok(scheduled.every((entry) => entry.status === 'pending'));
+
+  await db.query("SELECT record_order_payment(ARRAY[$1]::uuid[],30,current_date,'paid')", [orderId]);
+  assert.equal(
+    Number((await db.query("SELECT sum(amount) AS total FROM order_installments WHERE order_id=$1 AND status='paid'", [orderId])).rows[0].total),
+    30,
+  );
+
+  await db.query("SELECT record_order_payment(ARRAY[$1]::uuid[],50,current_date,'paid')", [orderId]);
+  const settled = (await db.query('SELECT payment_status FROM orders WHERE id=$1', [orderId])).rows[0];
+  assert.equal(settled.payment_status, 'quitado');
+  assert.equal((await db.query("SELECT count(*) AS count FROM order_installments WHERE order_id=$1 AND status='pending'", [orderId])).rows[0].count, 0);
+
+  await assert.rejects(
+    db.query("SELECT record_order_payment(ARRAY[$1]::uuid[],1,current_date,'paid')", [orderId]),
+    /payment_exceeds_balance/,
+  );
+  assert.equal(
+    Number((await db.query("SELECT sum(amount) AS total FROM order_installments WHERE order_id=$1 AND status='paid'", [orderId])).rows[0].total),
+    80,
   );
 });

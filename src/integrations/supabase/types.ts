@@ -429,6 +429,14 @@ export type Database = {
         Args: { p_produto_id: string; p_quantidade: number }
         Returns: boolean
       }
+      record_order_payment: {
+        Args: { _order_ids: string[]; _amount: number; _due_date?: string; _status?: string }
+        Returns: Json
+      }
+      replace_order_installments: {
+        Args: { _order_ids: string[]; _count: number }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

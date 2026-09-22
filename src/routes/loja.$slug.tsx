@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate, Outlet, useMatchRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Check, Copy, Package, Search, Sparkles, Store as StoreIcon, X, ShoppingCart, LayoutGrid, List, ChevronLeft, ChevronRight, ListFilter, ChevronDown, ChevronUp } from "lucide-react";
+import { BookmarkCheck, Check, Copy, Package, Search, Sparkles, Store as StoreIcon, X, ShoppingCart, LayoutGrid, List, ListFilter, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createServerFn } from "@tanstack/react-start";
 import { AppHeader } from "@/components/AppHeader";
@@ -16,7 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, getProductSignalAmount, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
+import type { Tables } from "@/integrations/supabase/types";
+import { brl, getProductSignalAmount, hasNoSignalRequirement } from "@/lib/format";
 import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 import { useCartStore } from "@/lib/cart";
@@ -24,8 +25,15 @@ import { saveCustomerToCache } from "@/lib/customerCache";
 import { getReadableTextColor, getStoreBanner, getProductBadge } from "@/lib/storeCustomizations";
 import { StoreReviewsSection } from "@/components/StoreReviewsSection";
 import { StoreProductCard } from "@/components/store/StoreProductCard";
+import { CatalogPagination } from "@/components/store/CatalogPagination";
 import { getProductCardImageUrl } from "@/lib/imageUrls";
 import { getSubdomain, getStoreFullUrl, getProductUrl, withStorePreviewVersion } from "@/lib/subdomain";
+
+type CatalogPage = {
+  products: Tables<"products">[];
+  total: number;
+  brands: string[];
+};
 
 const fetchStoreBySlug = createServerFn({ method: "GET" })
   .validator((d: { slug: string }) => d)
@@ -175,8 +183,17 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
   const [onlyInStock, setOnlyInStock] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [showFilters, setShowFilters] = useState<boolean>(false);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(12);
 
-  const { data, isLoading } = useQuery({
+  const deferredSearchQuery = useDeferredValue(searchQuery.trim());
+
+  const {
+    data,
+    isLoading: isStoreLoading,
+    isError: isStoreError,
+    refetch: refetchStore,
+  } = useQuery({
     queryKey: ["store", slug],
     retry: 2,
     queryFn: async () => {
@@ -187,12 +204,42 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
         .maybeSingle();
       if (error) throw error;
       if (!store) return null;
-      const { data: products } = await supabase
-        .from("products")
-        .select("*")
-        .eq("store_id", store.id)
-        .order("created_at", { ascending: false });
-      return { store, products: products ?? [] };
+      return { store };
+    },
+  });
+
+  const store = data?.store;
+
+  const {
+    data: catalog,
+    isLoading: isCatalogLoading,
+    isError: isCatalogError,
+    isFetching: isCatalogFetching,
+    refetch: refetchCatalog,
+  } = useQuery({
+    queryKey: ["catalog-page", store?.id, deferredSearchQuery, selectedBrand, selectedScale, selectedType, onlyInStock, sortBy, currentPage, itemsPerPage],
+    enabled: !!store?.id,
+    placeholderData: (previous) => previous,
+    queryFn: async (): Promise<CatalogPage> => {
+      const { data: page, error } = await supabase.rpc("catalog_page", {
+        _store_id: store!.id,
+        _search: deferredSearchQuery,
+        _brand: selectedBrand,
+        _scale: selectedScale,
+        _type: selectedType,
+        _in_stock: onlyInStock,
+        _sort: sortBy,
+        _page: currentPage,
+        _page_size: itemsPerPage,
+      });
+      if (error) throw error;
+
+      const result = page as unknown as Partial<CatalogPage> | null;
+      return {
+        products: Array.isArray(result?.products) ? result.products : [],
+        total: Number(result?.total ?? 0),
+        brands: Array.isArray(result?.brands) ? result.brands.filter(Boolean) : [],
+      };
     },
   });
 
@@ -350,77 +397,35 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
     toast.success("Adicionado ao carrinho!");
   };
 
-  const store = data?.store;
-  const products = data?.products ?? [];
+  const products = catalog?.products ?? [];
+  const catalogTotal = catalog?.total ?? 0;
   const isOwner = !!(user && store?.owner_id === user.id);
   const storeStatus = (store as any)?.status || "active";
   const themeColor = store?.primary_color || "#e11d48";
   const themeTextColor = getReadableTextColor(themeColor);
 
-  const filteredProducts = useMemo(() => {
-    return products.filter((p) => {
-      if (!p.is_open) return false;
-      if (onlyInStock && p.stock <= 0) return false;
-
-      if (selectedType === "pre" && isProntaEntrega(p)) return false;
-      if (selectedType === "pronta" && !isProntaEntrega(p)) return false;
-
-      const matchBrand = selectedBrand === "all" || (p.brand || "Outros").trim() === selectedBrand;
-      const matchScale = selectedScale === "all" || p.scale === selectedScale;
-
-      if (!matchBrand || !matchScale) return false;
-
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const modelMatch = (p.model || "").toLowerCase().includes(q);
-        const brandMatch = (p.brand || "").toLowerCase().includes(q);
-        const descMatch = ((p as any).description || "").toLowerCase().includes(q);
-        const skuMatch = ((p as any).sku || "").toLowerCase().includes(q);
-        const obsMatch = ((p as any).observation || "").toLowerCase().includes(q);
-        if (!modelMatch && !brandMatch && !descMatch && !skuMatch && !obsMatch) return false;
-      }
-
-      return true;
-    }).sort((a, b) => {
-      if (sortBy === "price_asc") return Number(a.price) - Number(b.price);
-      if (sortBy === "price_desc") return Number(b.price) - Number(a.price);
-      if (sortBy === "recent") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      // Ordem alfabética (Marca A-Z -> Modelo A-Z)
-      const brandCompare = (a.brand || "").localeCompare(b.brand || "");
-      if (brandCompare !== 0) return brandCompare;
-      return (a.model || "").localeCompare(b.model || "");
-    });
-  }, [products, selectedBrand, selectedScale, selectedType, searchQuery, onlyInStock, sortBy]);
-
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [itemsPerPage, setItemsPerPage] = useState<number>(12);
-
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedBrand, selectedScale, selectedType, searchQuery, onlyInStock, sortBy, itemsPerPage]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / itemsPerPage));
+  const totalPages = Math.max(1, Math.ceil(catalogTotal / itemsPerPage));
 
-  const paginatedProducts = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredProducts.slice(start, start + itemsPerPage);
-  }, [filteredProducts, currentPage, itemsPerPage]);
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   // Agrupamento por marca da página atual
   const brandsMap = useMemo(() => {
     const map: Record<string, typeof products> = {};
-    for (const p of paginatedProducts) {
+    for (const p of products) {
       const brandName = (p.brand || "Outros").trim();
       if (!map[brandName]) map[brandName] = [];
       map[brandName].push(p);
     }
     return map;
-  }, [paginatedProducts]);
-
-  const allAvailableBrands = useMemo(() => {
-    const set = new Set(products.filter((p) => p.is_open).map((p) => (p.brand || "Outros").trim()));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [products]);
+
+  const allAvailableBrands = catalog?.brands ?? [];
 
   const brandList = useMemo(() => Object.keys(brandsMap).sort((a, b) => a.localeCompare(b)), [brandsMap]);
   const filteredBrands = useMemo(
@@ -429,6 +434,8 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
   );
 
   const hasActiveFilters = searchQuery.trim() !== "" || selectedBrand !== "all" || selectedScale !== "all" || selectedType !== "all" || onlyInStock || sortBy !== "recent";
+
+  const isLoading = isStoreLoading || (!!store && isCatalogLoading);
 
   if (isLoading) {
     return (
@@ -447,6 +454,27 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
               </Card>
             ))}
           </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (isStoreError || isCatalogError) {
+    return (
+      <div className="min-h-screen">
+        <AppHeader store={store} />
+        <main className="mx-auto max-w-2xl px-4 py-16">
+          <InterfaceState
+            variant="error"
+            icon={Package}
+            title="Não foi possível carregar o catálogo"
+            description="Confira sua conexão e tente novamente. Nenhuma reserva foi alterada."
+            action={
+              <Button variant="outline" onClick={() => void (isStoreError ? refetchStore() : refetchCatalog())}>
+                Tentar novamente
+              </Button>
+            }
+          />
         </main>
       </div>
     );
@@ -742,20 +770,21 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
         {/* Resumo de Resultados & Itens por Página */}
         <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>
+            {isCatalogFetching && <Loader2 className="mr-1.5 inline size-3 animate-spin" aria-hidden="true" />}
             Exibindo{" "}
             <strong>
-              {filteredProducts.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}
+              {catalogTotal > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}
             </strong>{" "}
             a{" "}
             <strong>
-              {Math.min(currentPage * itemsPerPage, filteredProducts.length)}
+              {Math.min(currentPage * itemsPerPage, catalogTotal)}
             </strong>{" "}
-            de <strong>{filteredProducts.length}</strong> {filteredProducts.length === 1 ? "miniatura" : "miniaturas"}
+            de <strong>{catalogTotal}</strong> {catalogTotal === 1 ? "miniatura" : "miniaturas"}
             {totalPages > 1 && ` (Página ${currentPage} de ${totalPages})`}
             {searchQuery && ` para "${searchQuery}"`}
           </span>
 
-          {filteredProducts.length > 12 && (
+          {catalogTotal > 12 && (
             <div className="flex items-center gap-2">
               <span>Exibir por página:</span>
               <div className="flex items-center gap-1">
@@ -779,7 +808,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
         </div>
 
         {/* Mensagem de vazio quando não há miniaturas */}
-        {filteredProducts.length === 0 ? (
+        {catalogTotal === 0 ? (
           <InterfaceState
             className="mt-8"
             icon={Package}
@@ -948,77 +977,13 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
           </div>
         )}
 
-        {/* BARRA DE PAGINAÇÃO DE PRODUTOS */}
-        {totalPages > 1 && (
-          <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl border border-border/30 bg-card/60 shadow-sm backdrop-blur-sm">
-            <div className="text-xs text-muted-foreground">
-              Página <strong className="text-foreground">{currentPage}</strong> de{" "}
-              <strong className="text-foreground">{totalPages}</strong>
-            </div>
-
-            <div className="flex items-center gap-1.5 flex-wrap justify-center">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 px-2.5 text-xs gap-1"
-                disabled={currentPage <= 1}
-                onClick={() => {
-                  setCurrentPage((p) => Math.max(1, p - 1));
-                  window.scrollTo({ top: 400, behavior: "smooth" });
-                }}
-              >
-                <ChevronLeft className="size-4" />
-                <span>Anterior</span>
-              </Button>
-
-              {Array.from({ length: totalPages }).map((_, i) => {
-                const pageNum = i + 1;
-                if (
-                  pageNum === 1 ||
-                  pageNum === totalPages ||
-                  (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
-                ) {
-                  return (
-                    <button
-                      key={pageNum}
-                      type="button"
-                      onClick={() => {
-                        setCurrentPage(pageNum);
-                        window.scrollTo({ top: 400, behavior: "smooth" });
-                      }}
-                      className={`size-9 rounded-lg text-xs font-bold transition-all border ${
-                        currentPage === pageNum
-                          ? "text-white border-transparent shadow-md scale-105"
-                          : "bg-muted/30 border-border/30 text-muted-foreground hover:bg-muted"
-                      }`}
-                      style={currentPage === pageNum ? { backgroundColor: themeColor, color: themeTextColor } : undefined}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                }
-                if (pageNum === currentPage - 2 || pageNum === currentPage + 2) {
-                  return <span key={pageNum} className="text-xs text-muted-foreground px-1">...</span>;
-                }
-                return null;
-              })}
-
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 px-2.5 text-xs gap-1"
-                disabled={currentPage >= totalPages}
-                onClick={() => {
-                  setCurrentPage((p) => Math.min(totalPages, p + 1));
-                  window.scrollTo({ top: 400, behavior: "smooth" });
-                }}
-              >
-                <span>Próxima</span>
-                <ChevronRight className="size-4" />
-              </Button>
-            </div>
-          </div>
-        )}
+        <CatalogPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          primaryColor={themeColor}
+          primaryTextColor={themeTextColor}
+          onPageChange={setCurrentPage}
+        />
 
         {/* Seção de Avaliações dos Clientes */}
         <StoreReviewsSection storeId={store.id} storeName={store.name} primaryColor={store.primary_color} />

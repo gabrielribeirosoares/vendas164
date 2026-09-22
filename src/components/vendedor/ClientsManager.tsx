@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { brl, whatsappLink } from '@/lib/format';
 import { OrderInstallmentsDialog } from '@/components/vendedor/OrderInstallmentsDialog';
 import { SpreadsheetImporterDialog } from '@/components/vendedor/SpreadsheetImporterDialog';
+import { ProductThumbnail } from '@/components/ProductThumbnail';
 
 import type { OrderRow } from '@/components/vendedor/OrderManager';
 import { toast } from "sonner";
@@ -1072,7 +1073,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                       >
                         <div className="flex items-start gap-2.5 min-w-0 w-full">
                           {order.products?.image_url ? (
-                            <img src={order.products.image_url} alt="Miniatura" className="size-11 sm:size-12 rounded-lg object-cover border border-border/40 shrink-0" />
+                            <ProductThumbnail src={order.products.image_url} alt="Miniatura" className="size-11 sm:size-12 rounded-lg object-cover border border-border/40 shrink-0" />
                           ) : (
                             <div className="size-11 sm:size-12 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
                               <Package className="size-5 sm:size-6" />

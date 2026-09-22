@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { AppFooter } from "@/components/AppFooter";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { InterfaceState } from "@/components/InterfaceState";
+import { ProductThumbnail } from "@/components/ProductThumbnail";
 import { PhoneInput } from "@/components/PhoneInput";
 import { Countdown } from "@/components/Countdown";
 import { DeliveryBadge, PaymentBadge } from "@/components/StatusBadge";
@@ -432,10 +433,9 @@ function CustomerDashboardContent() {
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
                     <div className="size-10 shrink-0 overflow-hidden rounded-xl bg-muted sm:size-12">
                       {o.products?.image_url ? (
-                        <img
+                        <ProductThumbnail
                           src={o.products.image_url}
                           alt={o.products.model}
-                          loading="lazy"
                           className="h-full w-full object-cover"
                         />
                       ) : (
@@ -749,11 +749,10 @@ function CustomerDashboardContent() {
                     <Card key={ids[0]} className="border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
                       <div className="aspect-video w-full overflow-hidden bg-muted relative">
                         {(o.products?.image_url || (o as any).product_image_url) ? (
-                          <img
+                          <ProductThumbnail
                             src={o.products?.image_url || (o as any).product_image_url}
                             alt={o.products?.model || (o as any).product_model}
                             className="h-full w-full object-cover"
-                            loading="lazy"
                           />
                         ) : (
                           <div className="flex h-full items-center justify-center text-muted-foreground">

@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ProductThumbnail } from "@/components/ProductThumbnail";
 import {
   Select,
   SelectContent,
@@ -281,6 +282,8 @@ export function WaitlistManager({
 
       toast.success("Cliente removido da fila de espera.");
       await queryClient.invalidateQueries({ queryKey: ["store-waitlist", store.id] });
+      await queryClient.invalidateQueries({ queryKey: ["store-waitlist-product-ids", store.id] });
+      await queryClient.invalidateQueries({ queryKey: ["store-alert-counts", store.id] });
       await queryClient.invalidateQueries({ queryKey: ["waitlist"] });
       onRefresh?.();
     } catch (err: any) {
@@ -502,7 +505,7 @@ export function WaitlistManager({
                 <div className="p-4 sm:p-5 border-b border-border/50 bg-muted/15 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-3.5 min-w-0">
                     {product.image_url ? (
-                      <img
+                      <ProductThumbnail
                         src={product.image_url}
                         alt={`${product.brand} ${product.model}`}
                         className="size-14 sm:size-16 rounded-xl object-cover border border-border/60 shrink-0 bg-background"
@@ -778,7 +781,7 @@ export function WaitlistManager({
                         {product ? (
                           <div className="flex items-center gap-2.5">
                             {product.image_url ? (
-                              <img
+                              <ProductThumbnail
                                 src={product.image_url}
                                 alt={product.model}
                                 className="size-9 rounded-lg object-cover border border-border/50 shrink-0"
