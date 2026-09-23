@@ -1,5 +1,5 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import React, { useState, useRef, useMemo, useEffect, useDeferredValue } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { brl, isProntaEntrega, whatsappLink } from '@/lib/format';
 import { trackOrder } from '@/lib/trackingService';
@@ -24,17 +24,45 @@ import { ManualReservationDialog } from './ManualReservationDialog';
 import { OrderInstallmentsDialog } from '@/components/vendedor/OrderInstallmentsDialog';
 import { SpreadsheetImporterDialog } from '@/components/vendedor/SpreadsheetImporterDialog';
 import { ProductThumbnail } from '@/components/ProductThumbnail';
+import { SellerOverview } from '@/components/vendedor/SellerOverview';
+import { InterfaceState } from '@/components/InterfaceState';
 import type { Tables } from '@/integrations/supabase/types';
 
 export type Product = Tables<'products'>;
 const DEFAULT_PAGE_SIZE = 25;
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 0]; // 0 = Todos
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 export type OrderRow = Tables<"orders"> & {
   products: Tables<"products"> | null;
   profiles: { name: string | null; email: string | null; phone: string | null } | null;
   order_installments?: any[];
 };
+
+type GroupedOrderRow = { order: OrderRow; quantity: number; ids: string[] };
+
+type SellerOrdersPage = {
+  groups: GroupedOrderRow[];
+  total: number;
+  counts: { all: number; preorder: number; ready: number };
+  overview: {
+    projected: number;
+    received: number;
+    pending: number;
+    activeCount: number;
+    avgTicket: number;
+    paidInFull: number;
+  };
+  brands: Array<{ name: string; count: number }>;
+  legacyOrders?: OrderRow[];
+};
+
+function isMissingPaginationRpc(error: { code?: string; message?: string } | null) {
+  return !!error && (
+    error.code === "PGRST202" ||
+    error.code === "42883" ||
+    error.message?.includes("Could not find the function")
+  );
+}
 
 function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: string) {
   const modelName = `${o.products?.brand || ''} ${o.products?.model || 'Miniatura'}`.trim();
@@ -232,6 +260,7 @@ export function OrdersTab({
   const [categoryFilter, setCategoryFilter] = useState<"todos" | "pre_venda" | "pronta_entrega">("todos");
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+  const deferredSearchQuery = useDeferredValue(searchQuery.trim());
 
   useEffect(() => {
     setPage(0);
@@ -244,6 +273,82 @@ export function OrdersTab({
   const [trackingUpdating, setTrackingUpdating] = useState<Set<string>>(new Set());
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+
+  const {
+    data: orderPage,
+    isFetching: isOrdersFetching,
+    isError: isOrdersError,
+    refetch: refetchOrders,
+  } = useQuery({
+    queryKey: [
+      "seller-orders-page",
+      storeId,
+      deferredSearchQuery,
+      paymentFilter,
+      deliveryFilter,
+      categoryFilter,
+      startDate,
+      endDate,
+      focusFilter,
+      page,
+      pageSize,
+    ],
+    enabled: !!storeId,
+    placeholderData: (previous) => previous,
+    queryFn: async (): Promise<SellerOrdersPage> => {
+      const { data, error } = await supabase.rpc("seller_orders_page", {
+        _store_id: storeId!,
+        _search: deferredSearchQuery,
+        _payment: paymentFilter,
+        _delivery: deliveryFilter,
+        _category: categoryFilter,
+        _start_date: startDate || undefined,
+        _end_date: endDate || undefined,
+        _focus: focusFilter || undefined,
+        _page: page + 1,
+        _page_size: pageSize,
+      });
+
+      if (!error) return data as unknown as SellerOrdersPage;
+      if (!isMissingPaginationRpc(error)) throw error;
+
+      const { data: legacyRows, error: legacyError } = await supabase
+        .from("orders")
+        .select("*, products(*), order_installments(*)")
+        .eq("store_id", storeId!)
+        .order("created_at", { ascending: false });
+      if (legacyError) throw legacyError;
+
+      const userIds = [...new Set((legacyRows ?? []).map((row) => row.user_id))];
+      const { data: people } = userIds.length
+        ? await supabase.from("profiles").select("id, name, email, phone").in("id", userIds)
+        : { data: [] };
+      const byId = new Map((people ?? []).map((person) => [person.id, person]));
+      const hydrated = (legacyRows ?? []).map((row) => {
+        const person = byId.get(row.user_id);
+        const cached = getCustomerFromCache(row.user_id);
+        return {
+          ...row,
+          profiles: person || cached
+            ? {
+                name: person?.name || cached?.name || null,
+                email: person?.email || cached?.email || null,
+                phone: person?.phone || cached?.phone || null,
+              }
+            : null,
+        } as OrderRow;
+      });
+
+      return {
+        groups: [],
+        total: hydrated.length,
+        counts: { all: 0, preorder: 0, ready: 0 },
+        overview: { projected: 0, received: 0, pending: 0, activeCount: 0, avgTicket: 0, paidInFull: 0 },
+        brands: [],
+        legacyOrders: hydrated,
+      };
+    },
+  });
 
   async function handleTrackingUpdate(orderId: string, code: string, currentStatus?: string) {
     if (!code?.trim()) return;
@@ -305,19 +410,57 @@ export function OrdersTab({
     }
   }
 
+  const sourceOrders = orderPage?.legacyOrders ?? orders;
+  const isServerPage = !!orderPage && !orderPage.legacyOrders;
   const activeOrders = useMemo(
-    () => orders.filter((o) => o.payment_status !== "cancelado" && o.delivery_status !== "cancelado"),
-    [orders]
+    () => sourceOrders.filter((o) => o.payment_status !== "cancelado" && o.delivery_status !== "cancelado"),
+    [sourceOrders]
   );
-  const activeOrdersCount = activeOrders.length;
+  const activeOrdersCount = isServerPage ? orderPage.counts.all : activeOrders.length;
   const prontaEntregaOrdersCount = useMemo(
-    () => activeOrders.filter((o) => isProntaEntrega(o.products)).length,
-    [activeOrders]
+    () => isServerPage ? orderPage.counts.ready : activeOrders.filter((o) => isProntaEntrega(o.products)).length,
+    [activeOrders, isServerPage, orderPage]
   );
   const preVendaOrdersCount = useMemo(
-    () => activeOrders.filter((o) => !isProntaEntrega(o.products)).length,
-    [activeOrders]
+    () => isServerPage ? orderPage.counts.preorder : activeOrders.filter((o) => !isProntaEntrega(o.products)).length,
+    [activeOrders, isServerPage, orderPage]
   );
+
+  const overviewTotals = useMemo(() => {
+    if (isServerPage) return orderPage.overview;
+    const projected = activeOrders.reduce((sum, order) => sum + Number(order.total_price), 0);
+    const received = activeOrders.reduce((sum, order) => {
+      const total = Number(order.total_price || 0);
+      const signal = ["sinal_pago", "quitado"].includes(order.payment_status)
+        ? Number(order.down_payment || 0)
+        : 0;
+      const installments = (order.order_installments || [])
+        .filter((item: any) => item.status === "paid")
+        .reduce((value: number, item: any) => value + Number(item.amount), 0);
+      return sum + Math.min(total, signal + installments);
+    }, 0);
+    return {
+      projected,
+      received,
+      pending: Math.max(0, projected - received),
+      activeCount: activeOrders.length,
+      avgTicket: activeOrders.length ? projected / activeOrders.length : 0,
+      paidInFull: activeOrders.filter((order) => order.payment_status === "quitado").length,
+    };
+  }, [activeOrders, isServerPage, orderPage]);
+
+  const overviewBrands = useMemo(() => {
+    if (isServerPage) return orderPage.brands;
+    const counts = new Map<string, number>();
+    activeOrders.forEach((order) => {
+      const brand = order.products?.brand || "Outros";
+      counts.set(brand, (counts.get(brand) || 0) + 1);
+    });
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [activeOrders, isServerPage, orderPage]);
 
   async function handleTrackingSave(ids: string[], code: string) {
     const { error } = await supabase
@@ -340,7 +483,7 @@ export function OrdersTab({
   }
 
   const filteredOrders = useMemo(() => {
-    return orders.filter((o) => {
+    return sourceOrders.filter((o) => {
       if (focusFilter === "atrasado" && (o.payment_status !== "aguardando_sinal" || !o.reservation_expires_at || new Date(o.reservation_expires_at) >= new Date())) return false;
       if (focusFilter === "envios" && (o.payment_status !== "quitado" || ["enviado", "em_transito", "cancelado", "entregue"].includes(o.delivery_status))) return false;
       if (startDate) {
@@ -402,11 +545,10 @@ export function OrdersTab({
         trackingCode.includes(q)
       );
     });
-  }, [orders, focusFilter, searchQuery, startDate, endDate, paymentFilter, deliveryFilter, categoryFilter]);
-
-  type GroupedOrderRow = { order: OrderRow; quantity: number; ids: string[] };
+  }, [sourceOrders, focusFilter, searchQuery, startDate, endDate, paymentFilter, deliveryFilter, categoryFilter]);
 
   const groupedOrders = useMemo(() => {
+    if (isServerPage) return orderPage.groups;
     const map = new Map<string, GroupedOrderRow>();
     filteredOrders.forEach((o) => {
       // Agrupar pedidos do mesmo cliente, produto, status e criados na mesma leva
@@ -422,15 +564,69 @@ export function OrdersTab({
       }
     });
     return Array.from(map.values());
-  }, [filteredOrders]);
+  }, [filteredOrders, isServerPage, orderPage]);
 
-  const totalReservations = groupedOrders.length;
+  const totalReservations = isServerPage ? orderPage.total : groupedOrders.length;
   const isAllPages = pageSize === 0;
   const pages = isAllPages ? 1 : Math.max(1, Math.ceil(totalReservations / pageSize));
   const safePage = Math.min(page, Math.max(0, pages - 1));
   const startRow = totalReservations > 0 ? (isAllPages ? 1 : safePage * pageSize + 1) : 0;
   const endRow = isAllPages ? totalReservations : Math.min(totalReservations, (safePage + 1) * pageSize);
-  const rows = isAllPages ? groupedOrders : groupedOrders.slice(safePage * pageSize, (safePage + 1) * pageSize);
+  const rows = isServerPage ? groupedOrders : (isAllPages ? groupedOrders : groupedOrders.slice(safePage * pageSize, (safePage + 1) * pageSize));
+
+  async function loadOrdersForExport(): Promise<OrderRow[]> {
+    if (!isServerPage || !storeId) return filteredOrders;
+
+    const exportRows: OrderRow[] = [];
+    const exportPageSize = 100;
+    const exportPages = Math.max(1, Math.ceil(orderPage.total / exportPageSize));
+
+    for (let exportPage = 1; exportPage <= exportPages; exportPage += 1) {
+      const { data, error } = await supabase.rpc("seller_orders_page", {
+        _store_id: storeId,
+        _search: deferredSearchQuery,
+        _payment: paymentFilter,
+        _delivery: deliveryFilter,
+        _category: categoryFilter,
+        _start_date: startDate || undefined,
+        _end_date: endDate || undefined,
+        _focus: focusFilter || undefined,
+        _page: exportPage,
+        _page_size: exportPageSize,
+      });
+      if (error) throw error;
+
+      const result = data as unknown as SellerOrdersPage;
+      for (const group of result.groups) {
+        group.ids.forEach((id) => exportRows.push({ ...group.order, id }));
+      }
+    }
+
+    return exportRows;
+  }
+
+  async function handleFinancialExport() {
+    try {
+      const exportOrders = await loadOrdersForExport();
+      const financeiro = prepararDadosExportacaoFinanceira(exportOrders as any);
+      const csvRows = [
+        ["ID Pedido", "Cliente", "E-mail", "Telefone", "Modelo", "Marca", "Competência", "Status Pagamento", "Status Entrega", "Valor Total (R$)", "Sinal Recebido (R$)", "Saldo Provisionado (R$)"].join(";"),
+        ...financeiro.map((f) =>
+          [f.idPedido, `"${f.clienteNome}"`, `"${f.clienteEmail}"`, `"${f.clienteTelefone}"`, `"${f.produtoModelo}"`, `"${f.produtoMarca}"`, f.competenciaReserva, f.statusPagamento, f.statusEntrega, f.valorTotal, f.valorSinalRecebido, f.saldoProvisionado].join(";")
+        ),
+      ];
+      const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `relatorio-financeiro-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Relatório financeiro por competência exportado com sucesso!");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível exportar o relatório.");
+    }
+  }
 
   async function adjustStockOnCancel(productId: string, isCancelling: boolean, quantity: number) {
     if (!productId) return;
@@ -762,6 +958,16 @@ export function OrdersTab({
 
   return (
     <div className="space-y-6">
+      <SellerOverview totals={overviewTotals} brandData={overviewBrands} />
+      {isOrdersError && (
+        <InterfaceState
+          variant="error"
+          icon={RefreshCw}
+          title="Não foi possível carregar as reservas"
+          description="Nenhuma alteração foi realizada. Verifique a conexão e tente novamente."
+          action={<Button variant="outline" onClick={() => void refetchOrders()}>Tentar novamente</Button>}
+        />
+      )}
       {focusFilter && (
         <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-sm">
           <span>{focusFilter === "atrasado" ? "Sinais atrasados" : "Envios pendentes"}</span>
@@ -864,23 +1070,7 @@ export function OrdersTab({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  const financeiro = prepararDadosExportacaoFinanceira(filteredOrders as any);
-                  const csvRows = [
-                    ["ID Pedido", "Cliente", "E-mail", "Telefone", "Modelo", "Marca", "Competência", "Status Pagamento", "Status Entrega", "Valor Total (R$)", "Sinal Recebido (R$)", "Saldo Provisionado (R$)"].join(";"),
-                    ...financeiro.map((f) =>
-                      [f.idPedido, `"${f.clienteNome}"`, `"${f.clienteEmail}"`, `"${f.clienteTelefone}"`, `"${f.produtoModelo}"`, `"${f.produtoMarca}"`, f.competenciaReserva, f.statusPagamento, f.statusEntrega, f.valorTotal, f.valorSinalRecebido, f.saldoProvisionado].join(";")
-                    ),
-                  ];
-                  const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `relatorio-financeiro-${new Date().toISOString().slice(0, 10)}.csv`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                  toast.success("Relatório financeiro por competência exportado com sucesso!");
-                }}
+                onClick={() => void handleFinancialExport()}
                 className="h-9 text-xs gap-1.5 border-border/80 no-print"
               >
                 <Download className="size-3.5 text-primary" />
@@ -1677,6 +1867,7 @@ export function OrdersTab({
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border/60 px-4 py-3 text-xs bg-muted/10 no-print">
           <div className="flex items-center gap-2 text-muted-foreground flex-wrap justify-center sm:justify-start">
             <span>
+              {isOrdersFetching && <Loader2 className="mr-1.5 inline size-3 animate-spin" aria-hidden="true" />}
               Mostrando <strong className="text-foreground">{startRow}</strong>–<strong className="text-foreground">{endRow}</strong> de{" "}
               <strong className="text-foreground">{totalReservations}</strong>
               {!isAllPages && pages > 1 && ` (Pág. ${safePage + 1}/${pages})`}
@@ -1698,7 +1889,7 @@ export function OrdersTab({
                       : "bg-muted/40 hover:bg-muted text-muted-foreground"
                   }`}
                 >
-                  {opt === 0 ? "Todos" : opt}
+                  {opt}
                 </button>
               ))}
             </div>

@@ -63,16 +63,29 @@ test("paginação extraída possui navegação acessível", async () => {
   assert.match(pagination, /Próxima/);
 });
 
-test("painel do vendedor carrega coleções completas somente nas abas necessárias", async () => {
+test("painel do vendedor pagina pedidos e clientes no servidor", async () => {
   const route = await read("src/routes/_authenticated/vendedor.tsx");
+  const orders = await read("src/components/vendedor/OrderManager.tsx");
+  const clients = await read("src/components/vendedor/ClientsManager.tsx");
   const notifications = await read("src/components/vendedor/SmartNotifications.tsx");
+  const migration = await read(
+    "supabase/migrations/20260923004537_seller_server_pagination.sql",
+  );
 
   assert.match(route, /const needsProducts =/);
   assert.match(route, /enabled: !!store && needsProducts/);
-  assert.match(route, /enabled: !!store && needsOrders/);
   assert.match(route, /enabled: !!store && needsFullWaitlist/);
   assert.match(route, /select\("id", \{ count: "exact", head: true \}\)/);
   assert.match(route, /waitlistCount=\{alertCounts\.waitlist\}/);
+  assert.doesNotMatch(route, /select\("\*, products\(\*\), order_installments\(\*\)"\)/);
+  assert.match(orders, /supabase\.rpc\("seller_orders_page"/);
+  assert.match(clients, /supabase\.rpc\("seller_clients_page"/);
+  assert.match(orders, /PAGE_SIZE_OPTIONS = \[10, 25, 50, 100\]/);
+  assert.match(migration, /FUNCTION public\.seller_orders_page/);
+  assert.match(migration, /FUNCTION public\.seller_clients_page/);
+  assert.match(migration, /SECURITY INVOKER/);
+  assert.match(migration, /REVOKE ALL ON FUNCTION public\.seller_orders_page[\s\S]*FROM PUBLIC, anon/);
+  assert.match(migration, /REVOKE ALL ON FUNCTION public\.seller_clients_page[\s\S]*FROM PUBLIC, anon/);
   assert.doesNotMatch(notifications, /products:/);
   assert.doesNotMatch(notifications, /orders:/);
 });

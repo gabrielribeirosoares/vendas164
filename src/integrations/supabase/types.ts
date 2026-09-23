@@ -437,6 +437,14 @@ export type Database = {
         Args: { _order_ids: string[]; _count: number }
         Returns: Json
       }
+      seller_orders_page: {
+        Args: { _store_id: string; _search?: string; _payment?: string; _delivery?: string; _category?: string; _start_date?: string; _end_date?: string; _focus?: string; _page?: number; _page_size?: number }
+        Returns: Json
+      }
+      seller_clients_page: {
+        Args: { _store_id: string; _search?: string; _page?: number; _page_size?: number }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

@@ -46,12 +46,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, slugify } from "@/lib/format";
 import { useSession } from "@/lib/session";
-import { OrdersTab, type OrderRow } from "@/components/vendedor/OrderManager";
+import { OrdersTab } from "@/components/vendedor/OrderManager";
 import { BrandingTab } from "@/components/vendedor/StoreSettings";
 import { ClientsTab } from "@/components/vendedor/ClientsManager";
 import { SmartNotifications } from "@/components/vendedor/SmartNotifications";
 import { ProductsTab } from "@/components/vendedor/ProductManager";
-import { SellerOverview } from "@/components/vendedor/SellerOverview";
 import { SellerSectionHeader } from "@/components/vendedor/SellerSectionHeader";
 import { TrackingIntegration } from "@/components/vendedor/TrackingIntegration";
 import { WaitlistManager, type WaitlistRow } from "@/components/vendedor/WaitlistManager";
@@ -255,7 +254,6 @@ function SellerDashboard() {
   });
 
   const needsProducts = ["produtos", "pronta_entrega", "reservas", "fila_espera"].includes(activeTab) || !!manualReservationWaitlist;
-  const needsOrders = ["reservas", "clientes"].includes(activeTab);
   const needsFullWaitlist = activeTab === "fila_espera";
   const needsWaitlistProductIds = ["produtos", "pronta_entrega"].includes(activeTab);
 
@@ -294,43 +292,6 @@ function SellerDashboard() {
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
-    },
-  });
-
-  const { data: orders } = useQuery({
-    queryKey: ["store-orders", store?.id],
-    enabled: !!store && needsOrders,
-    queryFn: async (): Promise<OrderRow[]> => {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*, products(*), order_installments(*)")
-        .eq("store_id", store!.id)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      const rows = data ?? [];
-      const userIds = [...new Set(rows.map((r) => r.user_id))];
-      const { data: people } = userIds.length
-        ? await supabase.from("profiles").select("id, name, email, phone").in("id", userIds)
-        : { data: [] };
-      const byId = new Map((people ?? []).map((p) => [p.id, p]));
-      return rows.map((r) => {
-        const p = byId.get(r.user_id);
-        const cached = getCustomerFromCache(r.user_id);
-        const name = p?.name || cached?.name || null;
-        const email = p?.email || cached?.email || null;
-        const phone = p?.phone || cached?.phone || null;
-
-        const profileData = (p || cached)
-          ? {
-              name,
-              email,
-              phone,
-            }
-          : null;
-
-        return { ...r, profiles: profileData };
-      });
     },
   });
 
@@ -396,42 +357,6 @@ function SellerDashboard() {
     }
     return counts;
   }, [needsFullWaitlist, waitlist, waitlistProductIds]);
-
-  const totals = useMemo(() => {
-    const active = (orders ?? []).filter((o) => o.payment_status !== "cancelado");
-    const projected = active.reduce((s, o) => s + Number(o.total_price), 0);
-    const received = active.reduce((s, o) => {
-      const totalPrice = Number(o.total_price || 0);
-      const signalPaid = (o.payment_status === "sinal_pago" || o.payment_status === "quitado") ? Number(o.down_payment || 0) : 0;
-      const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid").reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-      const orderReceived = Math.min(totalPrice, signalPaid + paidInsts);
-      return s + orderReceived;
-    }, 0);
-    const pending = Math.max(0, projected - received);
-    const avgTicket = active.length > 0 ? projected / active.length : 0;
-    const paidInFull = active.filter(o => o.payment_status === "quitado").length;
-    return {
-      projected,
-      received,
-      pending,
-      activeCount: active.length,
-      avgTicket,
-      paidInFull,
-    };
-  }, [orders]);
-
-  const brandData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    (orders || []).forEach(o => {
-      if (o.payment_status === "cancelado" || (o as any).delivery_status === "cancelado") return;
-      const b = o.products?.brand || "Outros";
-      counts[b] = (counts[b] || 0) + 1;
-    });
-    return Object.entries(counts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-  }, [orders]);
 
   if (sessionLoading || isLoading) {
     return (
@@ -758,12 +683,11 @@ function SellerDashboard() {
           </TabsContent>
 
           <TabsContent value="reservas" className="mt-5 space-y-6">
-            <SellerOverview totals={totals} brandData={brandData} />
-            <OrdersTab focusFilter={orderFocus} onClearFocus={() => setOrderFocus(undefined)} storeId={store.id} storeColor={store.primary_color} products={products ?? []} orders={orders ?? []} />
+            <OrdersTab focusFilter={orderFocus} onClearFocus={() => setOrderFocus(undefined)} storeId={store.id} storeColor={store.primary_color} products={products ?? []} orders={[]} />
           </TabsContent>
 
           <TabsContent value="clientes" className="mt-5">
-            <ClientsTab orders={orders ?? []} storeId={store?.id} />
+            <ClientsTab orders={[]} storeId={store?.id} />
           </TabsContent>
 
           <TabsContent value="fila_espera" className="mt-5">
@@ -801,6 +725,8 @@ function SellerDashboard() {
             onClose={() => setManualReservationWaitlist(null)}
             onSuccess={() => {
               queryClient.invalidateQueries({ queryKey: ["store-orders", store?.id] });
+              queryClient.invalidateQueries({ queryKey: ["seller-orders-page", store?.id] });
+              queryClient.invalidateQueries({ queryKey: ["seller-clients-page", store?.id] });
               queryClient.invalidateQueries({ queryKey: ["store-products", store?.id] });
               queryClient.invalidateQueries({ queryKey: ["store-waitlist", store?.id] });
               queryClient.invalidateQueries({ queryKey: ["store-waitlist-product-ids", store?.id] });

@@ -41,6 +41,7 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/20260808150000_add_initial_stock_to_products.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260831121000_create_order_installments.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260831123600_fix_insert_order_installments.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260726124100_fix_profiles_rls_for_store_owners.sql', import.meta.url), 'utf8'));
   await db.exec('GRANT SELECT, INSERT, UPDATE, DELETE ON order_installments TO authenticated, anon;');
   await db.query('INSERT INTO stores(id,owner_id,name,slug) VALUES($1,$2,$3,$4)', [store,owner,'Loja','loja']);
   await db.exec(await readFile(new URL('../supabase/migrations/20260905190000_secure_checkout.sql', import.meta.url), 'utf8'));
@@ -52,6 +53,7 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/20260920145545_keep_presale_open_and_cleanup_customer_waitlist.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260831122700_add_installment_due_day.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260922183409_atomic_order_financial_management.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260923004537_seller_server_pagination.sql', import.meta.url), 'utf8'));
 });
 after(() => db.close());
 test('checkout commits stock, order and exact-cent installments; retry returns same IDs', async () => {
@@ -243,4 +245,44 @@ test('financial management replaces schedules and records payments atomically', 
     Number((await db.query("SELECT sum(amount) AS total FROM order_installments WHERE order_id=$1 AND status='paid'", [orderId])).rows[0].total),
     80,
   );
+});
+
+test('seller pagination filters grouped orders and aggregates clients on the server', async () => {
+  const firstProduct = await product({ price: 75 });
+  const secondProduct = await product({ price: 120 });
+  await checkout([item(firstProduct, { quantity: 2, expected_total: 150, expected_signal: 30 })]);
+  await checkout([item(secondProduct, { expected_total: 120, expected_signal: 24 })]);
+
+  await db.exec('RESET ROLE');
+  await db.query("INSERT INTO profiles(id,name,email,phone) VALUES($1,'Cliente Paginação','cliente@example.com','48999999999') ON CONFLICT (id) DO UPDATE SET name=excluded.name,email=excluded.email,phone=excluded.phone", [customer]);
+  await asUser(owner);
+
+  const firstPage = (await db.query(
+    "SELECT seller_orders_page($1,'Cliente Paginação','todos','todos','todos',null,null,null,1,1) AS page",
+    [store],
+  )).rows[0].page;
+  const secondPage = (await db.query(
+    "SELECT seller_orders_page($1,'Cliente Paginação','todos','todos','todos',null,null,null,2,1) AS page",
+    [store],
+  )).rows[0].page;
+  assert.equal(firstPage.groups.length, 1);
+  assert.ok(firstPage.total >= 2);
+  assert.notEqual(firstPage.groups[0].order.id, secondPage.groups[0].order.id);
+  assert.ok(firstPage.overview.activeCount >= 3);
+
+  const clients = (await db.query(
+    "SELECT seller_clients_page($1,'Cliente Paginação',1,25) AS page",
+    [store],
+  )).rows[0].page;
+  assert.equal(clients.total, 1);
+  assert.equal(clients.clients[0].profile.name, 'Cliente Paginação');
+  assert.ok(clients.clients[0].totalItems >= 3);
+
+  await asUser(customer);
+  await assert.rejects(
+    db.query("SELECT seller_orders_page($1,'','todos','todos','todos',null,null,null,1,25)", [store]),
+    /store_access_denied/,
+  );
+  await asUser('', 'anon');
+  await assert.rejects(db.query("SELECT seller_clients_page($1,'',1,25)", [store]), /permission denied/);
 });

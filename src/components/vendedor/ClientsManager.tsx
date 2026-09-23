@@ -1,10 +1,10 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PaymentBadge } from "@/components/StatusBadge";
-import { Package, Copy, MessageCircle, Search, Trophy, Star, Crown, Users, Sparkles, Zap, CheckCircle2, FileSpreadsheet } from 'lucide-react';
+import { Package, Copy, MessageCircle, Search, Trophy, Star, Crown, Users, Sparkles, Zap, CheckCircle2, FileSpreadsheet, ChevronLeft, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useDeferredValue, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { getCustomerFromCache } from '@/lib/customerCache';
@@ -18,9 +18,46 @@ import { brl, whatsappLink } from '@/lib/format';
 import { OrderInstallmentsDialog } from '@/components/vendedor/OrderInstallmentsDialog';
 import { SpreadsheetImporterDialog } from '@/components/vendedor/SpreadsheetImporterDialog';
 import { ProductThumbnail } from '@/components/ProductThumbnail';
+import { InterfaceState } from '@/components/InterfaceState';
 
 import type { OrderRow } from '@/components/vendedor/OrderManager';
 import { toast } from "sonner";
+
+type ClientSummary = {
+  userId: string;
+  profile: { id: string; name: string; email: string; phone: string };
+  orders: OrderRow[];
+  totalSpent: number;
+  totalPaid: number;
+  remainingBalance: number;
+  progressPercent: number;
+  totalItems: number;
+  arrivedCount: number;
+  preorderCount: number;
+  shippedCount: number;
+  deliveredCount: number;
+  firstOrderDate: Date | string;
+  isFollowerOnly: boolean;
+};
+
+type ClientsPage = {
+  clients: ClientSummary[];
+  total: number;
+  stats: {
+    topBrand: string;
+    topBrandCount: number;
+    newClientsThisMonth: number;
+    topClients: Array<{ user_id: string; name: string | null; total_spent: number }>;
+  };
+  legacy?: boolean;
+};
+
+function isMissingClientsRpc(error: { code?: string; message?: string } | null) {
+  return !!error && (
+    error.code === "PGRST202" || error.code === "42883" ||
+    error.message?.includes("Could not find the function")
+  );
+}
 
 function getClientTier(totalSpent: number, orderCount: number) {
   if (totalSpent >= 2000 || orderCount >= 10) {
@@ -66,6 +103,9 @@ function getClientTier(totalSpent: number, orderCount: number) {
 export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: string }) {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
+  const deferredSearchQuery = useDeferredValue(searchQuery.trim());
   const [selectedTier] = useState<string>("all");
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [itemSearch, setItemSearch] = useState<string>("");
@@ -97,6 +137,55 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
   const [tempWaTemplate, setTempWaTemplate] = useState(waTemplate);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
 
+  useEffect(() => setPage(0), [deferredSearchQuery, pageSize]);
+
+  const {
+    data: clientPage,
+    isFetching: isClientsFetching,
+    isError: isClientsError,
+    refetch: refetchClients,
+  } = useQuery({
+    queryKey: ["seller-clients-page", storeId, deferredSearchQuery, page, pageSize],
+    enabled: !!storeId,
+    placeholderData: (previous) => previous,
+    queryFn: async (): Promise<ClientsPage> => {
+      const { data, error } = await supabase.rpc("seller_clients_page", {
+        _store_id: storeId!,
+        _search: deferredSearchQuery,
+        _page: page + 1,
+        _page_size: pageSize,
+      });
+      if (!error) return data as unknown as ClientsPage;
+      if (isMissingClientsRpc(error)) {
+        return {
+          clients: [],
+          total: 0,
+          stats: { topBrand: "Nenhuma venda", topBrandCount: 0, newClientsThisMonth: 0, topClients: [] },
+          legacy: true,
+        };
+      }
+      throw error;
+    },
+  });
+
+  const usesServerPagination = !!clientPage && !clientPage.legacy;
+
+  const { data: legacyOrders = orders } = useQuery({
+    queryKey: ["seller-clients-legacy-orders", storeId],
+    enabled: !!storeId && clientPage?.legacy === true && orders.length === 0,
+    queryFn: async (): Promise<OrderRow[]> => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*, products(*), order_installments(*)")
+        .eq("store_id", storeId!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((row) => ({ ...row, profiles: null })) as OrderRow[];
+    },
+  });
+
+  const effectiveLegacyOrders = orders.length > 0 ? orders : legacyOrders;
+
   // Buscar dados da loja para Chave PIX e Nome
   const { data: storeData } = useQuery({
     queryKey: ["store-details", storeId],
@@ -115,7 +204,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
   // Buscar links de clientes que seguem a loja
   const { data: storeLinks } = useQuery({
     queryKey: ["customer-store-links", storeId],
-    enabled: !!storeId,
+    enabled: !!storeId && clientPage?.legacy === true,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("customer_store_link")
@@ -128,13 +217,13 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
 
   // Obter IDs de todos os usuários (seguidores + compradores)
   const linkUserIds = (storeLinks || []).map((l) => l.user_id);
-  const orderUserIds = orders.map((o) => o.user_id);
+  const orderUserIds = effectiveLegacyOrders.map((o) => o.user_id);
   const allUserIds = Array.from(new Set([...linkUserIds, ...orderUserIds]));
 
   // Buscar dados de perfil de todos os clientes
   const { data: profilesData } = useQuery({
     queryKey: ["client-profiles", allUserIds],
-    enabled: allUserIds.length > 0,
+    enabled: clientPage?.legacy === true && allUserIds.length > 0,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
@@ -165,7 +254,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
   const ordersByUserMap = new Map<string, OrderRow[]>();
   const brandCountMap = new Map<string, number>();
 
-  for (const order of orders) {
+  for (const order of effectiveLegacyOrders) {
     if (!ordersByUserMap.has(order.user_id)) {
       ordersByUserMap.set(order.user_id, []);
     }
@@ -193,7 +282,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
   const currentYear = now.getFullYear();
   let newClientsThisMonth = 0;
 
-  const allClients = allUserIds.map((userId) => {
+  const legacyClients = allUserIds.map((userId) => {
     const userOrders = (ordersByUserMap.get(userId) || []).filter(o => o.payment_status !== "cancelado" && (o as any).delivery_status !== "cancelado");
     const dbProfile = profilesMap.get(userId);
     const orderProfile = userOrders.find((o) => o.profiles)?.profiles;
@@ -268,16 +357,35 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
       firstOrderDate: entryDate,
       isFollowerOnly: userOrders.length === 0,
     };
-  }).sort((a, b) => b.totalSpent - a.totalSpent);
+  }).sort((a, b) => b.totalSpent - a.totalSpent) as ClientSummary[];
+
+  const allClients: ClientSummary[] = usesServerPagination
+    ? clientPage.clients.map((client) => ({
+        ...client,
+        firstOrderDate: new Date(client.firstOrderDate),
+      }))
+    : legacyClients;
 
   for (const client of allClients) {
-    if (client.firstOrderDate && client.firstOrderDate.getMonth() === currentMonth && client.firstOrderDate.getFullYear() === currentYear) {
+    const firstOrderDate = client.firstOrderDate ? new Date(client.firstOrderDate) : null;
+    if (firstOrderDate && firstOrderDate.getMonth() === currentMonth && firstOrderDate.getFullYear() === currentYear) {
       newClientsThisMonth++;
     }
   }
 
+  const displayedTopBrand = usesServerPagination ? clientPage.stats.topBrand : topBrand;
+  const displayedTopBrandCount = usesServerPagination ? clientPage.stats.topBrandCount : topBrandCount;
+  const displayedNewClients = usesServerPagination ? clientPage.stats.newClientsThisMonth : newClientsThisMonth;
+  const displayedTopClients = usesServerPagination
+    ? clientPage.stats.topClients.map((client) => ({
+        userId: client.user_id,
+        profile: { name: client.name || "Cliente" },
+        totalSpent: Number(client.total_spent),
+      }))
+    : allClients.slice(0, 3);
+
   const clients = allClients.filter((c) => {
-    const tier = getClientTier(c.totalSpent, c.orders.length);
+    const tier = getClientTier(c.totalSpent, c.totalItems);
     if (selectedTier !== "all" && tier.level !== selectedTier) return false;
 
     if (!searchQuery) return true;
@@ -289,11 +397,37 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
     return name.includes(q) || email.includes(q) || phone.includes(q) || note.includes(q);
   });
 
+  const {
+    data: selectedClientOrders,
+    isFetching: isClientHistoryLoading,
+    isError: isClientHistoryError,
+    refetch: refetchClientHistory,
+  } = useQuery({
+    queryKey: ["seller-client-orders", storeId, selectedClient?.userId],
+    enabled: usesServerPagination && !!storeId && !!selectedClient?.userId,
+    queryFn: async (): Promise<OrderRow[]> => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*, products(*), order_installments(*)")
+        .eq("store_id", storeId!)
+        .eq("user_id", selectedClient.userId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((order) => ({
+        ...order,
+        profiles: selectedClient.profile,
+      })) as OrderRow[];
+    },
+  });
+
   // Atualiza selectedClient quando as orders mudam (para refletir baixas imediatamente)
   const currentSelectedClient = useMemo(() => {
     if (!selectedClient) return null;
-    return allClients.find(c => c.userId === selectedClient.userId) || selectedClient;
-  }, [allClients, selectedClient]);
+    const current = allClients.find(c => c.userId === selectedClient.userId) || selectedClient;
+    return usesServerPagination && selectedClientOrders
+      ? { ...current, orders: selectedClientOrders }
+      : current;
+  }, [allClients, selectedClient, selectedClientOrders, usesServerPagination]);
 
   // Simulação da Baixa em Cascata em tempo real
   const cascadeSimulation = useMemo(() => {
@@ -421,6 +555,9 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
 
       // Invalidar queries do React Query
       await queryClient.invalidateQueries({ queryKey: ["store-orders"] });
+      await queryClient.invalidateQueries({ queryKey: ["seller-orders-page"] });
+      await queryClient.invalidateQueries({ queryKey: ["seller-clients-page"] });
+      await queryClient.invalidateQueries({ queryKey: ["seller-client-orders", storeId, currentSelectedClient.userId] });
       await queryClient.invalidateQueries({ queryKey: ["all_installments"] });
       await queryClient.invalidateQueries({ queryKey: ["order_installments"] });
 
@@ -558,8 +695,20 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
     });
   }, [currentSelectedClient, itemSearch, itemStatusFilter]);
 
+  const clientTotal = usesServerPagination ? clientPage.total : clients.length;
+  const clientPages = Math.max(1, Math.ceil(clientTotal / pageSize));
+
   return (
     <div className="space-y-4 w-full max-w-full overflow-hidden">
+      {isClientsError && (
+        <InterfaceState
+          variant="error"
+          icon={RefreshCw}
+          title="Não foi possível carregar os clientes"
+          description="Nenhum cadastro foi alterado. Verifique a conexão e tente novamente."
+          action={<Button variant="outline" onClick={() => void refetchClients()}>Tentar novamente</Button>}
+        />
+      )}
       {/* Cards de Métricas Top */}
       <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3 mb-2">
         <Card className="panel border-border/60">
@@ -570,9 +719,9 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="font-display text-2xl font-bold truncate">{topBrand}</p>
+            <p className="font-display text-2xl font-bold truncate">{displayedTopBrand}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              {topBrandCount === 0 ? "Nenhuma reserva confirmada" : `${topBrandCount} reservas no total`}
+              {displayedTopBrandCount === 0 ? "Nenhuma reserva confirmada" : `${displayedTopBrandCount} reservas no total`}
             </p>
           </CardContent>
         </Card>
@@ -585,7 +734,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="font-display text-2xl font-bold text-emerald-600 dark:text-emerald-500">+{newClientsThisMonth}</p>
+            <p className="font-display text-2xl font-bold text-emerald-600 dark:text-emerald-500">+{displayedNewClients}</p>
             <p className="text-xs text-muted-foreground mt-1">cadastros realizados este mês</p>
           </CardContent>
         </Card>
@@ -599,13 +748,13 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
           </CardHeader>
           <CardContent>
             <div className="space-y-1">
-              {allClients.slice(0, 3).map((c, i) => (
+              {displayedTopClients.map((c, i) => (
                 <div key={c.userId} className="flex justify-between text-xs">
                   <span className="truncate max-w-[140px] font-medium">{i + 1}. {c.profile.name}</span>
                   <span className="font-bold text-emerald-600 dark:text-emerald-500">{brl(c.totalSpent)}</span>
                 </div>
               ))}
-              {allClients.length === 0 && <p className="text-xs text-muted-foreground">Nenhum cliente registrado</p>}
+              {displayedTopClients.length === 0 && <p className="text-xs text-muted-foreground">Nenhum cliente registrado</p>}
             </div>
           </CardContent>
         </Card>
@@ -631,8 +780,9 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                 placeholder="Buscar cliente, WhatsApp..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 text-xs h-9"
+                className="pl-8 pr-8 text-xs h-9"
               />
+              {isClientsFetching && <Loader2 className="absolute right-2.5 top-2.5 size-4 animate-spin text-muted-foreground" aria-hidden="true" />}
             </div>
 
             {storeId && (
@@ -669,7 +819,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
               {/* VISUALIZAÇÃO MOBILE (CARDS RESPONSIVOS) */}
               <div className="space-y-3 md:hidden">
                 {clients.map((c) => {
-                  const tier = getClientTier(c.totalSpent, c.orders.length);
+                  const tier = getClientTier(c.totalSpent, c.totalItems);
                   const TierIcon = tier.icon;
 
                   return (
@@ -737,7 +887,10 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                             variant="outline"
                             size="sm"
                             className="flex-1 h-8 text-xs gap-1 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10"
-                            onClick={() => handleOpenWhatsAppSummary(c)}
+                            onClick={() => {
+                              setSelectedClient(c);
+                              setEditingNote(clientNotes[c.userId] || "");
+                            }}
                           >
                             <MessageCircle className="size-3.5" />
                             Extrato
@@ -776,7 +929,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                   </TableHeader>
                   <TableBody>
                     {clients.map((c) => {
-                      const tier = getClientTier(c.totalSpent, c.orders.length);
+                      const tier = getClientTier(c.totalSpent, c.totalItems);
                       const TierIcon = tier.icon;
 
                       return (
@@ -838,7 +991,10 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                                   variant="outline"
                                   size="sm"
                                   className="h-8 text-xs gap-1 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10"
-                                  onClick={() => handleOpenWhatsAppSummary(c)}
+                                  onClick={() => {
+                                    setSelectedClient(c);
+                                    setEditingNote(clientNotes[c.userId] || "");
+                                  }}
                                   title="Gerar extrato completo para o WhatsApp"
                                 >
                                   <MessageCircle className="size-3.5" />
@@ -867,6 +1023,32 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
               </div>
             </>
           )}
+          {usesServerPagination && clientTotal > 0 && (
+            <div className="mt-4 flex flex-col items-center justify-between gap-3 border-t border-border/60 pt-4 text-xs text-muted-foreground sm:flex-row">
+              <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                <span>
+                  Mostrando <strong className="text-foreground">{page * pageSize + 1}</strong>–
+                  <strong className="text-foreground">{Math.min(clientTotal, (page + 1) * pageSize)}</strong> de{" "}
+                  <strong className="text-foreground">{clientTotal}</strong>
+                </span>
+                <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
+                  <SelectTrigger className="h-8 w-[92px] text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[10, 25, 50, 100].map((size) => <SelectItem key={size} value={String(size)}>{size} por pág.</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex w-full items-center gap-2 sm:w-auto">
+                <Button variant="outline" size="sm" className="h-9 flex-1 gap-1 sm:flex-none" disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>
+                  <ChevronLeft className="size-3.5" /> Anterior
+                </Button>
+                <span className="min-w-20 text-center">{page + 1} de {clientPages}</span>
+                <Button variant="outline" size="sm" className="h-9 flex-1 gap-1 sm:flex-none" disabled={page + 1 >= clientPages} onClick={() => setPage((current) => Math.min(clientPages - 1, current + 1))}>
+                  Próxima <ChevronRight className="size-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -880,7 +1062,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                   Acervo: {currentSelectedClient?.profile?.name || "Cliente"}
                 </DialogTitle>
                 {currentSelectedClient && (() => {
-                  const tier = getClientTier(currentSelectedClient.totalSpent, currentSelectedClient.orders.length);
+                  const tier = getClientTier(currentSelectedClient.totalSpent, currentSelectedClient.totalItems);
                   const TierIcon = tier.icon;
                   return (
                     <Badge variant="outline" className={`gap-1 font-semibold text-[10px] sm:text-xs py-0.5 ${tier.color}`}>
@@ -896,6 +1078,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                   {currentSelectedClient?.remainingBalance > 0 && (
                     <Button
                       size="sm"
+                      disabled={isClientHistoryLoading || isClientHistoryError}
                       className="h-8 text-xs bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 shadow-sm font-semibold"
                       onClick={() => {
                         setGlobalAmount("");
@@ -909,6 +1092,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
 
                   <Button
                     size="sm"
+                    disabled={isClientHistoryLoading || isClientHistoryError}
                     className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
                     onClick={() => handleOpenWhatsAppSummary(currentSelectedClient)}
                   >
@@ -922,6 +1106,21 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
               WhatsApp: <span className="font-semibold text-foreground">{currentSelectedClient?.profile?.phone || "Não informado"}</span> &bull; Email: {currentSelectedClient?.profile?.email || "-"}
             </p>
           </DialogHeader>
+
+          {isClientHistoryLoading && (
+            <div className="flex items-center justify-center gap-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" /> Carregando histórico completo do cliente…
+            </div>
+          )}
+          {isClientHistoryError && (
+            <InterfaceState
+              variant="error"
+              icon={RefreshCw}
+              title="Não foi possível carregar o histórico"
+              description="Tente novamente antes de gerar o extrato ou registrar pagamentos."
+              action={<Button variant="outline" size="sm" onClick={() => void refetchClientHistory()}>Tentar novamente</Button>}
+            />
+          )}
 
           <div className="space-y-3 sm:space-y-4 overflow-y-auto flex-1 min-h-0 pr-0.5">
             {/* CARDS DE RESUMO DO ACERVO GERAL */}
