@@ -24,8 +24,8 @@ export function getProductCardImageUrl(value: string | null | undefined): string
 
   try {
     const url = new URL(publicUrl);
-    if (url.pathname.includes(OPTIMIZED_PRODUCT_FOLDER) && url.pathname.endsWith("/main.webp")) {
-      url.pathname = url.pathname.replace(/\/main\.webp$/, "/thumb.webp");
+    if (url.pathname.includes(OPTIMIZED_PRODUCT_FOLDER) && /\/main\.(?:webp|jpe?g|png)$/i.test(url.pathname)) {
+      url.pathname = url.pathname.replace(/\/main\.(webp|jpe?g|png)$/i, "/thumb.$1");
     }
     return url.toString();
   } catch {

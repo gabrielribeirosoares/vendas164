@@ -24,6 +24,12 @@ type VariantConfig = {
   quality: number;
 };
 
+type VariantEncoding = {
+  fallbackType: "image/jpeg" | "image/png";
+  preferredType?: "image/webp" | "image/jpeg" | "image/png";
+  background?: string;
+};
+
 function loadImage(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
@@ -49,23 +55,53 @@ function fitWithin(width: number, height: number, maxWidth: number, maxHeight: n
   };
 }
 
-function canvasToWebp(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
-  return new Promise((resolve, reject) => {
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  type: "image/webp" | "image/jpeg" | "image/png",
+  quality?: number,
+): Promise<Blob | null> {
+  return new Promise((resolve) => {
     canvas.toBlob(
-      (blob) => {
-        if (!blob || blob.type !== "image/webp") {
-          reject(new Error("webp_not_supported"));
-          return;
-        }
-        resolve(blob);
-      },
-      "image/webp",
+      resolve,
+      type,
       quality,
     );
   });
 }
 
-async function createVariant(image: HTMLImageElement, config: VariantConfig): Promise<Blob> {
+async function encodeCanvas(
+  canvas: HTMLCanvasElement,
+  quality: number,
+  encoding: VariantEncoding,
+): Promise<Blob> {
+  if (encoding.preferredType) {
+    const preferred = await canvasToBlob(
+      canvas,
+      encoding.preferredType,
+      encoding.preferredType === "image/png" ? undefined : quality,
+    );
+    if (preferred?.type === encoding.preferredType) return preferred;
+    throw new Error("image_encode_failed");
+  }
+
+  const webp = await canvasToBlob(canvas, "image/webp", quality);
+  if (webp?.type === "image/webp") return webp;
+
+  const fallback = await canvasToBlob(
+    canvas,
+    encoding.fallbackType,
+    encoding.fallbackType === "image/jpeg" ? quality : undefined,
+  );
+  if (fallback?.type === encoding.fallbackType) return fallback;
+
+  throw new Error("image_encode_failed");
+}
+
+async function createVariant(
+  image: HTMLImageElement,
+  config: VariantConfig,
+  encoding: VariantEncoding,
+): Promise<Blob> {
   const initial = fitWithin(
     image.naturalWidth,
     image.naturalHeight,
@@ -86,12 +122,16 @@ async function createVariant(image: HTMLImageElement, config: VariantConfig): Pr
 
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
+    if (encoding.background) {
+      context.fillStyle = encoding.background;
+      context.fillRect(0, 0, width, height);
+    }
     context.drawImage(image, 0, 0, width, height);
 
-    const blob = await canvasToWebp(canvas, quality);
+    const blob = await encodeCanvas(canvas, quality, encoding);
     if (blob.size <= config.maxBytes || (width <= 320 && height <= 320)) return blob;
 
-    if (quality > 0.56) {
+    if (blob.type !== "image/png" && quality > 0.56) {
       quality = Math.max(0.56, quality - 0.08);
     } else {
       width = Math.max(1, Math.round(width * 0.82));
@@ -112,10 +152,19 @@ export async function optimizeImage(
 
   const image = await loadImage(file);
   const config = PRESETS[preset];
-  const main = await createVariant(image, config.main);
+  const encoding: VariantEncoding = preset === "logo"
+    ? { fallbackType: "image/png" }
+    : { fallbackType: "image/jpeg", background: "#ffffff" };
+  const main = await createVariant(image, config.main, encoding);
 
   if (preset === "product") {
-    return { main, thumbnail: await createVariant(image, PRESETS.product.thumbnail) };
+    return {
+      main,
+      thumbnail: await createVariant(image, PRESETS.product.thumbnail, {
+        ...encoding,
+        preferredType: main.type as VariantEncoding["preferredType"],
+      }),
+    };
   }
 
   return { main };
@@ -126,9 +175,9 @@ export function getImageUploadErrorMessage(error: unknown): string {
 
   if (message === "image_too_large") return "A imagem original deve ter no máximo 12 MB.";
   if (message === "invalid_image_type") return "Selecione um arquivo de imagem válido.";
-  if (message === "webp_not_supported")
-    return "Este navegador não conseguiu converter a imagem para WebP.";
   if (message === "image_decode_failed")
     return "Não foi possível abrir esta imagem. Tente JPG, PNG ou WebP.";
+  if (message === "image_encode_failed")
+    return "Este navegador não conseguiu preparar a imagem. Tente outra foto ou atualize o navegador.";
   return "Falha ao otimizar e enviar a imagem.";
 }
