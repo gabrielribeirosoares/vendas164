@@ -1326,11 +1326,11 @@ export function OrdersTab({
                             <div className="text-xs text-muted-foreground uppercase font-semibold tracking-wide flex items-center gap-1.5 flex-wrap">
                               <span>{o.products?.brand}</span>
                               {isProntaEntrega(o.products) ? (
-                                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[9px] px-1 py-0 h-4 gap-0.5">
+                                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs px-1.5 py-0.5 gap-1">
                                   <Zap className="size-2.5 fill-current text-emerald-500" /> Pronta Entrega
                                 </Badge>
                               ) : (
-                                <Badge variant="outline" className="text-muted-foreground border-border/80 text-[9px] px-1 py-0 h-4 gap-0.5">
+                                <Badge variant="outline" className="text-muted-foreground border-border/80 text-xs px-1.5 py-0.5 gap-1">
                                   <Package className="size-2.5" /> Pré-venda
                                 </Badge>
                               )}
@@ -1361,7 +1361,7 @@ export function OrdersTab({
                         {/* Resumo financeiro e edição do sinal */}
                         <div className="grid grid-cols-2 gap-2 rounded-xl border border-border/40 bg-muted/20 p-3">
                           <div className="min-w-0">
-                            <p className="text-[11px] text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                               Total {o.installment_count && o.installment_count > 1 ? `(${o.installment_count}x)` : ""}
                             </p>
                             <p className="mt-0.5 break-words text-base font-bold tabular-nums">
@@ -1369,7 +1369,7 @@ export function OrdersTab({
                             </p>
                           </div>
                           <div className="min-w-0 text-right">
-                            <p className="text-[11px] text-muted-foreground">Saldo a receber</p>
+                            <p className="text-xs text-muted-foreground">Saldo a receber</p>
                             <p className="mt-0.5 break-words text-base font-bold text-primary tabular-nums">
                               {(() => {
                                 const total = Number(o.total_price) * quantity;
@@ -1381,7 +1381,7 @@ export function OrdersTab({
                             </p>
                           </div>
                           <div className="col-span-2 border-t border-border/40 pt-2.5">
-                            <label htmlFor={`mobile-signal-${groupId}`} className="mb-1.5 block text-[11px] font-medium text-muted-foreground">
+                            <label htmlFor={`mobile-signal-${groupId}`} className="mb-1.5 block text-xs font-medium text-muted-foreground">
                               Sinal por unidade
                             </label>
                             <div className="flex gap-2">
