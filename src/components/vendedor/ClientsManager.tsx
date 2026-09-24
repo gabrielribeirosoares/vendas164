@@ -918,7 +918,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                 </div>
               )}
             </div>
-            <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
+            <p className="text-xs text-muted-foreground break-words">
               WhatsApp: <span className="font-semibold text-foreground">{currentSelectedClient?.profile?.phone || "Não informado"}</span> &bull; Email: {currentSelectedClient?.profile?.email || "-"}
             </p>
           </DialogHeader>
@@ -929,27 +929,27 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <Card className="border-border/60 bg-muted/20">
                   <CardContent className="p-2.5 sm:p-3">
-                    <span className="text-[10px] sm:text-[11px] text-muted-foreground block">Total de Miniaturas</span>
+                    <span className="text-xs text-muted-foreground block">Total de Miniaturas</span>
                     <span className="text-base sm:text-lg font-bold text-foreground">{currentSelectedClient.totalItems} peças</span>
-                    <span className="text-[10px] text-muted-foreground block mt-0.5">{brl(currentSelectedClient.totalSpent)}</span>
+                    <span className="text-xs text-muted-foreground block mt-0.5">{brl(currentSelectedClient.totalSpent)}</span>
                   </CardContent>
                 </Card>
 
                 <Card className="border-emerald-500/30 bg-emerald-500/10">
                   <CardContent className="p-2.5 sm:p-3">
-                    <span className="text-[10px] sm:text-[11px] text-emerald-600 dark:text-emerald-400 block">Total Já Pago</span>
+                    <span className="text-xs text-emerald-600 dark:text-emerald-400 block">Total Já Pago</span>
                     <span className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400">{brl(currentSelectedClient.totalPaid)}</span>
-                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block mt-0.5">{currentSelectedClient.progressPercent}% quitado</span>
+                    <span className="text-xs text-emerald-600 dark:text-emerald-400 block mt-0.5">{currentSelectedClient.progressPercent}% quitado</span>
                   </CardContent>
                 </Card>
 
                 <Card className={`border ${currentSelectedClient.remainingBalance > 0 ? "border-amber-500/30 bg-amber-500/10" : "border-emerald-500/30 bg-emerald-500/10"}`}>
                   <CardContent className="p-2.5 sm:p-3">
-                    <span className="text-[10px] sm:text-[11px] block">{currentSelectedClient.remainingBalance > 0 ? "Saldo Restante" : "Status Financeiro"}</span>
-                    <span className="text-base sm:text-lg font-bold truncate block">
+                    <span className="text-xs block">{currentSelectedClient.remainingBalance > 0 ? "Saldo Restante" : "Status Financeiro"}</span>
+                    <span className="text-base sm:text-lg font-bold break-words block">
                       {currentSelectedClient.remainingBalance > 0 ? brl(currentSelectedClient.remainingBalance) : "100% Quitado"}
                     </span>
-                    <span className="text-[10px] text-muted-foreground block mt-0.5 truncate">
+                    <span className="text-xs text-muted-foreground block mt-0.5">
                       {currentSelectedClient.remainingBalance > 0 ? "a receber no total" : "todas as peças pagas"}
                     </span>
                   </CardContent>
@@ -957,8 +957,8 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
 
                 <Card className="border-border/60 bg-muted/20">
                   <CardContent className="p-2.5 sm:p-3">
-                    <span className="text-[10px] sm:text-[11px] text-muted-foreground block">Logística</span>
-                    <div className="flex flex-col text-[11px] sm:text-xs font-semibold mt-1 gap-0.5">
+                    <span className="text-xs text-muted-foreground block">Logística</span>
+                    <div className="flex flex-col text-xs font-semibold mt-1 gap-0.5">
                       <span className="text-emerald-600 dark:text-emerald-400">📦 {currentSelectedClient.arrivedCount} na loja</span>
                       <span className="text-muted-foreground">⏳ {currentSelectedClient.preorderCount} pré-venda</span>
                     </div>

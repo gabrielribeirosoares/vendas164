@@ -283,7 +283,7 @@ function SellerDashboard() {
     },
   });
 
-  const { data: products } = useQuery({
+  const { data: products, isError: productsError, refetch: retryProducts } = useQuery({
     queryKey: ["store-products", store?.id],
     enabled: !!store && needsProducts,
     queryFn: async () => {
@@ -297,7 +297,7 @@ function SellerDashboard() {
     },
   });
 
-  const { data: orders } = useQuery({
+  const { data: orders, isError: ordersError, refetch: retryOrders } = useQuery({
     queryKey: ["store-orders", store?.id],
     enabled: !!store && needsOrders,
     queryFn: async (): Promise<OrderRow[]> => {
@@ -350,6 +350,7 @@ function SellerDashboard() {
   const {
     data: waitlist = [],
     isLoading: waitlistLoading,
+    isError: waitlistError,
     refetch: refetchWaitlist,
   } = useQuery({
     queryKey: ["store-waitlist", store?.id],
@@ -750,23 +751,26 @@ function SellerDashboard() {
             <SellerSectionHeader activeSection={activeTab} storeName={store.name} />
 
           <TabsContent value="produtos" className="mt-5">
-            <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pre_venda" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} waitlistCounts={waitlistCounts} />
+            {productsError ? <SellerDataError onRetry={() => void retryProducts()} /> : <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pre_venda" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} waitlistCounts={waitlistCounts} />}
           </TabsContent>
 
           <TabsContent value="pronta_entrega" className="mt-5">
-            <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pronta_entrega" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} waitlistCounts={waitlistCounts} />
+            {productsError ? <SellerDataError onRetry={() => void retryProducts()} /> : <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pronta_entrega" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} waitlistCounts={waitlistCounts} />}
           </TabsContent>
 
           <TabsContent value="reservas" className="mt-5 space-y-6">
-            <SellerOverview totals={totals} brandData={brandData} />
-            <OrdersTab focusFilter={orderFocus} onClearFocus={() => setOrderFocus(undefined)} storeId={store.id} storeColor={store.primary_color} products={products ?? []} orders={orders ?? []} />
+            {ordersError || productsError ? <SellerDataError onRetry={() => { void retryOrders(); void retryProducts(); }} /> : <>
+              <SellerOverview totals={totals} brandData={brandData} />
+              <OrdersTab focusFilter={orderFocus} onClearFocus={() => setOrderFocus(undefined)} storeId={store.id} storeColor={store.primary_color} products={products ?? []} orders={orders ?? []} />
+            </>}
           </TabsContent>
 
           <TabsContent value="clientes" className="mt-5">
-            <ClientsTab orders={orders ?? []} storeId={store?.id} />
+            {ordersError ? <SellerDataError onRetry={() => void retryOrders()} /> : <ClientsTab orders={orders ?? []} storeId={store?.id} />}
           </TabsContent>
 
           <TabsContent value="fila_espera" className="mt-5">
+            {waitlistError || productsError ? <SellerDataError onRetry={() => { void refetchWaitlist(); void retryProducts(); }} /> : (
             <WaitlistManager
               store={store}
               waitlist={waitlist}
@@ -777,6 +781,7 @@ function SellerDashboard() {
                 setManualReservationWaitlist({ product, user });
               }}
             />
+            )}
           </TabsContent>
 
           <TabsContent value="rastreamento" className="mt-5 space-y-6">
@@ -817,6 +822,17 @@ function SellerDashboard() {
         )}
       </main>
     </div>
+  );
+}
+
+function SellerDataError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Alert variant="destructive" className="flex flex-wrap items-center justify-between gap-3">
+      <AlertDescription>Não foi possível carregar os dados desta seção. Confira a conexão e tente novamente.</AlertDescription>
+      <Button type="button" size="sm" variant="outline" onClick={onRetry} className="gap-2">
+        <RefreshCw className="size-4" /> Tentar novamente
+      </Button>
+    </Alert>
   );
 }
 
