@@ -684,7 +684,7 @@ function SellerDashboard() {
           </TabsContent>
 
           <TabsContent value="reservas" className="mt-5 space-y-6">
-            {productsError ? <SellerDataError onRetry={() => void retryProducts()} /> : <OrdersTab focusFilter={orderFocus} onClearFocus={() => setOrderFocus(undefined)} storeId={store.id} storeColor={store.primary_color} products={products ?? []} orders={[]} />}
+            {productsError ? <SellerDataError onRetry={() => void retryProducts()} /> : <OrdersTab focusFilter={orderFocus} onClearFocus={() => setOrderFocus(undefined)} storeId={store.id} storeColor={store.primary_color} storeName={store.name} products={products ?? []} orders={[]} />}
           </TabsContent>
 
           <TabsContent value="clientes" className="mt-5">

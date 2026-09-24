@@ -93,8 +93,12 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
   const currentStore = propStore !== undefined ? propStore : myStore;
 
   useEffect(() => {
-    const icon = currentStore?.favicon_url || currentStore?.logo_url;
-    updateAppFavicon(getStoreBrandImageUrl(currentStore?.id, icon, 64));
+    const icon = getStoreBrandImageUrl(
+      currentStore?.id,
+      currentStore?.favicon_url || currentStore?.logo_url,
+      64,
+    );
+    updateAppFavicon(icon);
   }, [currentStore?.id, currentStore?.favicon_url, currentStore?.logo_url]);
 
   async function signOut() {

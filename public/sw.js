@@ -31,7 +31,7 @@ self.addEventListener("fetch", (event) => {
   const isSupabaseStorageImage =
     request.destination === "image" &&
     url.hostname.endsWith(".supabase.co") &&
-    url.pathname.startsWith("/storage/v1/object/");
+    (url.pathname.startsWith("/storage/v1/object/") || url.pathname.startsWith("/storage/v1/render/image/"));
 
   if (isSupabaseStorageImage) {
     event.respondWith(

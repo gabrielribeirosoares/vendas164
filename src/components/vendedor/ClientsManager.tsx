@@ -54,8 +54,13 @@ type ClientsPage = {
 
 function isMissingClientsRpc(error: { code?: string; message?: string } | null) {
   return !!error && (
-    error.code === "PGRST202" || error.code === "42883" ||
-    error.message?.includes("Could not find the function")
+    error.code === "PGRST202" ||
+    error.code === "42883" ||
+    (error as any).status === 404 ||
+    (error as any).statusCode === 404 ||
+    error.message?.includes("Could not find the function") ||
+    error.message?.includes("seller_clients_page") ||
+    error.message?.includes("404")
   );
 }
 

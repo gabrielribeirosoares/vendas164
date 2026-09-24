@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Car, CheckCircle2, Copy, ExternalLink, Loader2, MessageCircle, Package, Search, Sparkles, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
+import { BookmarkCheck, Car, CheckCircle2, CheckSquare, Copy, ExternalLink, Layers, Loader2, MessageCircle, Package, QrCode, Search, Sparkles, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { getStoreBrandImageUrl } from "@/lib/imageUrls";
@@ -11,9 +11,11 @@ import { InterfaceState } from "@/components/InterfaceState";
 import { ProductThumbnail } from "@/components/ProductThumbnail";
 import { PhoneInput } from "@/components/PhoneInput";
 import { Countdown } from "@/components/Countdown";
+import { PixPaymentDialog, type PixItemDetail } from "@/components/PixPaymentDialog";
 import { DeliveryBadge, PaymentBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { OrderInstallmentsDialog } from "@/components/vendedor/OrderInstallmentsDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -63,6 +65,18 @@ function CustomerDashboardContent() {
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [phonePromptOpen, setPhonePromptOpen] = useState(false);
   const [garageSearchQuery, setGarageSearchQuery] = useState("");
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [pixModalData, setPixModalData] = useState<{
+    open: boolean;
+    pixKey: string;
+    amount?: number;
+    storeName?: string;
+    storePhone?: string | null;
+    orderId?: string;
+    title?: string;
+    description?: string;
+    items?: PixItemDetail[];
+  } | null>(null);
 
   // Redirect to main domain if accessed from a store subdomain
   useEffect(() => {
@@ -288,6 +302,161 @@ function CustomerDashboardContent() {
     return s + Math.min(totalPrice, signalPaid + paidInsts);
   }, 0), [active]);
 
+  // Informações de pagamento de cada pedido pendente
+  const getOrderPaymentInfo = (o: any, qty: number = 1) => {
+    const isAguardando = o.payment_status === "aguardando_sinal";
+    let amount = 0;
+    let type: "sinal" | "saldo" = "saldo";
+
+    if (isAguardando) {
+      const signalInfo = getProductSignalAmount(o.products, qty);
+      amount = signalInfo.amount;
+      type = "sinal";
+    } else if (Number(o.remaining_balance || 0) > 0) {
+      amount = Number(o.remaining_balance) * qty;
+      type = "saldo";
+    } else {
+      amount = Number(o.total_price || 0) * qty;
+      type = "saldo";
+    }
+
+    const isGuestPayload = (key?: string | null) =>
+      !key || key.startsWith("GUEST:") || key.startsWith("{");
+    const rawOrderPix = !isGuestPayload(o.pix_key) ? o.pix_key : null;
+    const pixKey = rawOrderPix || o.stores?.pix_key || o.stores?.whatsapp_number || "";
+
+    const productName = `${o.products?.brand || ""} ${o.products?.model || ""}`.trim() || "Miniatura";
+    const isPayable =
+      o.payment_status !== "quitado" &&
+      o.payment_status !== "cancelado" &&
+      o.delivery_status !== "cancelado" &&
+      amount > 0 &&
+      !!pixKey;
+
+    return {
+      amount,
+      type,
+      pixKey,
+      productName,
+      isPayable,
+    };
+  };
+
+  const handleToggleOrderSelection = (order: any, qty: number = 1) => {
+    const isSelected = selectedOrderIds.includes(order.id);
+    if (isSelected) {
+      setSelectedOrderIds(prev => prev.filter(id => id !== order.id));
+      return;
+    }
+
+    // Se já existem itens selecionados, verificar se são da mesma loja
+    if (selectedOrderIds.length > 0) {
+      const firstSelected = pendingOrders.find(po => po.id === selectedOrderIds[0]);
+      if (firstSelected && firstSelected.store_id !== order.store_id) {
+        toast.error(
+          `Você só pode pagar reservas da mesma loja juntas (${firstSelected.stores?.name || "loja anterior"}). Desmarque as anteriores para trocar de loja.`
+        );
+        return;
+      }
+    }
+
+    setSelectedOrderIds(prev => [...prev, order.id]);
+  };
+
+  const handleSelectAllFromStore = (storeId: string) => {
+    const storePayable = pendingOrders.filter(o => {
+      if (o.store_id !== storeId) return false;
+      const info = getOrderPaymentInfo(o, 1);
+      return info.isPayable;
+    });
+
+    if (storePayable.length === 0) {
+      toast.info("Nenhuma reserva pendente de pagamento nesta loja.");
+      return;
+    }
+
+    const ids = storePayable.map(o => o.id);
+    setSelectedOrderIds(ids);
+    const storeName = storePayable[0]?.stores?.name || "loja";
+    toast.success(`${ids.length} reserva(s) selecionada(s) da loja ${storeName}`);
+  };
+
+  const selectedOrdersData = useMemo(() => {
+    if (selectedOrderIds.length === 0) return null;
+    const selectedList = pendingOrders.filter(o => selectedOrderIds.includes(o.id));
+    if (selectedList.length === 0) return null;
+
+    const firstOrder = selectedList[0];
+    const store = firstOrder.stores;
+    const storeName = store?.name || "Loja";
+    const storePhone = store?.whatsapp_number || null;
+
+    const items: PixItemDetail[] = selectedList.map(o => {
+      const info = getOrderPaymentInfo(o, 1);
+      return {
+        orderId: o.id,
+        productName: info.productName,
+        quantity: 1,
+        amount: info.amount,
+        type: info.type,
+      };
+    });
+
+    const totalAmount = items.reduce((sum, it) => sum + it.amount, 0);
+    const pixKey = getOrderPaymentInfo(firstOrder, 1).pixKey;
+
+    return {
+      count: selectedList.length,
+      storeName,
+      storePhone,
+      pixKey,
+      totalAmount,
+      items,
+      storeId: firstOrder.store_id,
+    };
+  }, [selectedOrderIds, pendingOrders]);
+
+  // Identifica lojas que possuem 2 ou mais reservas pendentes de pagamento
+  const storesWithMultiplePayable = useMemo(() => {
+    const storeMap = new Map<string, { storeId: string; storeName: string; count: number; totalAmount: number }>();
+
+    for (const o of pendingOrders) {
+      const info = getOrderPaymentInfo(o, 1);
+      if (!info.isPayable) continue;
+      const sId = o.store_id || "unknown";
+      const sName = o.stores?.name || "Loja";
+      if (storeMap.has(sId)) {
+        const item = storeMap.get(sId)!;
+        item.count += 1;
+        item.totalAmount += info.amount;
+      } else {
+        storeMap.set(sId, { storeId: sId, storeName: sName, count: 1, totalAmount: info.amount });
+      }
+    }
+
+    return Array.from(storeMap.values()).filter(s => s.count >= 2);
+  }, [pendingOrders]);
+
+  const handlePaySelectedOrders = () => {
+    if (!selectedOrdersData) return;
+    if (!selectedOrdersData.pixKey) {
+      toast.error("Esta loja ainda não configurou uma chave PIX.");
+      return;
+    }
+
+    setPixModalData({
+      open: true,
+      pixKey: selectedOrdersData.pixKey,
+      amount: selectedOrdersData.totalAmount,
+      storeName: selectedOrdersData.storeName,
+      storePhone: selectedOrdersData.storePhone,
+      orderId: selectedOrderIds.join(","),
+      title: `Pagamento Consolidado via PIX (${selectedOrdersData.count} reservas)`,
+      description: `Efetue o pagamento conjunto de ${brl(selectedOrdersData.totalAmount)} referente a ${selectedOrdersData.count} reservas da loja ${selectedOrdersData.storeName}.`,
+      items: selectedOrdersData.items,
+    });
+  };
+
   if (sessionLoading || ordersLoading) {
     return (
       <div className="min-h-screen">
@@ -428,9 +597,71 @@ function CustomerDashboardContent() {
           </TabsList>
 
           <TabsContent value="reservas" className="mt-5 space-y-3 overflow-x-hidden">
-            {groupedPendingOrders.map(({ order: o, quantity: qty }) => (
-              <Card key={o.id} className="border-border/30 bg-card/60 overflow-hidden">
-                <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
+            {storesWithMultiplePayable.length > 0 && selectedOrderIds.length === 0 && (
+              <div className="p-3.5 bg-primary/5 border border-primary/20 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs mb-1">
+                <div className="flex items-center gap-2.5 text-foreground">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
+                    <Layers className="size-4" />
+                  </div>
+                  <div>
+                    <span className="font-semibold block">Pagamento Consolidado via PIX</span>
+                    <span className="text-muted-foreground text-[11px]">
+                      Você tem reservas acumuladas na mesma loja. Marque as caixinhas ou selecione todas para pagar um único PIX.
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                  {storesWithMultiplePayable.map((st) => (
+                    <Button
+                      key={st.storeId}
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10 font-medium"
+                      onClick={() => handleSelectAllFromStore(st.storeId)}
+                    >
+                      <CheckSquare className="size-3.5" /> Pagar todas de {st.storeName} ({st.count})
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {groupedPendingOrders.map(({ order: o, quantity: qty }) => {
+              const payInfo = getOrderPaymentInfo(o, qty);
+              const isSelected = selectedOrderIds.includes(o.id);
+
+              return (
+                <Card
+                  key={o.id}
+                  className={`border-border/30 bg-card/60 overflow-hidden transition-all duration-200 ${
+                    isSelected ? "ring-2 ring-emerald-500/50 bg-emerald-500/5 border-emerald-500/40" : ""
+                  }`}
+                >
+                  <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
+                    {payInfo.isPayable && (
+                      <div className="flex items-center justify-between pb-2.5 border-b border-border/20">
+                        <label
+                          htmlFor={`select-order-${o.id}`}
+                          className="flex items-center gap-2 text-xs font-medium cursor-pointer text-muted-foreground hover:text-foreground select-none"
+                        >
+                          <Checkbox
+                            id={`select-order-${o.id}`}
+                            checked={isSelected}
+                            onCheckedChange={() => handleToggleOrderSelection(o, qty)}
+                            className="data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
+                          />
+                          <span className={isSelected ? "font-semibold text-emerald-600 dark:text-emerald-400" : ""}>
+                            {isSelected ? "Selecionada para pagamento conjunto" : "Selecionar para pagar junto com outras"}
+                          </span>
+                        </label>
+                        {isSelected && (
+                          <Badge className="bg-emerald-600 text-white text-[11px] font-bold">
+                            {payInfo.type === "sinal" ? "Sinal: " : "Saldo: "}
+                            {brl(payInfo.amount)}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
                     <div className="size-10 shrink-0 overflow-hidden rounded-xl bg-muted sm:size-12">
                       {o.products?.image_url ? (
@@ -631,17 +862,50 @@ function CustomerDashboardContent() {
                             </span>
                           )}
                         </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="h-7 px-3 text-[11px] font-semibold gap-1"
-                          onClick={() => {
-                            navigator.clipboard.writeText(pixKey);
-                            toast.success("Chave PIX copiada para a área de transferência!");
-                          }}
-                        >
-                          <Copy className="size-3" /> Copiar PIX
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="h-7 px-3 text-[11px] font-semibold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                            onClick={() => {
+                              const info = getOrderPaymentInfo(o, qty);
+                              setPixModalData({
+                                open: true,
+                                pixKey,
+                                amount: pixAmount > 0 ? pixAmount : undefined,
+                                storeName: o.stores?.name,
+                                storePhone: o.stores?.whatsapp_number,
+                                orderId: o.id,
+                                title: isAguardando ? "Pagamento do Sinal via PIX" : "Pagamento do Pedido via PIX",
+                                description: isAguardando
+                                  ? `Pague o sinal de ${brl(pixAmount)} para garantir a reserva do seu modelo com o lojista.`
+                                  : `Transfira o valor restante de ${brl(pixAmount)} para liberar o envio da sua miniatura.`,
+                                items: [
+                                  {
+                                    orderId: o.id,
+                                    productName: info.productName,
+                                    quantity: qty,
+                                    amount: pixAmount,
+                                    type: isAguardando ? "sinal" : "saldo",
+                                  },
+                                ],
+                              });
+                            }}
+                          >
+                            <QrCode className="size-3.5" /> Pagar com PIX
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-7 px-2.5 text-[11px] font-semibold gap-1"
+                            onClick={() => {
+                              navigator.clipboard.writeText(pixKey);
+                              toast.success("Chave PIX copiada para a área de transferência!");
+                            }}
+                          >
+                            <Copy className="size-3" /> Copiar Chave
+                          </Button>
+                        </div>
                       </div>
                     );
                   })()}
@@ -679,7 +943,8 @@ function CustomerDashboardContent() {
                   )}
                 </CardContent>
               </Card>
-            ))}
+            );
+          })}
             {!ordersLoading && !ordersQuery.isError && groupedPendingOrders.length === 0 && (
               <InterfaceState
                 compact
@@ -911,7 +1176,66 @@ function CustomerDashboardContent() {
             )}
           </TabsContent>
         </Tabs>
+
+        {/* Barra Flutuante de Pagamento em Lote via PIX */}
+        {selectedOrdersData && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-2xl p-4 bg-background/95 backdrop-blur-md border border-emerald-500/40 rounded-2xl shadow-2xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-5 duration-200">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+                <Wallet className="size-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider truncate max-w-[200px]">
+                    {selectedOrdersData.storeName}
+                  </span>
+                  <Badge variant="secondary" className="text-[11px] font-bold">
+                    {selectedOrdersData.count} {selectedOrdersData.count === 1 ? "reserva" : "reservas"}
+                  </Badge>
+                </div>
+                <p className="text-sm font-bold text-foreground">
+                  Total PIX: <span className="text-emerald-600 dark:text-emerald-400 font-extrabold text-base">{brl(selectedOrdersData.totalAmount)}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedOrderIds([])}
+                className="text-xs text-muted-foreground hover:text-foreground h-8"
+              >
+                Limpar
+              </Button>
+              <Button
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5 shadow-md h-8 px-4 text-xs"
+                onClick={handlePaySelectedOrders}
+              >
+                <QrCode className="size-4" /> Pagar {selectedOrdersData.count} {selectedOrdersData.count === 1 ? "reserva" : "reservas"} via PIX
+              </Button>
+            </div>
+          </div>
+        )}
       </main>
+
+      {pixModalData && (
+        <PixPaymentDialog
+          open={pixModalData.open}
+          onOpenChange={(open) => {
+            if (!open) setPixModalData(null);
+          }}
+          pixKey={pixModalData.pixKey}
+          amount={pixModalData.amount}
+          storeName={pixModalData.storeName}
+          storePhone={pixModalData.storePhone}
+          orderId={pixModalData.orderId}
+          title={pixModalData.title}
+          description={pixModalData.description}
+          items={pixModalData.items}
+        />
+      )}
 
       <AppFooter />
     </div>

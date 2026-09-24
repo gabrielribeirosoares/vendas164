@@ -34,16 +34,19 @@ export function getProductCardImageUrl(value: string | null | undefined): string
   }
 }
 
-/** Serve the large LOJA TESTE brand asset at its actual display size. */
+/** Serve brand assets (logos, favicons) optimized at their actual display size. */
 export function getStoreBrandImageUrl(
-  storeId: string | null | undefined,
+  _storeId: string | null | undefined,
   value: string | null | undefined,
   size = 96,
 ): string {
   if (!value) return "";
-  if (storeId !== LOJA_TESTE_ID) return value;
 
   const publicUrl = getPublicStorageImageUrl(value);
+  if (publicUrl.includes("/optimized-logos/")) {
+    return publicUrl;
+  }
+
   try {
     const url = new URL(publicUrl);
     const marker = "/storage/v1/object/public/store-assets/";

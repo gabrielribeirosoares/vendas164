@@ -23,6 +23,7 @@ import { getCustomerFromCache } from '@/lib/customerCache';
 import { ManualReservationDialog } from './ManualReservationDialog';
 import { OrderInstallmentsDialog } from '@/components/vendedor/OrderInstallmentsDialog';
 import { SpreadsheetImporterDialog } from '@/components/vendedor/SpreadsheetImporterDialog';
+import { PackingSlipDialog, type PackingSlipItem } from './PackingSlipDialog';
 import { ProductThumbnail } from '@/components/ProductThumbnail';
 import { SellerOverview } from '@/components/vendedor/SellerOverview';
 import { InterfaceState } from '@/components/InterfaceState';
@@ -60,7 +61,11 @@ function isMissingPaginationRpc(error: { code?: string; message?: string } | nul
   return !!error && (
     error.code === "PGRST202" ||
     error.code === "42883" ||
-    error.message?.includes("Could not find the function")
+    (error as any).status === 404 ||
+    (error as any).statusCode === 404 ||
+    error.message?.includes("Could not find the function") ||
+    error.message?.includes("seller_orders_page") ||
+    error.message?.includes("404")
   );
 }
 
@@ -238,6 +243,7 @@ export function OrdersTab({
   orders,
   storeId,
   storeColor,
+  storeName,
   products = [],
   focusFilter,
   onClearFocus,
@@ -245,6 +251,7 @@ export function OrdersTab({
   orders: OrderRow[];
   storeId?: string;
   storeColor?: string;
+  storeName?: string;
   products?: Product[];
   focusFilter?: "atrasado" | "envios";
   onClearFocus?: () => void;
@@ -273,6 +280,7 @@ export function OrdersTab({
   const [trackingUpdating, setTrackingUpdating] = useState<Set<string>>(new Set());
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [packingSlipOpen, setPackingSlipOpen] = useState(false);
 
   const {
     data: orderPage,
@@ -565,6 +573,52 @@ export function OrdersTab({
     });
     return Array.from(map.values());
   }, [filteredOrders, isServerPage, orderPage]);
+
+  const packingSlipOrders: PackingSlipItem[] = useMemo(() => {
+    return groupedOrders.map((item) => {
+      const { order: o, quantity } = item;
+      let guestMeta: { name?: string; phone?: string } | null = null;
+      if (o.pix_key && typeof o.pix_key === "string") {
+        if (o.pix_key.startsWith("GUEST:")) {
+          try {
+            guestMeta = JSON.parse(o.pix_key.replace(/^GUEST:/, ""));
+          } catch {}
+        } else if (o.pix_key.startsWith('{"manual_guest":true')) {
+          try {
+            guestMeta = JSON.parse(o.pix_key);
+          } catch {}
+        }
+      }
+      const cached = getCustomerFromCache(o.id) || getCustomerFromCache(o.user_id);
+      const displayName =
+        guestMeta?.name ||
+        (o.profiles?.name && o.profiles.name !== "Cliente" && o.profiles.name !== "Cliente cadastrado"
+          ? o.profiles.name
+          : cached?.name) ||
+        (o.profiles?.email ? o.profiles.email.split("@")[0] : null) ||
+        (guestMeta?.phone || o.profiles?.phone || cached?.phone
+          ? `Cliente (${guestMeta?.phone || o.profiles?.phone || cached?.phone})`
+          : "Cliente sem nome");
+
+      const customerPhone = guestMeta?.phone || o.profiles?.phone || cached?.phone || null;
+
+      return {
+        orderId: o.id,
+        customerName: displayName,
+        customerPhone,
+        customerEmail: o.profiles?.email || null,
+        productName: o.products?.model || "Miniatura",
+        productBrand: o.products?.brand || "",
+        productScale: o.products?.scale || "1:64",
+        quantity,
+        paymentStatus: o.payment_status,
+        deliveryStatus: o.delivery_status,
+        remainingBalance: (Number(o.remaining_balance) || 0) * quantity,
+        trackingCode: o.tracking_code || null,
+        createdAt: o.created_at,
+      };
+    });
+  }, [groupedOrders]);
 
   const totalReservations = isServerPage ? orderPage.total : groupedOrders.length;
   const isAllPages = pageSize === 0;
@@ -1075,6 +1129,17 @@ export function OrdersTab({
               >
                 <Download className="size-3.5 text-primary" />
                 <span><span className="sm:hidden">Exportar</span><span className="hidden sm:inline">Exportar Relatório Financeiro</span></span>
+              </Button>
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPackingSlipOpen(true)}
+                className="h-9 text-xs gap-1.5 border-border/80 no-print"
+                title="Romaneio de Separação e Despacho de Encomendas"
+              >
+                <Truck className="size-3.5 text-blue-500" />
+                <span><span className="sm:hidden">Romaneio</span><span className="hidden sm:inline">Romaneio de Envio</span></span>
               </Button>
             </div>
           </div>
@@ -2042,6 +2107,13 @@ export function OrdersTab({
           storeId={storeId}
         />
       )}
+
+      <PackingSlipDialog
+        open={packingSlipOpen}
+        onOpenChange={setPackingSlipOpen}
+        orders={packingSlipOrders}
+        storeName={storeName || "Minha Loja"}
+      />
 
     </Card>
     </div>
