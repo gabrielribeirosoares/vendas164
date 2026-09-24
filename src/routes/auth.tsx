@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { createServerFn } from "@tanstack/react-start";
 import { AppHeader } from "@/components/AppHeader";
 import { updateAppFavicon } from "@/lib/favicon";
+import { getStoreBrandImageUrl } from "@/lib/imageUrls";
 import { AppFooter } from "@/components/AppFooter";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PhoneInput } from "@/components/PhoneInput";
@@ -185,7 +186,7 @@ function AuthPageContent() {
       document.title = `Acesse ${invitedStore.name}`;
       const icon = invitedStore.favicon_url || invitedStore.logo_url;
       if (icon) {
-        updateAppFavicon(icon);
+        updateAppFavicon(getStoreBrandImageUrl(invitedStore.id, icon, 64));
       }
     }
   }, [invitedStore]);

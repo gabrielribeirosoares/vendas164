@@ -26,7 +26,7 @@ import { getReadableTextColor, getStoreBanner, getProductBadge } from "@/lib/sto
 import { StoreReviewsSection } from "@/components/StoreReviewsSection";
 import { StoreProductCard } from "@/components/store/StoreProductCard";
 import { CatalogPagination } from "@/components/store/CatalogPagination";
-import { getProductCardImageUrl } from "@/lib/imageUrls";
+import { getProductCardImageUrl, getStoreBrandImageUrl } from "@/lib/imageUrls";
 import { getSubdomain, getStoreFullUrl, getProductUrl, withStorePreviewVersion } from "@/lib/subdomain";
 
 type CatalogPage = {
@@ -261,7 +261,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
   useEffect(() => {
     const iconUrl = data?.store?.favicon_url || data?.store?.logo_url;
     if (iconUrl) {
-      updateAppFavicon(iconUrl);
+      updateAppFavicon(getStoreBrandImageUrl(data.store.id, iconUrl, 64));
     }
   }, [data?.store]);
 
@@ -546,7 +546,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
           <div className="flex flex-wrap items-center gap-5">
             {store.logo_url ? (
               <img
-                src={store.logo_url}
+                src={getStoreBrandImageUrl(store.id, store.logo_url, 128)}
                 alt={`Logo ${store.name}`}
                 className="size-16 rounded-2xl object-cover border border-border/30 shadow-sm"
                 loading="lazy"
