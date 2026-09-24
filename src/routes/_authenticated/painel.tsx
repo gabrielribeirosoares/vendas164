@@ -4,6 +4,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { BookmarkCheck, Car, CheckCircle2, Copy, ExternalLink, Loader2, MessageCircle, Package, Search, Sparkles, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
+import { getStoreBrandImageUrl } from "@/lib/imageUrls";
 import { AppFooter } from "@/components/AppFooter";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { InterfaceState } from "@/components/InterfaceState";
@@ -393,7 +394,7 @@ function CustomerDashboardContent() {
                     <CardContent className="flex items-center gap-3 p-3 px-4">
                       {l.stores?.logo_url ? (
                         <img
-                          src={l.stores.logo_url}
+                          src={getStoreBrandImageUrl(l.store_id, l.stores.logo_url, 64)}
                           alt={l.stores.name}
                           className="size-8 rounded-lg object-cover border border-border/30"
                           loading="lazy"

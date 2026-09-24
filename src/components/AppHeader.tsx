@@ -18,6 +18,7 @@ import { PushNotificationManager } from "@/components/PushNotificationManager";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/lib/session";
 import { updateAppFavicon } from "@/lib/favicon";
+import { getStoreBrandImageUrl } from "@/lib/imageUrls";
 import { getStoreFullUrl } from "@/lib/subdomain";
 
 interface AppHeaderProps {
@@ -93,8 +94,8 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
 
   useEffect(() => {
     const icon = currentStore?.favicon_url || currentStore?.logo_url;
-    updateAppFavicon(icon);
-  }, [currentStore?.favicon_url, currentStore?.logo_url]);
+    updateAppFavicon(getStoreBrandImageUrl(currentStore?.id, icon, 64));
+  }, [currentStore?.id, currentStore?.favicon_url, currentStore?.logo_url]);
 
   async function signOut() {
     await queryClient.cancelQueries();
@@ -112,7 +113,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
               <>
                 {currentStore.logo_url ? (
                   <img
-                    src={currentStore.logo_url}
+                    src={getStoreBrandImageUrl(currentStore.id, currentStore.logo_url, 96)}
                     alt={currentStore.name}
                     className="size-8 sm:size-9 rounded-xl object-cover border border-border/50 shrink-0"
                     loading="lazy"
@@ -167,7 +168,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                             }}
                           >
                             {s.logo_url ? (
-                              <img src={s.logo_url} alt={s.name} className="size-5 rounded object-cover" loading="lazy" />
+                              <img src={getStoreBrandImageUrl(s.id, s.logo_url, 64)} alt={s.name} className="size-5 rounded object-cover" loading="lazy" />
                             ) : (
                               <StoreIcon className="size-4 text-muted-foreground" />
                             )}
@@ -289,7 +290,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                                   <Button key={s.id} asChild variant="ghost" className="w-full justify-start gap-3 h-11 mb-1">
                                     <a href={getStoreFullUrl(s.slug)}>
                                       {s.logo_url ? (
-                                        <img src={s.logo_url} alt={s.name} className="size-5 rounded object-cover border border-border" />
+                                        <img src={getStoreBrandImageUrl(s.id, s.logo_url, 64)} alt={s.name} className="size-5 rounded object-cover border border-border" />
                                       ) : (
                                         <StoreIcon className="size-5 text-muted-foreground" />
                                       )}
