@@ -1,7 +1,6 @@
 const STORAGE_SIGNED_MARKER = "/storage/v1/object/sign/store-assets/";
 const STORAGE_PUBLIC_MARKER = "/storage/v1/object/public/store-assets/";
 const OPTIMIZED_PRODUCT_FOLDER = "/optimized-products/";
-const LOJA_TESTE_ID = "5cdfaeec-48d1-4a0d-825d-d4b25785ff13";
 
 export function getPublicStorageImageUrl(value: string | null | undefined): string {
   if (!value) return "";
@@ -34,14 +33,12 @@ export function getProductCardImageUrl(value: string | null | undefined): string
   }
 }
 
-/** Serve the large LOJA TESTE brand asset at its actual display size. */
+/** Serve store logos from our public bucket at their display size. */
 export function getStoreBrandImageUrl(
-  storeId: string | null | undefined,
   value: string | null | undefined,
   size = 96,
 ): string {
   if (!value) return "";
-  if (storeId !== LOJA_TESTE_ID) return value;
 
   const publicUrl = getPublicStorageImageUrl(value);
   try {

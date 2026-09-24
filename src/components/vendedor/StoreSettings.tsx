@@ -153,7 +153,7 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
 
     setSaving(false);
     if (error) return toast.error("Não foi possível salvar.");
-    updateAppFavicon(getStoreBrandImageUrl(store.id, logo, 64));
+    updateAppFavicon(getStoreBrandImageUrl(logo, 64));
     queryClient.invalidateQueries();
     toast.success("Identidade da loja atualizada!");
   }
@@ -163,7 +163,7 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
       const url = await uploadImage(userId, file, "logo");
       // Atualiza tanto o logo quanto o favicon automaticamente com a mesma imagem
       setForm((f) => ({ ...f, logo_url: url, favicon_url: url }));
-      updateAppFavicon(getStoreBrandImageUrl(store.id, url, 64));
+      updateAppFavicon(getStoreBrandImageUrl(url, 64));
       toast.success("Logotipo enviado! (definido como favicon)");
     } catch (error) {
       toast.error(getImageUploadErrorMessage(error));
@@ -449,7 +449,7 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
               {form.logo_url && (
                 <div className="mt-3 flex items-center gap-3">
                   <img
-                    src={getStoreBrandImageUrl(store.id, form.logo_url, 128)}
+                    src={getStoreBrandImageUrl(form.logo_url, 128)}
                     alt="Prévia do logotipo"
                     className="size-14 rounded-xl object-cover border border-border shadow-sm"
                   />
@@ -479,7 +479,7 @@ export function BrandingTab({ store, userId }: { store: Store; userId: string })
             <div className="flex items-center gap-3">
               {form.logo_url ? (
                 <img
-                  src={getStoreBrandImageUrl(store.id, form.logo_url, 128)}
+                  src={getStoreBrandImageUrl(form.logo_url, 128)}
                   alt="Logo"
                   className="size-12 rounded-xl object-cover"
                 />

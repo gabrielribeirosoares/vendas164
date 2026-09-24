@@ -186,7 +186,7 @@ function AuthPageContent() {
       document.title = `Acesse ${invitedStore.name}`;
       const icon = invitedStore.favicon_url || invitedStore.logo_url;
       if (icon) {
-        updateAppFavicon(getStoreBrandImageUrl(invitedStore.id, icon, 64));
+        updateAppFavicon(getStoreBrandImageUrl(icon, 64));
       }
     }
   }, [invitedStore]);

@@ -394,7 +394,7 @@ function CustomerDashboardContent() {
                     <CardContent className="flex items-center gap-3 p-3 px-4">
                       {l.stores?.logo_url ? (
                         <img
-                          src={getStoreBrandImageUrl(l.store_id, l.stores.logo_url, 64)}
+                          src={getStoreBrandImageUrl(l.stores.logo_url, 64)}
                           alt={l.stores.name}
                           className="size-8 rounded-lg object-cover border border-border/30"
                           loading="lazy"
