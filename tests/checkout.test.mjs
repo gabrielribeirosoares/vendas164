@@ -54,6 +54,7 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/20260831122700_add_installment_due_day.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260922183409_atomic_order_financial_management.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260923004537_seller_server_pagination.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260924165900_atomic_global_payment.sql', import.meta.url), 'utf8'));
 });
 after(() => db.close());
 test('checkout commits stock, order and exact-cent installments; retry returns same IDs', async () => {
@@ -159,6 +160,41 @@ test('manual reservations are atomic, owner-only and idempotent', async () => {
   const missingCustomer = await product(); await asUser(owner);
   await assert.rejects(db.query('SELECT create_manual_reservations($1,$2,1,$3::jsonb)',[randomUUID(),missingCustomer,JSON.stringify({...order,user_id:randomUUID()})]),/foreign key/);
   assert.equal(await stock(missingCustomer),10);
+});
+
+test('global payment is atomic, idempotent, ordered, and restricted to the store', async () => {
+  const id = await product();
+  const [first, second] = await checkout([item(id, { quantity: 2, expected_total: 200, expected_signal: 40 })]);
+  const request = randomUUID();
+  const date = '2026-09-24';
+  const payments = [
+    { order_id: second, amount_cents: 10000, expected_balance_cents: 10000 },
+    { order_id: first, amount_cents: 5000, expected_balance_cents: 10000 },
+  ];
+  const apply = (key, entries) => db.query(
+    'SELECT apply_global_payment($1,$2,$3,$4,$5::jsonb) AS result',
+    [store, customer, key, date, JSON.stringify(entries)],
+  );
+
+  await asUser(customer);
+  await assert.rejects(apply(request, payments), /global_payment_access_denied|permission denied/);
+  await asUser(owner);
+  const initial = (await apply(request, payments)).rows[0].result;
+  assert.equal(initial.amount_cents, 15000);
+  assert.equal(initial.settled, 1);
+  assert.equal(initial.replayed, false);
+  assert.equal((await apply(request, payments)).rows[0].result.replayed, true);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM order_installments WHERE global_payment_request_id=$1', [request])).rows[0].n, 2);
+  assert.equal((await db.query('SELECT payment_status FROM orders WHERE id=$1', [second])).rows[0].payment_status, 'quitado');
+  await assert.rejects(apply(request, [{ ...payments[0], amount_cents: 100 }]), /global_payment_request_reused/);
+
+  const failedRequest = randomUUID();
+  await assert.rejects(apply(failedRequest, [
+    { order_id: first, amount_cents: 1000, expected_balance_cents: 5000 },
+    { order_id: second, amount_cents: 1000, expected_balance_cents: 10000 },
+  ]), /global_payment_balance_changed/);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM order_installments WHERE global_payment_request_id=$1', [failedRequest])).rows[0].n, 0);
+  await assert.rejects(apply(randomUUID(), [{ ...payments[1], expected_balance_cents: 10000 }]), /global_payment_balance_changed/);
 });
 
 test('customers cannot edit financial fields and administrators are explicit', async () => {

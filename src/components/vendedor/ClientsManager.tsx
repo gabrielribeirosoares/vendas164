@@ -120,6 +120,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
   const [globalPaymentDate, setGlobalPaymentDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [globalStrategy, setGlobalStrategy] = useState<"oldest_first" | "ready_first">("oldest_first");
   const [isProcessingGlobal, setIsProcessingGlobal] = useState(false);
+  const [globalPaymentRequestId, setGlobalPaymentRequestId] = useState(() => crypto.randomUUID());
 
   const [clientNotes, setClientNotes] = useState<Record<string, string>>(() => {
     try {
@@ -518,40 +519,26 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
 
   // Executar a Baixa Global em Cascata no Banco
   async function handleConfirmGlobalPayment() {
-    if (!cascadeSimulation.items || cascadeSimulation.items.length === 0) {
+    if (!storeId || !currentSelectedClient || cascadeSimulation.items.length === 0) {
       toast.error("Informe um valor para realizar a baixa.");
       return;
     }
 
     try {
       setIsProcessingGlobal(true);
-      const dueDate = globalPaymentDate ? new Date(globalPaymentDate + "T12:00:00").toISOString() : new Date().toISOString();
-
-      // Executar as inserções e updates para cada pedido afetado
-      for (const item of cascadeSimulation.items) {
-        // Remove parcelas pendentes legadas deste pedido para não ficarem duplicadas
-        await supabase.from("order_installments").delete().eq("order_id", item.orderId).eq("status", "pending");
-
-        const { data: existingInsts } = await supabase.from("order_installments").select("id").eq("order_id", item.orderId);
-        const nextNumber = (existingInsts?.length || 0) + 1;
-
-        // Inserir amortização paga
-        const { error: insError } = await supabase.from("order_installments").insert({
+      const { data, error } = await supabase.rpc("apply_global_payment", {
+        _store_id: storeId,
+        _customer_id: currentSelectedClient.userId,
+        _request_id: globalPaymentRequestId,
+        _payment_date: globalPaymentDate,
+        _payments: cascadeSimulation.items.map((item) => ({
           order_id: item.orderId,
-          installment_number: nextNumber,
-          amount: item.deducted,
-          due_date: dueDate,
-          status: "paid",
-          paid_at: new Date().toISOString()
-        });
-
-        if (insError) throw insError;
-
-        // Se o pedido foi quitado, atualizar status
-        if (item.willBeQuitado) {
-          await supabase.from("orders").update({ payment_status: "quitado" }).eq("id", item.orderId);
-        }
-      }
+          amount_cents: Math.round(item.deducted * 100),
+          expected_balance_cents: Math.round(item.currentRemaining * 100),
+        })),
+      });
+      if (error) throw error;
+      const result = data as { amount_cents: number; settled: number; replayed: boolean };
 
       // Invalidar queries do React Query
       await queryClient.invalidateQueries({ queryKey: ["store-orders"] });
@@ -561,11 +548,19 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
       await queryClient.invalidateQueries({ queryKey: ["all_installments"] });
       await queryClient.invalidateQueries({ queryKey: ["order_installments"] });
 
-      toast.success(`Baixa de ${brl(cascadeSimulation.totalDeducted)} concluída! ${cascadeSimulation.fullyPaidCount} miniaturas quitadas.`);
+      toast.success(`Baixa de ${brl(result.amount_cents / 100)} concluída!${result.replayed ? " Pagamento já registrado." : ` ${result.settled} miniaturas quitadas.`}`);
       setGlobalPaymentOpen(false);
       setGlobalAmount("");
+      setGlobalPaymentRequestId(crypto.randomUUID());
     } catch (err: any) {
-      toast.error("Erro ao aplicar baixa global: " + (err.message || "Tente novamente"));
+      if (err.message?.includes("global_payment_balance_changed")) {
+        await queryClient.invalidateQueries({ queryKey: ["seller-client-orders", storeId, currentSelectedClient.userId] });
+        toast.error("O saldo mudou desde a simulação. Confira os valores atualizados antes de tentar novamente.");
+      } else if (err.code === "PGRST202" || err.message?.includes("Could not find the function")) {
+        toast.error("A baixa global ainda não está disponível neste banco. Aplique a migração antes de utilizar esta função.");
+      } else {
+        toast.error("Não foi possível registrar a baixa. Tente novamente sem alterar os valores para evitar repetições.");
+      }
     } finally {
       setIsProcessingGlobal(false);
     }

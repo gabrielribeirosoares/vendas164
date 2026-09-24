@@ -408,6 +408,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_global_payment: {
+        Args: { _store_id: string; _customer_id: string; _request_id: string; _payment_date: string; _payments: Json };
+        Returns: Json;
+      }
       create_manual_reservations: {
         Args: { _request_id: string; _product_id: string; _quantity: number; _order: Json };
         Returns: string[];
