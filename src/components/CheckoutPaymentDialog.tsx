@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   Lock,
   AlertCircle,
-  Zap,
   ExternalLink,
 } from "lucide-react";
 import {
@@ -70,7 +69,6 @@ export function CheckoutPaymentDialog({
 
   // Estados Cartão (Checkout Pro Oficial do Mercado Pago)
   const [redirectingToMp, setRedirectingToMp] = useState(false);
-  const [processingCard, setProcessingCard] = useState(false);
   const [cardError, setCardError] = useState("");
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -82,7 +80,6 @@ export function CheckoutPaymentDialog({
       setPixData(null);
       setCardError("");
       setGeneratingPix(false);
-      setProcessingCard(false);
       setRedirectingToMp(false);
     }
   }, [open]);
@@ -260,70 +257,6 @@ export function CheckoutPaymentDialog({
       toast.error("Erro ao copiar código PIX.");
     }
   };
-
-  // Simular aprovação do PIX em modo Sandbox
-  async function handleSimulatePixApproval() {
-    setGeneratingPix(true);
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-
-      const res = await fetch("/api/mercadopago/simulate-approval", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          orderIds,
-          amount,
-          paymentId: pixData?.id || "simulated-pix",
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Não foi possível simular a baixa.");
-      }
-
-      handleSuccess();
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao simular aprovação do PIX");
-    } finally {
-      setGeneratingPix(false);
-    }
-  }
-
-  // Simular aprovação do Cartão em modo Sandbox
-  async function handleSimulateCardApproval() {
-    setProcessingCard(true);
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-
-      const res = await fetch("/api/mercadopago/simulate-approval", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          orderIds,
-          amount,
-          paymentId: "simulated-card",
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Não foi possível simular a baixa.");
-      }
-
-      handleSuccess();
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao simular aprovação do Cartão");
-    } finally {
-      setProcessingCard(false);
-    }
-  }
 
   // Redirecionar para o Checkout Pro Oficial do Mercado Pago
   async function handleRedirectToMercadoPago() {
@@ -518,18 +451,6 @@ export function CheckoutPaymentDialog({
                           Aguardando confirmação bancária. Assim que transferir, o pedido aprova na hora!
                         </p>
                       </div>
-
-                      {paymentConfig?.isSandbox && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={generatingPix}
-                          onClick={handleSimulatePixApproval}
-                          className="w-full border-dashed border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 text-xs font-semibold gap-1.5 h-8 mt-1"
-                        >
-                          <Zap className="size-3.5" /> Simular Pagamento do PIX (Modo Teste)
-                        </Button>
-                      )}
                     </div>
                   ) : (
                     <div className="py-6 text-center space-y-3">
@@ -612,19 +533,6 @@ export function CheckoutPaymentDialog({
                       </>
                     )}
                   </Button>
-
-                  {paymentConfig?.isSandbox && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={processingCard || redirectingToMp}
-                      onClick={handleSimulateCardApproval}
-                      className="w-full border-dashed border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 text-xs font-semibold gap-1.5 h-8 mt-1"
-                    >
-                      <Zap className="size-3.5" /> Simular Pagamento do Cartão (Modo Teste)
-                    </Button>
-                  )}
 
                   <p className="text-[11px] text-center text-muted-foreground flex items-center justify-center gap-1">
                     <Lock className="size-3 text-primary" /> Transação processada em ambiente seguro do Mercado Pago

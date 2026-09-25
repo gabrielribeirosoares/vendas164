@@ -23,7 +23,6 @@ import { Route as LojaSlugRouteImport } from './routes/loja.$slug'
 import { Route as ProdutoIdRouteImport } from './routes/produto.$id'
 import { Route as ApiMercadopagoCreatePaymentRouteImport } from './routes/api/mercadopago/create-payment'
 import { Route as ApiMercadopagoPublicConfigRouteImport } from './routes/api/mercadopago/public-config'
-import { Route as ApiMercadopagoSimulateApprovalRouteImport } from './routes/api/mercadopago/simulate-approval'
 import { Route as ApiMercadopagoWebhookRouteImport } from './routes/api/mercadopago/webhook'
 import { Route as LojaSlugItemSlugRouteImport } from './routes/loja.$slug.$itemSlug'
 
@@ -98,12 +97,6 @@ const ApiMercadopagoPublicConfigRoute =
     path: '/api/mercadopago/public-config',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiMercadopagoSimulateApprovalRoute =
-  ApiMercadopagoSimulateApprovalRouteImport.update({
-    id: '/api/mercadopago/simulate-approval',
-    path: '/api/mercadopago/simulate-approval',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiMercadopagoWebhookRoute = ApiMercadopagoWebhookRouteImport.update({
   id: '/api/mercadopago/webhook',
   path: '/api/mercadopago/webhook',
@@ -129,7 +122,6 @@ export interface FileRoutesByFullPath {
   '/produto/$id': typeof ProdutoIdRoute
   '/api/mercadopago/create-payment': typeof ApiMercadopagoCreatePaymentRoute
   '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
-  '/api/mercadopago/simulate-approval': typeof ApiMercadopagoSimulateApprovalRoute
   '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
 }
@@ -147,7 +139,6 @@ export interface FileRoutesByTo {
   '/produto/$id': typeof ProdutoIdRoute
   '/api/mercadopago/create-payment': typeof ApiMercadopagoCreatePaymentRoute
   '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
-  '/api/mercadopago/simulate-approval': typeof ApiMercadopagoSimulateApprovalRoute
   '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
 }
@@ -167,7 +158,6 @@ export interface FileRoutesById {
   '/produto/$id': typeof ProdutoIdRoute
   '/api/mercadopago/create-payment': typeof ApiMercadopagoCreatePaymentRoute
   '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
-  '/api/mercadopago/simulate-approval': typeof ApiMercadopagoSimulateApprovalRoute
   '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
 }
@@ -187,7 +177,6 @@ export interface FileRouteTypes {
     | '/produto/$id'
     | '/api/mercadopago/create-payment'
     | '/api/mercadopago/public-config'
-    | '/api/mercadopago/simulate-approval'
     | '/api/mercadopago/webhook'
     | '/loja/$slug/$itemSlug'
   fileRoutesByTo: FileRoutesByTo
@@ -205,7 +194,6 @@ export interface FileRouteTypes {
     | '/produto/$id'
     | '/api/mercadopago/create-payment'
     | '/api/mercadopago/public-config'
-    | '/api/mercadopago/simulate-approval'
     | '/api/mercadopago/webhook'
     | '/loja/$slug/$itemSlug'
   id:
@@ -224,7 +212,6 @@ export interface FileRouteTypes {
     | '/produto/$id'
     | '/api/mercadopago/create-payment'
     | '/api/mercadopago/public-config'
-    | '/api/mercadopago/simulate-approval'
     | '/api/mercadopago/webhook'
     | '/loja/$slug/$itemSlug'
   fileRoutesById: FileRoutesById
@@ -242,7 +229,6 @@ export interface RootRouteChildren {
   ProdutoIdRoute: typeof ProdutoIdRoute
   ApiMercadopagoCreatePaymentRoute: typeof ApiMercadopagoCreatePaymentRoute
   ApiMercadopagoPublicConfigRoute: typeof ApiMercadopagoPublicConfigRoute
-  ApiMercadopagoSimulateApprovalRoute: typeof ApiMercadopagoSimulateApprovalRoute
   ApiMercadopagoWebhookRoute: typeof ApiMercadopagoWebhookRoute
 }
 
@@ -346,13 +332,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMercadopagoPublicConfigRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/mercadopago/simulate-approval': {
-      id: '/api/mercadopago/simulate-approval'
-      path: '/api/mercadopago/simulate-approval'
-      fullPath: '/api/mercadopago/simulate-approval'
-      preLoaderRoute: typeof ApiMercadopagoSimulateApprovalRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/mercadopago/webhook': {
       id: '/api/mercadopago/webhook'
       path: '/api/mercadopago/webhook'
@@ -408,7 +387,6 @@ const rootRouteChildren: RootRouteChildren = {
   ProdutoIdRoute: ProdutoIdRoute,
   ApiMercadopagoCreatePaymentRoute: ApiMercadopagoCreatePaymentRoute,
   ApiMercadopagoPublicConfigRoute: ApiMercadopagoPublicConfigRoute,
-  ApiMercadopagoSimulateApprovalRoute: ApiMercadopagoSimulateApprovalRoute,
   ApiMercadopagoWebhookRoute: ApiMercadopagoWebhookRoute,
 }
 export const routeTree = rootRouteImport

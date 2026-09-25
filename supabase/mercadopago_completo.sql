@@ -261,33 +261,8 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.confirm_gateway_payment(UUID[], NUMERIC, TEXT, TEXT) TO authenticated, anon, service_role;
+REVOKE ALL ON FUNCTION public.confirm_gateway_payment(UUID[], NUMERIC, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
 
--- 7. Seed de credenciais da LOJA TESTE
-INSERT INTO public.mercadopago_connections (
-  store_id,
-  mp_user_id,
-  public_key,
-  access_token,
-  is_sandbox,
-  is_active,
-  updated_at
-)
-VALUES (
-  '5cdfaeec-48d1-4a0d-825d-d4b25785ff13',
-  '3443278484',
-  'APP_USR-5fe1ca74-2c4a-4f92-832e-d1060745a302',
-  'APP_USR-8834082435427894-092509-454b02c83c5d231d7b473529c3ddb1d4-3443278484',
-  true,
-  true,
-  now()
-)
-ON CONFLICT (store_id) DO UPDATE SET
-  mp_user_id = EXCLUDED.mp_user_id,
-  public_key = EXCLUDED.public_key,
-  access_token = EXCLUDED.access_token,
-  is_sandbox = EXCLUDED.is_sandbox,
-  is_active = EXCLUDED.is_active,
-  updated_at = now();
+-- Credenciais são configuradas individualmente pelo lojista; não incluir tokens em SQL.
 
 COMMIT;

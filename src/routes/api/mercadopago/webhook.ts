@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/integrations/supabase/types";
+import { confirmGatewayPayment, gatewayAdmin } from "@/lib/mercadoPago.server";
 
 export const Route = createFileRoute("/api/mercadopago/webhook")({
   server: {
@@ -8,97 +7,61 @@ export const Route = createFileRoute("/api/mercadopago/webhook")({
       POST: async ({ request }) => {
         try {
           const url = new URL(request.url);
-          const body = await request.json().catch(() => ({}));
-
-          // O Mercado Pago pode enviar o ID via query params ou body
-          const paymentId = body?.data?.id || url.searchParams.get("data.id") || url.searchParams.get("id");
-
-          if (!paymentId) {
-            return new Response(JSON.stringify({ received: true, message: "No payment ID" }), {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            });
+          const storeId = url.searchParams.get("store_id");
+          if (!storeId || !/^[0-9a-f-]{36}$/i.test(storeId)) return new Response("Invalid store", { status: 400 });
+          const body = await request.json();
+          const type = String(body?.type || url.searchParams.get("type") || url.searchParams.get("topic") || "payment");
+          if (type !== "payment" && type !== "order") return Response.json({ received: true });
+          const id = String(body?.data?.id || url.searchParams.get("data.id") || "");
+          if (!(type === "payment" ? /^\d{1,30}$/.test(id) : /^ORD[A-Za-z0-9]{1,60}$/.test(id))) {
+            return new Response("Invalid payment ID", { status: 400 });
           }
 
-          // Inicializar Supabase
-          const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-          const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+          const admin = gatewayAdmin();
+          const { data: connection, error } = await admin.from("mercadopago_connections" as never)
+            .select("access_token, is_active").eq("store_id", storeId).maybeSingle();
+          if (error) throw error;
+          const credentials = connection as { access_token?: string; is_active?: boolean } | null;
+          if (!credentials?.is_active || !credentials.access_token) return new Response("Unknown store", { status: 404 });
 
-          if (!supabaseUrl || !supabaseKey) {
-            return new Response("Configuração de servidor ausente", { status: 500 });
-          }
-
-          const supabase = createClient<Database>(supabaseUrl, supabaseKey);
-
-          // Buscar detalhes do pagamento no Mercado Pago usando tokens das lojas cadastradas
-          let mpRes: Response | null = null;
-
-          const { data: conns } = await supabase
-            .from("mercadopago_connections" as any)
-            .select("access_token")
-            .eq("is_active", true);
-
-          if (conns) {
-            for (const conn of conns as any[]) {
-              if (conn.access_token) {
-                const attempt = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-                  headers: { Authorization: `Bearer ${conn.access_token}` },
-                });
-                if (attempt.ok) {
-                  mpRes = attempt;
-                  break;
-                }
-              }
-            }
-          }
-
-          if (!mpRes || !mpRes.ok) {
-            console.warn(`[MP Webhook] Pagamento ${paymentId} não pôde ser consultado no MP.`);
-            return new Response(JSON.stringify({ received: true }), { status: 200 });
-          }
-
-          const paymentData = await mpRes.json();
-          const { status, external_reference } = paymentData;
-
-          // Se o pagamento foi aprovado e temos a referência do pedido
-          if (status === "approved" && external_reference) {
-            const orderIds = String(external_reference)
-              .split(",")
-              .map((id) => id.trim())
-              .filter(Boolean);
-
-            if (orderIds.length > 0) {
-              const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-              if (serviceKey) {
-                const adminClient = createClient<Database>(supabaseUrl, serviceKey);
-                await adminClient
-                  .from("orders")
-                  .update({
-                    payment_status: "quitado",
-                    gateway_payment_id: String(paymentId),
-                    gateway_status: "approved",
-                  } as any)
-                  .in("id", orderIds);
-              } else {
-                await supabase.rpc("confirm_gateway_payment" as any, {
-                  p_order_ids: orderIds,
-                  p_amount: paymentData.transaction_amount || null,
-                  p_payment_method: paymentData.payment_method_id || "pix",
-                  p_gateway_id: String(paymentId),
-                });
-              }
-
-              console.log(`[MP Webhook] Pedidos [${orderIds.join(", ")}] atualizados para quitado com sucesso!`);
-            }
-          }
-
-          return new Response(JSON.stringify({ success: true }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
+          // The webhook body and return URL are notifications only. Always ask Mercado Pago
+          // with this store's own token before changing a financial record.
+          const resource = type === "order" ? `v1/orders/${id}` : `v1/payments/${id}`;
+          const mpResponse = await fetch(`https://api.mercadopago.com/${resource}`, {
+            headers: { Authorization: `Bearer ${credentials.access_token}` },
           });
-        } catch (err) {
-          console.error("[MP Webhook Error]", err);
-          return new Response(JSON.stringify({ received: true }), { status: 200 });
+          if (!mpResponse.ok) {
+            if (mpResponse.status === 404 || mpResponse.status === 403) return new Response("Payment not found", { status: 404 });
+            throw new Error(`Mercado Pago unavailable: ${mpResponse.status}`);
+          }
+          const mp = await mpResponse.json();
+          // An Orders API Pix may also emit a payment notification. Use the same
+          // ledger key for both, so one Pix cannot pay the signal and then the
+          // remaining balance a second time.
+          const linkedOrderId = String(mp.order?.id || "");
+          if (type === "payment" && mp.payment_method_id === "pix" && !/^ORD[A-Za-z0-9]+$/.test(linkedOrderId)) {
+            return Response.json({ received: true });
+          }
+          const payment = type === "order" ? {
+            id: `order:${mp.id}`,
+            status: mp.status === "processed" && mp.status_detail === "accredited" ? "approved" : "pending",
+            external_reference: mp.external_reference,
+            transaction_amount: Number(mp.total_amount),
+            payment_method_id: "pix",
+          } : {
+            id: /^ORD[A-Za-z0-9]+$/.test(linkedOrderId) ? `order:${linkedOrderId}` : String(mp.id),
+            status: mp.status,
+            external_reference: mp.external_reference,
+            transaction_amount: Number(mp.transaction_amount),
+            payment_method_id: mp.payment_method_id,
+          };
+          if (payment.status === "approved") {
+            await confirmGatewayPayment(admin, storeId, payment);
+          }
+          return Response.json({ received: true });
+        } catch (error) {
+          console.error("Não foi possível processar a notificação de pagamento:", error);
+          return new Response("Falha temporária na confirmação", { status: 500 });
         }
       },
     },

@@ -98,40 +98,10 @@ function CustomerDashboardContent() {
     if (typeof window === "undefined") return;
     const urlParams = new URLSearchParams(window.location.search);
     const mpStatus = urlParams.get("status") || urlParams.get("collection_status");
-    const orderIdsParam = urlParams.get("orderIds") || urlParams.get("external_reference");
-    const paymentId = urlParams.get("payment_id") || urlParams.get("collection_id");
-
     if (mpStatus) {
       if (mpStatus === "approved") {
-        toast.success("Pagamento aprovado pelo Mercado Pago! Pedido atualizado com sucesso. 🎉");
-
-        if (orderIdsParam) {
-          const list = orderIdsParam.split(",").map((id) => id.trim()).filter(Boolean);
-          if (list.length > 0) {
-            supabase.auth.getSession().then(({ data: sessionData }) => {
-              const token = sessionData?.session?.access_token;
-              const headers: Record<string, string> = { "Content-Type": "application/json" };
-              if (token) headers["Authorization"] = `Bearer ${token}`;
-
-              fetch("/api/mercadopago/simulate-approval", {
-                method: "POST",
-                headers,
-                body: JSON.stringify({
-                  orderIds: list,
-                  paymentId: paymentId || "checkout_pro_approved",
-                }),
-              })
-                .then(() => {
-                  queryClient.invalidateQueries({ queryKey: ["my-orders"] });
-                })
-                .catch(() => {
-                  queryClient.invalidateQueries({ queryKey: ["my-orders"] });
-                });
-            });
-          }
-        } else {
-          queryClient.invalidateQueries({ queryKey: ["my-orders"] });
-        }
+        toast.info("Pagamento recebido pelo Mercado Pago. Aguarde a confirmação do pedido.");
+        queryClient.invalidateQueries({ queryKey: ["my-orders"] });
       } else if (mpStatus === "pending" || mpStatus === "in_process") {
         toast.info("Pagamento em processamento pelo Mercado Pago. O pedido será atualizado assim que compensado.");
       } else if (mpStatus === "failure" || mpStatus === "rejected") {
