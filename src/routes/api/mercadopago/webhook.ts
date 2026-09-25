@@ -2,8 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
-const DEFAULT_TEST_ACCESS_TOKEN = "APP_USR-8834082435427894-092509-454b02c83c5d231d7b473529c3ddb1d4-3443278484";
-
 export const Route = createFileRoute("/api/mercadopago/webhook")({
   server: {
     handlers: {
@@ -32,37 +30,29 @@ export const Route = createFileRoute("/api/mercadopago/webhook")({
 
           const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
-          // Buscar detalhes do pagamento no Mercado Pago usando token
-          // Tentar primeiro com token default de teste
-          let accessToken = DEFAULT_TEST_ACCESS_TOKEN;
+          // Buscar detalhes do pagamento no Mercado Pago usando tokens das lojas cadastradas
+          let mpRes: Response | null = null;
 
-          let mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
+          const { data: conns } = await supabase
+            .from("mercadopago_connections" as any)
+            .select("access_token")
+            .eq("is_active", true);
 
-          // Se falhar com token default, buscar tokens cadastrados nas lojas
-          if (!mpRes.ok) {
-            const { data: conns } = await supabase
-              .from("mercadopago_connections" as any)
-              .select("access_token")
-              .eq("is_active", true);
-
-            if (conns) {
-              for (const conn of conns as any[]) {
-                if (conn.access_token && conn.access_token !== accessToken) {
-                  const retry = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-                    headers: { Authorization: `Bearer ${conn.access_token}` },
-                  });
-                  if (retry.ok) {
-                    mpRes = retry;
-                    break;
-                  }
+          if (conns) {
+            for (const conn of conns as any[]) {
+              if (conn.access_token) {
+                const attempt = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+                  headers: { Authorization: `Bearer ${conn.access_token}` },
+                });
+                if (attempt.ok) {
+                  mpRes = attempt;
+                  break;
                 }
               }
             }
           }
 
-          if (!mpRes.ok) {
+          if (!mpRes || !mpRes.ok) {
             console.warn(`[MP Webhook] Pagamento ${paymentId} não pôde ser consultado no MP.`);
             return new Response(JSON.stringify({ received: true }), { status: 200 });
           }

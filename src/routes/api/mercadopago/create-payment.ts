@@ -16,9 +16,7 @@ function jsonError(message: string, status = 400): Response {
   });
 }
 
-// Fallback das credenciais da LOJA TESTE caso o banco ainda não tenha aplicado a migration
-const DEFAULT_TEST_STORE_ID = "5cdfaeec-48d1-4a0d-825d-d4b25785ff13";
-const DEFAULT_TEST_ACCESS_TOKEN = "APP_USR-8834082435427894-092509-454b02c83c5d231d7b473529c3ddb1d4-3443278484";
+
 
 export const Route = createFileRoute("/api/mercadopago/create-payment")({
   server: {
@@ -28,6 +26,7 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
           const body = await request.json();
           const {
             storeId,
+            storeName,
             orderIds,
             amount: requestedAmount,
             paymentMethodId = "pix",
@@ -46,7 +45,8 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
 
           // Criar cliente Supabase com service_role ou anon key + auth header da sessão
           const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-          const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+          const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+          const supabaseKey = serviceKey || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
           if (!supabaseUrl || !supabaseKey) {
             return jsonError("Configuração do servidor incompleta.", 500);
@@ -59,34 +59,31 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
             },
           });
 
-          // 1. Obter credencial do Mercado Pago para a loja
-          let accessToken = "";
+          // Cliente admin (service_role) para acessar mercadopago_connections sem RLS
+          const adminClient = serviceKey
+            ? createClient<Database>(supabaseUrl, serviceKey)
+            : supabase;
 
-          // Buscar na tabela mercadopago_connections
-          const { data: connection } = await supabase
+          // 1. Obter credencial do Mercado Pago para a loja (usa admin para bypassar RLS)
+          const { data: connection } = await adminClient
             .from("mercadopago_connections" as any)
             .select("access_token, is_sandbox, is_active")
             .eq("store_id", storeId)
             .maybeSingle();
 
-          const ZERO51_STORE_ID = "b2d3e709-3d0c-4dc1-be97-6c92b961f210";
-          if (connection && (connection as any).is_active && (connection as any).access_token) {
-            accessToken = (connection as any).access_token;
-          } else if (storeId === DEFAULT_TEST_STORE_ID || storeId === ZERO51_STORE_ID || !connection) {
-            accessToken = DEFAULT_TEST_ACCESS_TOKEN;
-          }
-
-          if (!accessToken) {
+          if (!connection || !(connection as any).is_active || !(connection as any).access_token) {
             return jsonError(
-              "Esta loja ainda não conectou uma conta do Mercado Pago para pagamentos automáticos.",
+              "Esta loja ainda não conectou uma conta do Mercado Pago para pagamentos automáticos. O lojista precisa configurar suas credenciais na aba Pagamentos.",
               400
             );
           }
 
+          const accessToken = (connection as any).access_token;
+
           // 2. Buscar pedidos no banco de dados para validar valor
           const { data: orders } = await supabase
             .from("orders")
-            .select("id, total_price, down_payment, payment_status, product_id, store_id, installment_count, products(max_installments)")
+            .select("id, total_price, down_payment, payment_status, product_id, store_id, installment_count, products(name, max_installments)")
             .in("id", orderIds);
 
           // Calcular valor total pendente caso os pedidos sejam retornados
@@ -181,9 +178,79 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
             });
           }
 
-          // 5. Se for Cartão de Crédito, usar a nova API de Orders
-          if (!token) {
-            return jsonError("Token do cartão de crédito não fornecido.", 400);
+          // 5. Se for Checkout Pro / Pagamento com Cartão no layout oficial do Mercado Pago
+          if (paymentMethodId === "checkout_pro" || !token) {
+            const reqOrigin = body?.origin || request.headers.get("origin") || request.headers.get("referer") || "https://vendas164.com.br";
+            let baseOrigin = "https://vendas164.com.br";
+            try {
+              baseOrigin = new URL(reqOrigin).origin;
+            } catch {
+              baseOrigin = "https://vendas164.com.br";
+            }
+
+            const cleanStoreName = String(storeName || "Loja").trim();
+            const firstModel = (orders && (orders[0] as any)?.products?.name) ? (orders[0] as any).products.name : "";
+            const itemTitle = firstModel
+              ? `${firstModel}${orders && orders.length > 1 ? ` (+${orders.length - 1} itens)` : ""}`
+              : `Pedido na ${cleanStoreName}`;
+
+            const isHttps = baseOrigin.startsWith("https://");
+
+            const prefPayload: any = {
+              items: [
+                {
+                  id: externalRef,
+                  title: itemTitle.slice(0, 128),
+                  quantity: 1,
+                  unit_price: Number(finalAmount.toFixed(2)),
+                  currency_id: "BRL",
+                },
+              ],
+              payer: {
+                name: payer?.name || payer?.firstName || "Cliente",
+                // Removido o envio do e-mail no backend porque no Sandbox do Checkout Pro 
+                // o MP exige que o e-mail pertença a um 'Test User' oficial gerado via API.
+                // Se enviarmos um e-mail aleatório ou o e-mail real do vendedor, a página quebra (422/Ops ocorreu um erro).
+                // Ao não enviar, o próprio Mercado Pago vai pedir o e-mail na tela de checkout.
+              },
+
+              back_urls: {
+                success: `${baseOrigin}/painel?status=approved&collection_status=approved&orderIds=${externalRef}`,
+                pending: `${baseOrigin}/painel?status=pending&collection_status=pending&orderIds=${externalRef}`,
+                failure: `${baseOrigin}/painel?status=failure&collection_status=failure&orderIds=${externalRef}`,
+              },
+              ...(isHttps ? { auto_return: "approved" } : {}),
+              external_reference: externalRef,
+              statement_descriptor: cleanStoreName.slice(0, 16),
+            };
+
+            if (baseOrigin.includes("http") && !baseOrigin.includes("localhost") && !baseOrigin.includes("127.0.0.1")) {
+              prefPayload.notification_url = `${baseOrigin}/api/mercadopago/webhook`;
+            }
+
+            const mpResponse = await fetch("https://api.mercadopago.com/checkout/preferences", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify(prefPayload),
+            });
+
+            const mpData = await mpResponse.json();
+
+            if (!mpResponse.ok) {
+              console.error("[MercadoPago Preferences Error]", mpData);
+              const errDetail = mpData.message || mpData.errors?.[0]?.message || "Erro ao criar preferência de checkout.";
+              return jsonError(`Mercado Pago: ${errDetail}`, mpResponse.status);
+            }
+
+            return jsonResponse({
+              preferenceId: mpData.id,
+              initPoint: mpData.init_point,
+              sandboxInitPoint: mpData.sandbox_init_point,
+              orderIds,
+            });
           }
 
           let brandId = (paymentMethodId || "visa").toLowerCase();

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   CreditCard,
   QrCode,
@@ -9,6 +9,7 @@ import {
   Lock,
   AlertCircle,
   Zap,
+  ExternalLink,
 } from "lucide-react";
 import {
   Dialog,
@@ -20,13 +21,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { brl } from "@/lib/format";
 import { toast } from "sonner";
@@ -74,24 +68,12 @@ export function CheckoutPaymentDialog({
   const [copiedPix, setCopiedPix] = useState(false);
   const [paymentApproved, setPaymentApproved] = useState(false);
 
-  // Estados Cartão
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardHolder, setCardHolder] = useState(customerName || "");
-  const [expiry, setExpiry] = useState("");
-  const [cvv, setCvv] = useState("");
-  const [cpf, setCpf] = useState("");
-  const [installments, setInstallments] = useState("1");
+  // Estados Cartão (Checkout Pro Oficial do Mercado Pago)
+  const [redirectingToMp, setRedirectingToMp] = useState(false);
   const [processingCard, setProcessingCard] = useState(false);
   const [cardError, setCardError] = useState("");
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Limite configurado no carrinho / pedido
-  const cartLimit = Math.max(1, Number(maxInstallments) || 1);
-  // Limite imposto pelo valor mínimo por parcela do Mercado Pago (R$ 5,00 por parcela no Brasil)
-  const mpLimit = Math.max(1, Math.floor(amount / 5.00));
-  // Limite máximo efetivo permitido
-  const effectiveMaxInstallments = Math.max(1, Math.min(cartLimit, mpLimit));
 
   // Resetar estados sempre que o modal abrir
   useEffect(() => {
@@ -101,19 +83,9 @@ export function CheckoutPaymentDialog({
       setCardError("");
       setGeneratingPix(false);
       setProcessingCard(false);
-      // Pré-seleciona a quantidade de parcelas marcada pelo comprador no carrinho, respeitando o limite do MP
-      const defaultInst = Math.max(1, Math.min(cartLimit, effectiveMaxInstallments));
-      setInstallments(String(defaultInst));
+      setRedirectingToMp(false);
     }
-  }, [open, cartLimit, effectiveMaxInstallments]);
-
-  // Se o valor de parcelas selecionado for maior que o permitido, ajusta para o teto
-  useEffect(() => {
-    const current = parseInt(installments, 10) || 1;
-    if (current > effectiveMaxInstallments) {
-      setInstallments(String(effectiveMaxInstallments));
-    }
-  }, [effectiveMaxInstallments, installments]);
+  }, [open]);
 
   // 1. Carregar configuração de pagamento da loja
   useEffect(() => {
@@ -253,7 +225,6 @@ export function CheckoutPaymentDialog({
           payer: {
             email: customerEmail || "cliente@vendas164.com.br",
             firstName: customerName || "Cliente",
-            identification: { type: "CPF", number: cpf.replace(/\D/g, "") },
           },
         }),
       });
@@ -354,93 +325,11 @@ export function CheckoutPaymentDialog({
     }
   }
 
-  // Formatações de Cartão
-  function handleCardNumberChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value.replace(/\D/g, "").slice(0, 16);
-    const formatted = raw.replace(/(\d{4})(?=\d)/g, "$1 ");
-    setCardNumber(formatted);
-  }
-
-  function handleExpiryChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value.replace(/\D/g, "").slice(0, 4);
-    if (raw.length >= 3) {
-      setExpiry(`${raw.slice(0, 2)}/${raw.slice(2)}`);
-    } else {
-      setExpiry(raw);
-    }
-  }
-
-  function handleCpfChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value.replace(/\D/g, "").slice(0, 11);
-    const formatted = raw
-      .replace(/(\d{3})(\d)/, "$1.$2")
-      .replace(/(\d{3})(\d)/, "$1.$2")
-      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-    setCpf(formatted);
-  }
-
-  // Processamento de Cartão Transparente
-  async function handlePayCard(e: React.FormEvent) {
-    e.preventDefault();
+  // Redirecionar para o Checkout Pro Oficial do Mercado Pago
+  async function handleRedirectToMercadoPago() {
+    setRedirectingToMp(true);
     setCardError("");
-
-    if (!paymentConfig?.publicKey) {
-      setCardError("Configuração do Mercado Pago não encontrada.");
-      return;
-    }
-
-    const cleanCard = cardNumber.replace(/\D/g, "");
-    if (cleanCard.length < 13) {
-      setCardError("Número do cartão inválido.");
-      return;
-    }
-
-    const [monthStr, yearStr] = expiry.split("/");
-    if (!monthStr || !yearStr || monthStr.length !== 2 || yearStr.length !== 2) {
-      setCardError("Validade inválida (use MM/AA).");
-      return;
-    }
-
-    const cleanCpf = cpf.replace(/\D/g, "");
-    if (cleanCpf.length !== 11) {
-      setCardError("Informe um CPF válido para emissão da cobrança.");
-      return;
-    }
-
-    setProcessingCard(true);
-
     try {
-      // 1. Tokenizar cartão direto no Mercado Pago (PCI compliance)
-      const tokenRes = await fetch(
-        `https://api.mercadopago.com/v1/card_tokens?public_key=${paymentConfig.publicKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            card_number: cleanCard,
-            cardholder: {
-              name: cardHolder.trim(),
-              identification: {
-                type: "CPF",
-                number: cleanCpf,
-              },
-            },
-            expiration_month: parseInt(monthStr, 10),
-            expiration_year: parseInt(`20${yearStr}`, 10),
-            security_code: cvv.trim(),
-          }),
-        }
-      );
-
-      const tokenData = await tokenRes.json();
-      if (!tokenRes.ok || !tokenData.id) {
-        console.error("Erro tokenização MP:", tokenData);
-        throw new Error(
-          tokenData.message || tokenData.cause?.[0]?.description || "Dados do cartão incorretos."
-        );
-      }
-
-      // 2. Chamar nosso backend para processar o pagamento
       const { data: sessionData } = await supabase.auth.getSession();
       const userToken = sessionData?.session?.access_token;
       const payHeaders: Record<string, string> = { "Content-Type": "application/json" };
@@ -448,72 +337,44 @@ export function CheckoutPaymentDialog({
         payHeaders["Authorization"] = `Bearer ${userToken}`;
       }
 
-      // Detectar bandeira a partir do número do cartão
-      const detectedBrand = cleanCard.startsWith("4")
-        ? "visa"
-        : /^5[1-5]/.test(cleanCard) || /^2[2-7]/.test(cleanCard)
-        ? "master"
-        : /^(34|37)/.test(cleanCard)
-        ? "amex"
-        : /^(4011|4389|4514|5067|6504)/.test(cleanCard)
-        ? "elo"
-        : "visa";
-
-      const payRes = await fetch("/api/mercadopago/create-payment", {
+      const res = await fetch("/api/mercadopago/create-payment", {
         method: "POST",
         headers: payHeaders,
         body: JSON.stringify({
           storeId,
+          storeName,
           orderIds,
           amount,
-          paymentMethodId: tokenData.payment_method?.id || detectedBrand,
-          token: tokenData.id,
-          installments: Math.max(1, Math.min(parseInt(installments, 10) || 1, effectiveMaxInstallments)),
+          paymentMethodId: "checkout_pro",
+          origin: typeof window !== "undefined" ? window.location.origin : undefined,
           payer: {
-            email: customerEmail || "cliente@vendas164.com.br",
-            firstName: cardHolder.split(" ")[0] || "Cliente",
-            lastName: cardHolder.split(" ").slice(1).join(" ") || "Vendas164",
-            identification: { type: "CPF", number: cleanCpf },
+            name: customerName,
+            email: customerEmail,
           },
         }),
       });
 
-      const payData = await payRes.json();
-      if (!payRes.ok) {
-        throw new Error(payData.error || "Não foi possível concluir o pagamento.");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Erro ao conectar com o Mercado Pago.");
       }
 
-      if (payData.status === "approved") {
-        handleSuccess();
-      } else if (payData.status === "in_process") {
-        toast.info("Pagamento em análise pelo Mercado Pago.");
-        onOpenChange(false);
-      } else {
-        throw new Error(
-          payData.statusDetail === "cc_rejected_insufficient_amount"
-            ? "Saldo insuficiente no cartão."
-            : payData.statusDetail === "cc_rejected_bad_filled_security_code"
-            ? "Código de segurança (CVV) inválido."
-            : "Pagamento não autorizado pelo emissor do cartão."
-        );
+      const checkoutUrl = (paymentConfig?.isSandbox && data.sandboxInitPoint)
+        ? data.sandboxInitPoint
+        : (data.initPoint || data.sandboxInitPoint);
+
+      if (!checkoutUrl) {
+        throw new Error("Link do checkout não retornado pelo Mercado Pago.");
       }
+
+      window.location.href = checkoutUrl;
     } catch (err: any) {
-      setCardError(err.message || "Erro ao processar cartão de crédito.");
-      toast.error(err.message || "Erro no pagamento");
-    } finally {
-      setProcessingCard(false);
+      console.error("Erro ao redirecionar para Mercado Pago:", err);
+      setCardError(err.message || "Erro ao abrir Mercado Pago.");
+      toast.error(err.message || "Erro ao abrir Mercado Pago.");
+      setRedirectingToMp(false);
     }
   }
-
-  // Lista de parcelas respeitando estritamente o limite do carrinho e o mínimo de R$ 5,00/parcela do Mercado Pago
-  const installmentOptions = Array.from({ length: effectiveMaxInstallments }, (_, i) => {
-    const num = i + 1;
-    const value = amount / num;
-    return {
-      num,
-      label: `${num}x de ${brl(value)} ${num === 1 ? "(à vista)" : "sem juros"}`,
-    };
-  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -569,6 +430,27 @@ export function CheckoutPaymentDialog({
             </DialogHeader>
 
             <div className="p-6 pt-4">
+              {paymentConfig && !paymentConfig.isConfigured ? (
+                <div className="py-8 text-center space-y-4">
+                  <div className="size-14 rounded-full bg-amber-500/15 text-amber-600 flex items-center justify-center mx-auto">
+                    <AlertCircle className="size-7" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-semibold text-foreground">Pagamento online indisponível</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed max-w-xs mx-auto">
+                      A loja <strong>{storeName}</strong> ainda não configurou o recebimento automático via Mercado Pago.
+                      Entre em contato com o vendedor para combinar outra forma de pagamento.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="text-xs"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    Fechar
+                  </Button>
+                </div>
+              ) : (
               <Tabs
                 value={activeTab}
                 onValueChange={(val) => setActiveTab(val as any)}
@@ -664,127 +546,92 @@ export function CheckoutPaymentDialog({
                   )}
                 </TabsContent>
 
-                {/* ABA CARTÃO DE CRÉDITO */}
+                {/* ABA CARTÃO DE CRÉDITO (CHECKOUT PRO OFICIAL MERCADO PAGO) */}
                 <TabsContent value="card" className="space-y-4 mt-0">
-                  <form onSubmit={handlePayCard} className="space-y-3">
-                    {cardError && (
-                      <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive flex items-center gap-2">
-                        <AlertCircle className="size-4 shrink-0" />
-                        <span>{cardError}</span>
+                  {cardError && (
+                    <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive flex items-center gap-2">
+                      <AlertCircle className="size-4 shrink-0" />
+                      <span>{cardError}</span>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-3.5">
+                    <div className="flex items-center justify-between pb-2 border-b border-border/40">
+                      <div className="flex items-center gap-2">
+                        <div className="size-7 rounded-lg bg-[#009ee3]/15 flex items-center justify-center text-[#009ee3]">
+                          <CreditCard className="size-4" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-foreground block">Mercado Pago</span>
+                          <span className="text-[10px] text-muted-foreground">Checkout Oficial e Seguro</span>
+                        </div>
                       </div>
-                    )}
-
-                    <div className="space-y-1">
-                      <Label className="text-xs">Número do Cartão</Label>
-                      <div className="relative">
-                        <Input
-                          placeholder="0000 0000 0000 0000"
-                          value={cardNumber}
-                          onChange={handleCardNumberChange}
-                          required
-                          className="pr-10 text-sm font-mono"
-                        />
-                        <CreditCard className="size-4 text-muted-foreground absolute right-3 top-3 pointer-events-none" />
-                      </div>
+                      <span className="text-xs font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                        🛡️ 100% Protegido
+                      </span>
                     </div>
 
-                    <div className="space-y-1">
-                      <Label className="text-xs">Nome impresso no Cartão</Label>
-                      <Input
-                        placeholder="NOME COMO NO CARTÃO"
-                        value={cardHolder}
-                        onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
-                        required
-                        className="text-sm uppercase"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Validade</Label>
-                        <Input
-                          placeholder="MM/AA"
-                          value={expiry}
-                          onChange={handleExpiryChange}
-                          required
-                          className="text-sm font-mono text-center"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">CVV</Label>
-                        <Input
-                          placeholder="123"
-                          value={cvv}
-                          maxLength={4}
-                          onChange={(e) => setCvv(e.target.value.replace(/\D/g, ""))}
-                          required
-                          className="text-sm font-mono text-center"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs">CPF do Titular</Label>
-                      <Input
-                        placeholder="000.000.000-00"
-                        value={cpf}
-                        onChange={handleCpfChange}
-                        required
-                        className="text-sm font-mono"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs">Parcelamento</Label>
-                      <Select value={installments} onValueChange={setInstallments}>
-                        <SelectTrigger className="text-xs">
-                          <SelectValue placeholder="Selecione as parcelas" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {installmentOptions.map((opt) => (
-                            <SelectItem key={opt.num} value={opt.num.toString()} className="text-xs">
-                              {opt.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <Button
-                      type="submit"
-                      disabled={processingCard}
-                      className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold mt-2 h-10 gap-2"
-                    >
-                      {processingCard ? (
-                        <>
-                          <Loader2 className="size-4 animate-spin" /> Processando Pagamento...
-                        </>
-                      ) : (
-                        <>
-                          <Lock className="size-4" /> Pagar {brl(amount)}
-                        </>
-                      )}
-                    </Button>
-
-                    {paymentConfig?.isSandbox && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={processingCard}
-                        onClick={handleSimulateCardApproval}
-                        className="w-full border-dashed border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 text-xs font-semibold gap-1.5 h-8 mt-1"
-                      >
-                        <Zap className="size-3.5" /> Simular Pagamento do Cartão (Modo Teste)
-                      </Button>
-                    )}
-
-                    <p className="text-[11px] text-center text-muted-foreground flex items-center justify-center gap-1">
-                      <Lock className="size-3 text-primary" /> Pagamento 100% criptografado e seguro
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Você será redirecionado para a tela oficial do <strong>Mercado Pago</strong> para pagar com cartão de crédito com as condições, parcelas e taxas configuradas pela loja <strong className="text-foreground">{storeName}</strong>.
                     </p>
-                  </form>
+
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground pt-1">
+                      <div className="flex items-center gap-1.5 p-2 rounded-lg bg-background/60 border border-border/40">
+                        <span className="text-emerald-500 font-bold">✓</span> {maxInstallments > 1 ? `Até ${maxInstallments}x no cartão` : "Parcelamento da loja"}
+                      </div>
+                      <div className="flex items-center gap-1.5 p-2 rounded-lg bg-background/60 border border-border/40">
+                        <span className="text-emerald-500 font-bold">✓</span> Cartões salvos no app
+                      </div>
+                      <div className="flex items-center gap-1.5 p-2 rounded-lg bg-background/60 border border-border/40">
+                        <span className="text-emerald-500 font-bold">✓</span> Todas as bandeiras
+                      </div>
+                      <div className="flex items-center gap-1.5 p-2 rounded-lg bg-background/60 border border-border/40">
+                        <span className="text-emerald-500 font-bold">✓</span> Confirmação imediata
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center bg-background/80 p-3 rounded-lg border border-border/60">
+                      <span className="text-xs text-muted-foreground">Total a pagar:</span>
+                      <span className="text-base font-bold text-foreground">{brl(amount)}</span>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    disabled={redirectingToMp}
+                    onClick={handleRedirectToMercadoPago}
+                    className="w-full bg-[#009ee3] hover:bg-[#0081ba] text-white font-bold h-11 gap-2 text-sm shadow-md"
+                  >
+                    {redirectingToMp ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" /> Conectando ao Mercado Pago...
+                      </>
+                    ) : (
+                      <>
+                        <ExternalLink className="size-4" /> Pagar com Cartão no Mercado Pago
+                      </>
+                    )}
+                  </Button>
+
+                  {paymentConfig?.isSandbox && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={processingCard || redirectingToMp}
+                      onClick={handleSimulateCardApproval}
+                      className="w-full border-dashed border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 text-xs font-semibold gap-1.5 h-8 mt-1"
+                    >
+                      <Zap className="size-3.5" /> Simular Pagamento do Cartão (Modo Teste)
+                    </Button>
+                  )}
+
+                  <p className="text-[11px] text-center text-muted-foreground flex items-center justify-center gap-1">
+                    <Lock className="size-3 text-primary" /> Transação processada em ambiente seguro do Mercado Pago
+                  </p>
                 </TabsContent>
               </Tabs>
+              )}
             </div>
           </>
         )}

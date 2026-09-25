@@ -2,9 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
-const DEFAULT_TEST_STORE_ID = "5cdfaeec-48d1-4a0d-825d-d4b25785ff13";
-const DEFAULT_TEST_PUBLIC_KEY = "APP_USR-5fe1ca74-2c4a-4f92-832e-d1060745a302";
-
 export const Route = createFileRoute("/api/mercadopago/public-config")({
   server: {
     handlers: {
@@ -50,19 +47,7 @@ export const Route = createFileRoute("/api/mercadopago/public-config")({
             );
           }
 
-          // Fallback para LOJA TESTE e Zero51 Garage durante testes/desenvolvimento
-          const ZERO51_STORE_ID = "b2d3e709-3d0c-4dc1-be97-6c92b961f210";
-          if (storeId === DEFAULT_TEST_STORE_ID || storeId === ZERO51_STORE_ID || !connection) {
-            return new Response(
-              JSON.stringify({
-                isConfigured: true,
-                publicKey: DEFAULT_TEST_PUBLIC_KEY,
-                isSandbox: true,
-              }),
-              { status: 200, headers: { "Content-Type": "application/json" } }
-            );
-          }
-
+          // Se a loja não configurou credenciais, retornar não configurado
           return new Response(
             JSON.stringify({
               isConfigured: false,
