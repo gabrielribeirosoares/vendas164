@@ -1,7 +1,6 @@
 const STORAGE_SIGNED_MARKER = "/storage/v1/object/sign/store-assets/";
 const STORAGE_PUBLIC_MARKER = "/storage/v1/object/public/store-assets/";
 const OPTIMIZED_PRODUCT_FOLDER = "/optimized-products/";
-const LOJA_TESTE_ID = "5cdfaeec-48d1-4a0d-825d-d4b25785ff13";
 
 export function getPublicStorageImageUrl(value: string | null | undefined): string {
   if (!value) return "";

@@ -1055,7 +1055,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
       {/* DIALOG DE DETALHES DO ACERVO DO CLIENTE */}
       <Dialog open={!!selectedClient} onOpenChange={(open) => !open && setSelectedClient(null)}>
         <DialogContent className="w-[98vw] sm:w-[95vw] max-w-4xl max-h-[92vh] flex flex-col overflow-hidden p-3.5 sm:p-6 gap-3 sm:gap-4">
-          <DialogHeader className="shrink-0 space-y-1">
+          <DialogHeader className="shrink-0 space-y-1 pr-10 sm:pr-14">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <DialogTitle className="text-base sm:text-xl font-bold flex items-center gap-2">

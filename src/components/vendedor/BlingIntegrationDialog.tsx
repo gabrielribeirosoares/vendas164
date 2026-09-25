@@ -214,7 +214,7 @@ export function BlingIntegrationDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[96vw] max-w-2xl max-h-[90vh] flex flex-col p-4 sm:p-6 gap-4 overflow-hidden">
-        <DialogHeader className="shrink-0 space-y-1">
+        <DialogHeader className="shrink-0 space-y-1 pr-10 sm:pr-12">
           <div className="flex items-center justify-between gap-2">
             <DialogTitle className="text-lg font-bold flex items-center gap-2">
               <Sparkles className="size-5 text-amber-500 fill-amber-500" />

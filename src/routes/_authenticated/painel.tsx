@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Car, CheckCircle2, CheckSquare, Copy, ExternalLink, Layers, Loader2, MessageCircle, Package, QrCode, Search, Sparkles, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
+import { BookmarkCheck, Car, CheckCircle2, CheckSquare, Copy, CreditCard, ExternalLink, Layers, Loader2, MessageCircle, Package, QrCode, Search, Sparkles, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { getStoreBrandImageUrl } from "@/lib/imageUrls";
@@ -12,6 +12,7 @@ import { ProductThumbnail } from "@/components/ProductThumbnail";
 import { PhoneInput } from "@/components/PhoneInput";
 import { Countdown } from "@/components/Countdown";
 import { PixPaymentDialog, type PixItemDetail } from "@/components/PixPaymentDialog";
+import { CheckoutPaymentDialog } from "@/components/CheckoutPaymentDialog";
 import { DeliveryBadge, PaymentBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,6 +63,7 @@ function CustomerDashboard() {
 
 function CustomerDashboardContent() {
   const { user, loading: sessionLoading } = useSession();
+  const queryClient = useQueryClient();
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [phonePromptOpen, setPhonePromptOpen] = useState(false);
   const [garageSearchQuery, setGarageSearchQuery] = useState("");
@@ -76,6 +78,14 @@ function CustomerDashboardContent() {
     title?: string;
     description?: string;
     items?: PixItemDetail[];
+  } | null>(null);
+  const [checkoutModalData, setCheckoutModalData] = useState<{
+    open: boolean;
+    storeId: string;
+    storeName: string;
+    orderIds: string[];
+    amount: number;
+    maxInstallments?: number;
   } | null>(null);
 
   // Redirect to main domain if accessed from a store subdomain
@@ -342,7 +352,7 @@ function CustomerDashboardContent() {
     };
   };
 
-  const handleToggleOrderSelection = (order: any, qty: number = 1) => {
+  const handleToggleOrderSelection = (order: any, _qty: number = 1) => {
     const isSelected = selectedOrderIds.includes(order.id);
     if (isSelected) {
       setSelectedOrderIds(prev => prev.filter(id => id !== order.id));
@@ -439,21 +449,19 @@ function CustomerDashboardContent() {
 
   const handlePaySelectedOrders = () => {
     if (!selectedOrdersData) return;
-    if (!selectedOrdersData.pixKey) {
-      toast.error("Esta loja ainda não configurou uma chave PIX.");
-      return;
-    }
 
-    setPixModalData({
+    const selectedList = pendingOrders.filter(o => selectedOrderIds.includes(o.id));
+    const maxInstallments = selectedList.length > 0
+      ? Math.min(...selectedList.map(o => Number(o.installment_count || (o.products as any)?.max_installments || 1)))
+      : 1;
+
+    setCheckoutModalData({
       open: true,
-      pixKey: selectedOrdersData.pixKey,
-      amount: selectedOrdersData.totalAmount,
+      storeId: selectedOrdersData.storeId,
       storeName: selectedOrdersData.storeName,
-      storePhone: selectedOrdersData.storePhone,
-      orderId: selectedOrderIds.join(","),
-      title: `Pagamento Consolidado via PIX (${selectedOrdersData.count} reservas)`,
-      description: `Efetue o pagamento conjunto de ${brl(selectedOrdersData.totalAmount)} referente a ${selectedOrdersData.count} reservas da loja ${selectedOrdersData.storeName}.`,
-      items: selectedOrdersData.items,
+      orderIds: selectedOrderIds,
+      amount: selectedOrdersData.totalAmount,
+      maxInstallments,
     });
   };
 
@@ -728,8 +736,8 @@ function CustomerDashboardContent() {
                                 const paidInsts = installments.filter((i: any) => i.status === "paid");
                                 const totalPaidInsts = paidInsts.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
                                 const signalPaid = (o.payment_status === "sinal_pago" || o.payment_status === "quitado") ? Number(o.down_payment || 0) * qty : 0;
-                                const totalPaid = totalPaidInsts + signalPaid;
                                 const totalOrder = Number(o.total_price) * qty;
+                                const totalPaid = o.payment_status === "quitado" ? totalOrder : Math.min(totalOrder, totalPaidInsts + signalPaid);
                                 const progress = totalOrder > 0 ? Math.min(100, Math.round((totalPaid / totalOrder) * 100)) : 0;
                                 
                                 return (
@@ -868,31 +876,17 @@ function CustomerDashboardContent() {
                             size="sm"
                             className="h-7 px-3 text-[11px] font-semibold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
                             onClick={() => {
-                              const info = getOrderPaymentInfo(o, qty);
-                              setPixModalData({
+                              setCheckoutModalData({
                                 open: true,
-                                pixKey,
-                                amount: pixAmount > 0 ? pixAmount : undefined,
-                                storeName: o.stores?.name,
-                                storePhone: o.stores?.whatsapp_number,
-                                orderId: o.id,
-                                title: isAguardando ? "Pagamento do Sinal via PIX" : "Pagamento do Pedido via PIX",
-                                description: isAguardando
-                                  ? `Pague o sinal de ${brl(pixAmount)} para garantir a reserva do seu modelo com o lojista.`
-                                  : `Transfira o valor restante de ${brl(pixAmount)} para liberar o envio da sua miniatura.`,
-                                items: [
-                                  {
-                                    orderId: o.id,
-                                    productName: info.productName,
-                                    quantity: qty,
-                                    amount: pixAmount,
-                                    type: isAguardando ? "sinal" : "saldo",
-                                  },
-                                ],
+                                storeId: o.store_id || (o.stores as any)?.id || "",
+                                storeName: o.stores?.name || "Loja",
+                                orderIds: [o.id],
+                                amount: pixAmount,
+                                maxInstallments: Number(o.installment_count || (o.products as any)?.max_installments || 1),
                               });
                             }}
                           >
-                            <QrCode className="size-3.5" /> Pagar com PIX
+                            <CreditCard className="size-3.5" /> Pagar com PIX ou Cartão
                           </Button>
                           <Button
                             variant="secondary"
@@ -1234,6 +1228,25 @@ function CustomerDashboardContent() {
           title={pixModalData.title}
           description={pixModalData.description}
           items={pixModalData.items}
+        />
+      )}
+
+      {checkoutModalData && (
+        <CheckoutPaymentDialog
+          open={checkoutModalData.open}
+          onOpenChange={(open) => {
+            if (!open) setCheckoutModalData(null);
+          }}
+          storeId={checkoutModalData.storeId}
+          storeName={checkoutModalData.storeName}
+          orderIds={checkoutModalData.orderIds}
+          amount={checkoutModalData.amount}
+          maxInstallments={checkoutModalData.maxInstallments}
+          customerEmail={user?.email || ""}
+          customerName={profile?.name || ""}
+          onPaymentSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["my-orders"] });
+          }}
         />
       )}
 

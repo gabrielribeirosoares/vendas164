@@ -89,21 +89,20 @@ export function OrderInstallmentsDialog({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("down_payment, payment_status, stores(default_installment_due_day), products(*)")
+        .select("down_payment, signal_amount, payment_status, stores(default_installment_due_day), products(*)")
         .eq("id", orderId)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      return data as any;
     }
   });
 
-  const expectedSignal = getProductSignalAmount(orderMeta?.products, qty).amount;
-  const unitSignal = orderMeta?.down_payment != null ? Number(orderMeta.down_payment) : Number(downPayment || 0);
-  const actualSignal = unitSignal * qty;
-  const signalToDeduct = Math.max(expectedSignal, actualSignal);
+  const unitExpectedSignal = getProductSignalAmount(orderMeta?.products, 1).amount;
+  const isSemSinal = orderMeta?.payment_status === "sem_sinal" || orderMeta?.payment_status === "pagar_na_chegada";
+  const isAguardandoSinal = orderMeta?.payment_status === "aguardando_sinal";
 
   const { data: installments, isLoading } = useQuery({
-    queryKey: ["order_installments", orderId, signalToDeduct, targetIds.join(",")],
+    queryKey: ["order_installments", orderId, targetIds.join(",")],
     enabled: open,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -115,25 +114,46 @@ export function OrderInstallmentsDialog({
       if (error) throw error;
       let list = data ?? [];
 
-      // Se houver amortizações pagas ou o pedido for quitado, remove parcelas pendentes legadas/fantasmas
-      const paidItems = list.filter((i) => i.status === "paid");
-      const paidSum = actualSignal + paidItems.reduce((acc, curr) => acc + Number(curr.amount), 0);
-      const isOrderFullyPaid = paidSum >= (totalPrice - 0.01) || orderMeta?.payment_status === "quitado";
+      const listSum = list.reduce((acc, c) => acc + Number(c.amount), 0);
+      const maxSig = listSum > 0 ? Math.max(0, totalPrice - listSum) : totalPrice;
+      let effUnitSig = 0;
+      if (!isSemSinal && !isAguardandoSinal) {
+        if (orderMeta?.signal_amount != null && Number(orderMeta.signal_amount) > 0) {
+          effUnitSig = Math.min(Number(orderMeta.signal_amount), maxSig);
+        } else if (unitExpectedSignal > 0) {
+          effUnitSig = Math.min(unitExpectedSignal, maxSig);
+        } else {
+          effUnitSig = Math.min(Number(orderMeta?.down_payment ?? downPayment ?? 0), maxSig);
+        }
+      }
+      const effActualSig = effUnitSig * qty;
 
-      if (paidItems.length > 0 || isOrderFullyPaid) {
-        const redundantPending = list.filter((i) => i.status === "pending");
-        if (redundantPending.length > 0) {
-          if (isOrderFullyPaid) {
-            await supabase.from("order_installments").delete().in("id", redundantPending.map(p => p.id));
-            list = paidItems;
-          }
+      const paidItems = list.filter((i) => i.status === "paid");
+      const paidSum = effActualSig + paidItems.reduce((acc, curr) => acc + Number(curr.amount), 0);
+      const isOrderFullyPaid = orderMeta?.payment_status === "quitado" || paidSum >= (totalPrice - 0.01);
+
+      // Se o pedido estiver quitado, todas as parcelas pendentes devem ser confirmadas como pagas
+      if (isOrderFullyPaid) {
+        const pendingItems = list.filter((i) => i.status === "pending");
+        if (pendingItems.length > 0) {
+          const nowStr = new Date().toISOString();
+          await supabase
+            .from("order_installments")
+            .update({ status: "paid", paid_at: nowStr })
+            .in("id", pendingItems.map((p) => p.id));
+          list = list.map((item) =>
+            item.status === "pending"
+              ? { ...item, status: "paid", paid_at: nowStr }
+              : item
+          );
         }
       }
 
       // Se existir 1 única parcela pendente cujo valor é igual ao valor total do produto (sem o sinal deduzido),
       // ajustamos automaticamente para abater o sinal
-      if (list.length === 1 && list[0].status === "pending" && signalToDeduct > 0 && Math.abs(Number(list[0].amount) - totalPrice) < 0.01) {
-        const adjustedAmount = Math.max(0, totalPrice - signalToDeduct);
+      const sigToDeduct = Math.max(unitExpectedSignal * qty, effActualSig);
+      if (list.length === 1 && list[0].status === "pending" && sigToDeduct > 0 && Math.abs(Number(list[0].amount) - totalPrice) < 0.01) {
+        const adjustedAmount = Math.max(0, totalPrice - sigToDeduct);
         await supabase.from("order_installments").update({ amount: adjustedAmount }).eq("id", list[0].id);
         list[0].amount = adjustedAmount;
       }
@@ -143,14 +163,40 @@ export function OrderInstallmentsDialog({
   });
 
   const currentList = installments || [];
+  const allInstallmentsSum = currentList.reduce((acc, curr) => acc + Number(curr.amount), 0);
+  
+  // Se existem parcelas cadastradas, o sinal pago NUNCA pode ultrapassar (totalPrice - soma_parcelas)
+  // Exemplo: total R$ 380, parcelas somam R$ 355 -> sinal máximo é R$ 25
+  const maxPossibleSignal = allInstallmentsSum > 0 
+    ? Math.max(0, totalPrice - allInstallmentsSum)
+    : totalPrice;
+
+  let unitSignal = 0;
+  if (!isSemSinal && !isAguardandoSinal) {
+    if (orderMeta?.signal_amount != null && Number(orderMeta.signal_amount) > 0) {
+      unitSignal = Math.min(Number(orderMeta.signal_amount), maxPossibleSignal);
+    } else if (unitExpectedSignal > 0) {
+      unitSignal = Math.min(unitExpectedSignal, maxPossibleSignal);
+    } else {
+      const rawDown = Number(orderMeta?.down_payment ?? downPayment ?? 0);
+      unitSignal = Math.min(rawDown, maxPossibleSignal);
+    }
+  }
+
+  const actualSignal = unitSignal * qty;
+  const signalToDeduct = Math.max(unitExpectedSignal * qty, actualSignal);
+
   const totalPaidInsts = currentList
     .filter((i) => i.status === "paid")
     .reduce((acc, curr) => acc + Number(curr.amount), 0);
-  const totalPaid = actualSignal + totalPaidInsts;
-  const remainingBalance = Math.max(0, totalPrice - totalPaid);
-  const excessAmount = Math.max(0, totalPaid - totalPrice);
-  const progressPercent = totalPrice > 0 ? Math.min(100, Math.round((totalPaid / totalPrice) * 100)) : 0;
-  const isFullyPaid = remainingBalance <= 0.001;
+
+  const rawTotalPaid = actualSignal + totalPaidInsts;
+  const isOrderQuitado = orderMeta?.payment_status === "quitado" || rawTotalPaid >= (totalPrice - 0.01);
+  const totalPaid = isOrderQuitado ? Math.max(totalPrice, rawTotalPaid) : rawTotalPaid;
+  const remainingBalance = isOrderQuitado ? 0 : Math.max(0, totalPrice - totalPaid);
+  const excessAmount = Math.max(0, rawTotalPaid - totalPrice);
+  const progressPercent = totalPrice > 0 ? (isOrderQuitado ? 100 : Math.min(100, Math.round((totalPaid / totalPrice) * 100))) : 0;
+  const isFullyPaid = isOrderQuitado || remainingBalance <= 0.009;
 
   const parsedInputVal = parseFloat(newPaymentAmount.replace(",", "."));
   const isAmountOverBalance = !isNaN(parsedInputVal) && parsedInputVal > (remainingBalance + 0.009);
@@ -169,10 +215,9 @@ export function OrderInstallmentsDialog({
 
       // Compatibilidade temporária enquanto a migração é aplicada no ambiente.
       const orderData = orderMeta;
-      const expectedSig = getProductSignalAmount(orderData?.products, qty).amount;
-      const unitSig = orderData?.down_payment != null ? Number(orderData.down_payment) : Number(downPayment || 0);
-      const actualSig = unitSig * qty;
-      const sigToDeduct = Math.max(expectedSig, actualSig);
+      const expectedSig = getProductSignalAmount(orderData?.products, 1).amount * qty;
+      const isSemSig = orderData?.payment_status === "sem_sinal" || orderData?.payment_status === "pagar_na_chegada";
+      const sigToDeduct = isSemSig ? 0 : (orderData?.signal_amount != null ? Number(orderData.signal_amount) * qty : expectedSig);
       
       const amountToParcel = Math.max(0, totalPrice - sigToDeduct);
       const amountPerInstallment = amountToParcel / count;
@@ -360,7 +405,7 @@ export function OrderInstallmentsDialog({
       </DialogTrigger>
 
       <DialogContent className="w-[96vw] sm:max-w-[650px] max-h-[92vh] flex flex-col overflow-hidden p-3.5 sm:p-6 gap-3 sm:gap-4">
-        <DialogHeader className="shrink-0 space-y-1">
+        <DialogHeader className="shrink-0 space-y-1 pr-10 sm:pr-12">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-lg font-bold flex items-center gap-2">
               <Wallet className="size-5 text-primary" />
@@ -419,7 +464,7 @@ export function OrderInstallmentsDialog({
                   </div>
                 </div>
 
-                {excessAmount > 0.01 && (
+                {!isOrderQuitado && excessAmount > 0.05 && (
                   <div className="bg-amber-500/15 border border-amber-500/30 p-2 rounded-lg text-xs text-amber-700 dark:text-amber-300 flex items-center justify-between">
                     <span>⚠️ <strong>Atenção:</strong> O valor total pago ({brl(totalPaid)}) ultrapassou o total do pedido ({brl(totalPrice)}).</span>
                     <span className="font-bold">Excedente: {brl(excessAmount)}</span>

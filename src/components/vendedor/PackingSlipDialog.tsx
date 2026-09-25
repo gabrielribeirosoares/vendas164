@@ -3,22 +3,16 @@ import {
   Printer,
   Package,
   CheckCircle2,
-  AlertCircle,
   Truck,
   Search,
-  Filter,
   Download,
-  Share2,
   CheckSquare,
   Square,
-  Store,
   Phone,
-  Calendar,
 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
@@ -192,7 +186,7 @@ export function PackingSlipDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl p-0 max-h-[92vh] flex flex-col gap-0 overflow-hidden bg-background">
         {/* CABEÇALHO (Oculto na impressão regular e substituído por cabeçalho formal) */}
-        <div className="p-5 border-b border-border/60 bg-muted/20 flex flex-wrap items-center justify-between gap-3 no-print">
+        <div className="p-4 sm:p-5 pr-12 sm:pr-16 border-b border-border/60 bg-muted/20 flex flex-wrap items-center justify-between gap-3 no-print">
           <div>
             <div className="flex items-center gap-2">
               <div className="flex size-9 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
