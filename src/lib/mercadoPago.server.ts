@@ -39,24 +39,32 @@ export function parseOrderIds(value: unknown): string[] {
   return ids.sort();
 }
 
-export function paymentRequestKey(storeId: string, ids: string[], cents: number, method: string) {
-  return createHash("sha256").update(JSON.stringify([storeId, ids, cents, method])).digest("hex");
+export function paymentAttemptReference(attemptId: string) {
+  return `v164:${attemptId}`;
+}
+
+export function paymentAttemptKey(storeId: string, userId: string, orderIds: string[], amountCents: number, method: string) {
+  return createHash("sha256").update(JSON.stringify([storeId, userId, orderIds, amountCents, method])).digest("hex");
+}
+
+export function parsePaymentAttemptReference(value: unknown) {
+  const match = String(value || "").match(/^v164:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+  if (!match) throw new Error("Referência de pagamento inválida.");
+  return match[1].toLowerCase();
 }
 
 export async function confirmGatewayPayment(
   admin: ReturnType<typeof gatewayAdmin>,
-  storeId: string,
   payment: { id: string; status: string; external_reference: string; transaction_amount: number; payment_method_id?: string },
 ) {
   if (payment.status !== "approved") return false;
-  const ids = parseOrderIds(payment.external_reference?.split(","));
+  const attemptId = parsePaymentAttemptReference(payment.external_reference);
   const amount = Number(payment.transaction_amount);
   if (!Number.isFinite(amount) || amount <= 0 || Math.abs(Math.round(amount * 100) - amount * 100) > 0.000001) {
     throw new Error("Valor do pagamento inválido.");
   }
-  const { data, error } = await admin.rpc("confirm_verified_gateway_payment" as never, {
-    p_store_id: storeId,
-    p_order_ids: ids,
+  const { data, error } = await admin.rpc("confirm_gateway_payment_attempt" as never, {
+    p_attempt_id: attemptId,
     p_amount: amount,
     p_payment_method: payment.payment_method_id || "mercadopago",
     p_gateway_id: payment.id,

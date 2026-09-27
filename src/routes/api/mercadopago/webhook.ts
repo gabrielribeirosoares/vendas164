@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { confirmGatewayPayment, gatewayAdmin } from "@/lib/mercadoPago.server";
+import { confirmGatewayPayment, gatewayAdmin, parsePaymentAttemptReference } from "@/lib/mercadoPago.server";
 
 export const Route = createFileRoute("/api/mercadopago/webhook")({
   server: {
@@ -56,7 +56,15 @@ export const Route = createFileRoute("/api/mercadopago/webhook")({
             payment_method_id: mp.payment_method_id,
           };
           if (payment.status === "approved") {
-            await confirmGatewayPayment(admin, storeId, payment);
+            await confirmGatewayPayment(admin, payment);
+          } else {
+            const attemptId = parsePaymentAttemptReference(payment.external_reference);
+            const terminalStatuses = new Set(["rejected", "cancelled", "refunded", "charged_back"]);
+            await admin.from("gateway_payment_attempts" as never).update({
+              status: terminalStatuses.has(payment.status) ? "failed" : "pending",
+              provider_resource_id: String(mp.id),
+              updated_at: new Date().toISOString(),
+            } as never).eq("id", attemptId).eq("store_id", storeId).neq("status", "approved");
           }
           return Response.json({ received: true });
         } catch (error) {

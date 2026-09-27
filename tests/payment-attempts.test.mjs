@@ -1,0 +1,93 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { PGlite } from "@electric-sql/pglite";
+
+const customer = "10000000-0000-4000-8000-000000000001";
+const store = "20000000-0000-4000-8000-000000000001";
+const signalOrder = "30000000-0000-4000-8000-000000000001";
+const fullOrder = "30000000-0000-4000-8000-000000000002";
+
+test("payment attempts bind amount, customer, store and gateway confirmation", async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+      CREATE SCHEMA auth;
+      CREATE TABLE auth.users(id uuid PRIMARY KEY);
+      CREATE TABLE public.stores(id uuid PRIMARY KEY);
+      CREATE TABLE public.orders(
+        id uuid PRIMARY KEY, store_id uuid NOT NULL, user_id uuid NOT NULL,
+        total_price numeric NOT NULL, down_payment numeric, payment_status text NOT NULL,
+        payment_method text, gateway_payment_id text, gateway_status text
+      );
+      CREATE TABLE public.order_installments(id uuid PRIMARY KEY,order_id uuid,status text,paid_at timestamptz);
+      INSERT INTO auth.users VALUES ('${customer}');
+      INSERT INTO public.stores VALUES ('${store}');
+      INSERT INTO public.orders VALUES
+        ('${signalOrder}','${store}','${customer}',150,25,'aguardando_sinal',null,null,null),
+        ('${fullOrder}','${store}','${customer}',100,0,'pendente',null,null,null);
+      INSERT INTO public.order_installments VALUES
+        ('40000000-0000-4000-8000-000000000001','${signalOrder}','pending',null),
+        ('40000000-0000-4000-8000-000000000002','${fullOrder}','pending',null);`);
+    const migration = await readFile(
+      new URL("../supabase/migrations/20260927200746_payment_attempts.sql", import.meta.url),
+      "utf8",
+    );
+    await db.exec(migration);
+
+    const privileges = (await db.query(`SELECT
+      has_table_privilege('anon','public.gateway_payment_attempts','SELECT') AS anon_read,
+      has_function_privilege('authenticated','public.confirm_gateway_payment_attempt(uuid,numeric,text,text)','EXECUTE') AS user_execute,
+      has_function_privilege('service_role','public.confirm_gateway_payment_attempt(uuid,numeric,text,text)','EXECUTE') AS service_execute`)).rows[0];
+    assert.equal(privileges.anon_read, false);
+    assert.equal(privileges.user_execute, false);
+    assert.equal(privileges.service_execute, true);
+
+    const attempt = "50000000-0000-4000-8000-000000000001";
+    await db.query(`INSERT INTO public.gateway_payment_attempts
+      (id,store_id,user_id,order_ids,request_key,amount,payment_method,max_installments,description,status,expires_at)
+      VALUES($1,$2,$3,$4::uuid[],repeat('a',64),25,'pix',1,'Sinal Mini GT','pending',now()+interval '30 minutes')`,
+      [attempt, store, customer, [signalOrder]]);
+    await assert.rejects(
+      db.query("SELECT public.confirm_gateway_payment_attempt($1,1,'pix','pay-1')", [attempt]),
+      /gateway_attempt_mismatch/,
+    );
+    const result = (await db.query(
+      "SELECT public.confirm_gateway_payment_attempt($1,25,'pix','pay-1') AS result",
+      [attempt],
+    )).rows[0].result;
+    assert.equal(result.updated_count, 1);
+    assert.equal((await db.query("SELECT payment_status FROM public.orders WHERE id=$1", [signalOrder])).rows[0].payment_status, "sinal_pago");
+    assert.equal((await db.query("SELECT status FROM public.order_installments WHERE order_id=$1", [signalOrder])).rows[0].status, "pending");
+    assert.equal((await db.query(
+      "SELECT public.confirm_gateway_payment_attempt($1,25,'pix','pay-1') AS result",
+      [attempt],
+    )).rows[0].result.already_confirmed, true);
+
+    const secondAttempt = "50000000-0000-4000-8000-000000000002";
+    await db.query(`INSERT INTO public.gateway_payment_attempts
+      (id,store_id,user_id,order_ids,request_key,amount,payment_method,max_installments,description,status,expires_at)
+      VALUES($1,$2,$3,$4::uuid[],repeat('b',64),100,'checkout_pro',3,'Pedido Kaido House','expired',now()-interval '1 minute')`,
+      [secondAttempt, store, customer, [fullOrder]]);
+    await assert.rejects(
+      db.query("SELECT public.confirm_gateway_payment_attempt($1,100,'card','pay-1')", [secondAttempt]),
+      /gateway_payment_reused/,
+    );
+    assert.equal((await db.query(
+      "SELECT public.confirm_gateway_payment_attempt($1,100,'card','pay-2') AS result",
+      [secondAttempt],
+    )).rows[0].result.updated_count, 1);
+    assert.equal((await db.query("SELECT payment_status FROM public.orders WHERE id=$1", [fullOrder])).rows[0].payment_status, "quitado");
+    assert.equal((await db.query("SELECT status FROM public.order_installments WHERE order_id=$1", [fullOrder])).rows[0].status, "paid");
+  } finally {
+    await db.close();
+  }
+});
+
+test("Checkout Pro uses the registered attempt, description and installment limit", async () => {
+  const source = await readFile(new URL("../src/routes/api/mercadopago/create-payment.ts", import.meta.url), "utf8");
+  assert.match(source, /external_reference: externalReference/);
+  assert.match(source, /payment_methods: \{ installments: maxInstallments \}/);
+  assert.match(source, /title: description/);
+  assert.doesNotMatch(source, /external_reference: orderIds\.join/);
+});
