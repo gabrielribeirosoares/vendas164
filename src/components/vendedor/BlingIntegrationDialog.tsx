@@ -6,10 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Package, RefreshCw, Download, Search, Sparkles, Key, ExternalLink, Settings, Unplug } from "lucide-react";
+import { Package, RefreshCw, Download, Search, Sparkles, Key, ExternalLink, Settings, Unplug, Upload, CheckCircle2, ImageOff } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, slugify } from "@/lib/format";
+import { uploadImage } from "@/lib/upload";
+import { getImageUploadErrorMessage } from "@/lib/imageOptimization";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
@@ -22,6 +24,15 @@ import {
 } from "@/lib/bling";
 
 interface BlingProduct extends BlingProductItem {}
+
+type ImageQualityIssue = {
+  productId: string;
+  blingProductId: number;
+  name: string;
+  thumbnailUrl: string | null;
+  replacementUrl: string;
+  resolved: boolean;
+};
 
 export function BlingIntegrationDialog({
   storeId,
@@ -43,6 +54,8 @@ export function BlingIntegrationDialog({
   const [searchFilter, setSearchFilter] = useState("");
   const [showConfig, setShowConfig] = useState(false);
   const [authenticating, setAuthenticating] = useState(false);
+  const [imageQualityIssues, setImageQualityIssues] = useState<ImageQualityIssue[]>([]);
+  const [fixingImageId, setFixingImageId] = useState<string | null>(null);
 
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -64,7 +77,13 @@ export function BlingIntegrationDialog({
     setSelectedProductIds([]);
     setPage(1);
     setHasMore(false);
+    setImageQualityIssues([]);
   }, [storeId]);
+
+  function handleDialogOpenChange(nextOpen: boolean) {
+    if (!nextOpen) setImageQualityIssues([]);
+    onOpenChange(nextOpen);
+  }
 
   async function beginAuthorization() {
     setAuthenticating(true);
@@ -166,6 +185,7 @@ export function BlingIntegrationDialog({
     try {
       let successCount = 0;
       let thumbnailCount = 0;
+      const qualityIssues: ImageQualityIssue[] = [];
 
       for (const item of itemsToImport) {
         const brand = detectBrand(item.nome);
@@ -175,12 +195,14 @@ export function BlingIntegrationDialog({
         const slug = slugify(`${brand}-${model}`);
 
         let imageUrl = item.imagemURL || null;
+        let imageQuality: "original" | "thumbnail" | "missing" = imageUrl ? "thumbnail" : "missing";
         try {
           const image = await fetchBlingProductImageServer({
             data: { storeId, productId: item.id, fallbackUrl: item.imagemURL },
           });
           imageUrl = image.imageUrl;
-          if (image.imageQuality === "thumbnail") thumbnailCount++;
+          imageQuality = image.imageQuality;
+          if (imageQuality !== "original") thumbnailCount++;
         } catch (imageError) {
           console.warn("Não foi possível consultar a imagem original no Bling:", item.id, imageError);
           if (imageUrl) thumbnailCount++;
@@ -203,22 +225,38 @@ export function BlingIntegrationDialog({
             : null,
         };
 
-        const { error } = await supabase.from("products").insert(payload);
+        const { data: insertedProduct, error } = await supabase
+          .from("products")
+          .insert(payload)
+          .select("id")
+          .single();
         if (error) {
           console.error("Erro ao importar item:", item.nome, error);
         } else {
           successCount++;
+          if (imageQuality !== "original" && insertedProduct?.id) {
+            qualityIssues.push({
+              productId: insertedProduct.id,
+              blingProductId: item.id,
+              name: item.nome,
+              thumbnailUrl: imageUrl,
+              replacementUrl: "",
+              resolved: false,
+            });
+          }
         }
       }
 
       await queryClient.invalidateQueries({ queryKey: ["store-products", storeId] });
       toast.success(`🎉 ${successCount} produtos importados com sucesso para ${storeName}!`);
       if (thumbnailCount > 0) {
-        toast.warning(`${thumbnailCount} produto(s) só possuem miniatura no Bling. Cadastre a foto como URL externa no Bling ou substitua a imagem no Vendas 1:64 para obter alta resolução.`, {
+        toast.warning(`${thumbnailCount} produto(s) precisam de uma foto melhor. Você pode corrigi-los agora.`, {
           duration: 9000,
         });
+        setImageQualityIssues(qualityIssues);
+      } else {
+        handleDialogOpenChange(false);
       }
-      onOpenChange(false);
     } catch (err: any) {
       toast.error("Erro ao importar: " + (err.message || "Tente novamente"));
     } finally {
@@ -226,8 +264,92 @@ export function BlingIntegrationDialog({
     }
   }
 
+  async function saveReplacementUrl(issue: ImageQualityIssue) {
+    let parsed: URL;
+    try {
+      parsed = new URL(issue.replacementUrl.trim());
+      if (parsed.protocol !== "https:") throw new Error();
+    } catch {
+      toast.error("Informe uma URL pública iniciada por https://.");
+      return;
+    }
+
+    setFixingImageId(issue.productId);
+    try {
+      const { error } = await supabase
+        .from("products")
+        .update({ image_url: parsed.toString() })
+        .eq("id", issue.productId)
+        .eq("store_id", storeId);
+      if (error) throw error;
+      markImageResolved(issue.productId);
+      toast.success("Imagem atualizada.");
+    } catch {
+      toast.error("Não foi possível atualizar a imagem.");
+    } finally {
+      setFixingImageId(null);
+    }
+  }
+
+  async function uploadReplacement(issue: ImageQualityIssue, file: File) {
+    setFixingImageId(issue.productId);
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) throw authError || new Error("Sessão expirada.");
+      const imageUrl = await uploadImage(authData.user.id, file, "product");
+      const { error } = await supabase
+        .from("products")
+        .update({ image_url: imageUrl })
+        .eq("id", issue.productId)
+        .eq("store_id", storeId);
+      if (error) throw error;
+      markImageResolved(issue.productId);
+      toast.success("Foto otimizada e atualizada.");
+    } catch (error) {
+      toast.error(getImageUploadErrorMessage(error));
+    } finally {
+      setFixingImageId(null);
+    }
+  }
+
+  async function retryBlingImage(issue: ImageQualityIssue) {
+    setFixingImageId(issue.productId);
+    try {
+      const image = await fetchBlingProductImageServer({
+        data: {
+          storeId,
+          productId: issue.blingProductId,
+          fallbackUrl: issue.thumbnailUrl || undefined,
+        },
+      });
+      if (image.imageQuality !== "original" || !image.imageUrl) {
+        toast.info("O Bling ainda está fornecendo somente a miniatura deste produto.");
+        return;
+      }
+      const { error } = await supabase
+        .from("products")
+        .update({ image_url: image.imageUrl })
+        .eq("id", issue.productId)
+        .eq("store_id", storeId);
+      if (error) throw error;
+      markImageResolved(issue.productId);
+      toast.success("Imagem original encontrada no Bling.");
+    } catch {
+      toast.error("Não foi possível buscar a imagem novamente.");
+    } finally {
+      setFixingImageId(null);
+    }
+  }
+
+  function markImageResolved(productId: string) {
+    setImageQualityIssues((issues) =>
+      issues.map((issue) => issue.productId === productId ? { ...issue, resolved: true } : issue)
+    );
+    queryClient.invalidateQueries({ queryKey: ["store-products", storeId] });
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="w-[96vw] max-w-2xl max-h-[90vh] flex flex-col p-4 sm:p-6 gap-4 overflow-hidden">
         <DialogHeader className="shrink-0 space-y-1">
           <div className="flex items-center justify-between gap-2">
@@ -263,6 +385,65 @@ export function BlingIntegrationDialog({
         </DialogHeader>
 
         <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-0.5">
+          {imageQualityIssues.length > 0 ? (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+                <p className="text-sm font-semibold">Corrigir imagens importadas</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  O Bling forneceu somente miniaturas. Envie a foto original, cole uma URL pública ou tente buscar novamente após corrigir a imagem no Bling.
+                </p>
+              </div>
+              {imageQualityIssues.map((issue) => (
+                <div key={issue.productId} className="rounded-xl border border-border/50 bg-card p-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
+                      {issue.thumbnailUrl ? (
+                        <img src={issue.thumbnailUrl} alt="" className="size-full object-cover" />
+                      ) : (
+                        <ImageOff className="size-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-sm font-semibold">{issue.name}</p>
+                        {issue.resolved && <Badge className="gap-1 bg-emerald-600 text-white"><CheckCircle2 className="size-3" /> Corrigida</Badge>}
+                      </div>
+                      {!issue.resolved && (
+                        <div className="mt-2 space-y-2">
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <Input
+                              value={issue.replacementUrl}
+                              onChange={(event) => setImageQualityIssues((issues) => issues.map((current) => current.productId === issue.productId ? { ...current, replacementUrl: event.target.value } : current))}
+                              placeholder="https://.../foto.jpg"
+                              className="h-8 text-xs"
+                            />
+                            <Button size="sm" variant="outline" className="h-8" disabled={fixingImageId === issue.productId} onClick={() => saveReplacementUrl(issue)}>
+                              Usar URL
+                            </Button>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button asChild size="sm" className="h-8 gap-1.5">
+                              <label className="cursor-pointer">
+                                <Upload className="size-3.5" /> Enviar foto
+                                <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={fixingImageId === issue.productId} onChange={(event) => {
+                                  const file = event.target.files?.[0];
+                                  if (file) uploadReplacement(issue, file);
+                                  event.currentTarget.value = "";
+                                }} />
+                              </label>
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-8 gap-1.5" disabled={fixingImageId === issue.productId} onClick={() => retryBlingImage(issue)}>
+                              <RefreshCw className={`size-3.5 ${fixingImageId === issue.productId ? "animate-spin" : ""}`} /> Buscar novamente
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : <>
           {/* Card de Autorização quando não conectado ou clicou em configurações */}
           {connection.isError && (
             <p role="alert" className="text-sm text-destructive">
@@ -459,19 +640,22 @@ export function BlingIntegrationDialog({
               </div>
             )
           )}
+          </>}
         </div>
 
         {/* Rodapé de Ações */}
         <div className="flex items-center justify-between pt-3 border-t border-border/40 shrink-0">
           <span className="text-xs text-muted-foreground">
-            {itemsToImport.length} de {filteredBlingProducts.length} selecionados
+            {imageQualityIssues.length > 0
+              ? `${imageQualityIssues.filter((issue) => issue.resolved).length} de ${imageQualityIssues.length} imagens corrigidas`
+              : `${itemsToImport.length} de ${filteredBlingProducts.length} selecionados`}
           </span>
 
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => onOpenChange(false)}>
-              Fechar
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => handleDialogOpenChange(false)}>
+              {imageQualityIssues.length > 0 ? "Concluir depois" : "Fechar"}
             </Button>
-            <Button
+            {imageQualityIssues.length === 0 && <Button
               size="sm"
               className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5"
               onClick={handleImportProducts}
@@ -479,7 +663,7 @@ export function BlingIntegrationDialog({
             >
               <Download className="size-3.5" />
               {importing ? "Importando..." : `Importar (${itemsToImport.length}) para ${storeName}`}
-            </Button>
+            </Button>}
           </div>
         </div>
       </DialogContent>
