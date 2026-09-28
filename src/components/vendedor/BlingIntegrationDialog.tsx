@@ -34,6 +34,21 @@ type ImageQualityIssue = {
   resolved: boolean;
 };
 
+type BlingResolvedImage = Awaited<ReturnType<typeof fetchBlingProductImageServer>>;
+
+function imageFileExtension(contentType: string) {
+  if (contentType === "image/png") return "png";
+  if (contentType === "image/webp") return "webp";
+  return "jpg";
+}
+
+function base64ToImageFile(base64: string, contentType: string, productId: number) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new File([bytes], `bling-${productId}.${imageFileExtension(contentType)}`, { type: contentType });
+}
+
 export function BlingIntegrationDialog({
   storeId,
   storeName,
@@ -83,6 +98,15 @@ export function BlingIntegrationDialog({
   function handleDialogOpenChange(nextOpen: boolean) {
     if (!nextOpen) setImageQualityIssues([]);
     onOpenChange(nextOpen);
+  }
+
+  async function persistResolvedBlingImage(image: BlingResolvedImage, productId: number) {
+    if (!image.imageData || !image.contentType) return image.imageUrl;
+
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data.user) throw error || new Error("Sessão expirada.");
+    const file = base64ToImageFile(image.imageData, image.contentType, productId);
+    return uploadImage(data.user.id, file, "product");
   }
 
   async function beginAuthorization() {
@@ -200,7 +224,7 @@ export function BlingIntegrationDialog({
           const image = await fetchBlingProductImageServer({
             data: { storeId, productId: item.id, fallbackUrl: item.imagemURL },
           });
-          imageUrl = image.imageUrl;
+          imageUrl = await persistResolvedBlingImage(image, item.id);
           imageQuality = image.imageQuality;
           if (imageQuality !== "original") thumbnailCount++;
         } catch (imageError) {
@@ -322,13 +346,15 @@ export function BlingIntegrationDialog({
           fallbackUrl: issue.thumbnailUrl || undefined,
         },
       });
-      if (image.imageQuality !== "original" || !image.imageUrl) {
+      if (image.imageQuality !== "original") {
         toast.info("O Bling ainda está fornecendo somente a miniatura deste produto.");
         return;
       }
+      const permanentImageUrl = await persistResolvedBlingImage(image, issue.blingProductId);
+      if (!permanentImageUrl) throw new Error("O Bling não retornou a imagem original.");
       const { error } = await supabase
         .from("products")
-        .update({ image_url: image.imageUrl })
+        .update({ image_url: permanentImageUrl })
         .eq("id", issue.productId)
         .eq("store_id", storeId);
       if (error) throw error;
