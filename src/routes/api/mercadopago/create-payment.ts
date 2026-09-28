@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { gatewayAdmin, parseOrderIds, paymentAttemptKey, paymentAttemptReference, pendingAmount } from "@/lib/mercadoPago.server";
+import { gatewayAdmin, getMercadoPagoAccessToken, parseOrderIds, paymentAttemptKey, paymentAttemptReference, pendingAmount } from "@/lib/mercadoPago.server";
 
 const errorResponse = (message: string, status: number) => Response.json({ error: message }, { status });
 type PaymentMethod = "pix" | "checkout_pro";
@@ -44,12 +44,9 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
             ? `${firstProduct}${orders.length > 1 ? ` (+${orders.length - 1} itens)` : ""} — ${store.name}`
             : `Pedido — ${store.name}`).slice(0, 128);
 
-          const { data: connection, error: connectionError } = await admin
-            .from("mercadopago_connections" as never)
-            .select("access_token, is_active, is_sandbox").eq("store_id", storeId).maybeSingle();
-          if (connectionError) throw connectionError;
-          const credentials = connection as { access_token?: string; is_active?: boolean; is_sandbox?: boolean } | null;
-          if (!credentials?.is_active || !credentials.access_token) return errorResponse("Esta loja ainda não configurou o Mercado Pago.", 400);
+          let accessToken: string;
+          try { accessToken = await getMercadoPagoAccessToken(storeId); }
+          catch { return errorResponse("Esta loja ainda não conectou o Mercado Pago.", 400); }
 
           const now = new Date();
           await admin.from("gateway_payment_attempts" as never)
@@ -88,7 +85,7 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
           const notificationUrl = `https://vendas164.com.br/api/mercadopago/webhook?store_id=${encodeURIComponent(storeId)}`;
           const headers = {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${credentials.access_token}`,
+            Authorization: `Bearer ${accessToken}`,
             "X-Idempotency-Key": paymentAttempt.id,
           };
           const response = method === "pix"

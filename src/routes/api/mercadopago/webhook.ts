@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { confirmGatewayPayment, gatewayAdmin, parsePaymentAttemptReference } from "@/lib/mercadoPago.server";
+import { confirmGatewayPayment, gatewayAdmin, getMercadoPagoAccessToken, parsePaymentAttemptReference } from "@/lib/mercadoPago.server";
 
 export const Route = createFileRoute("/api/mercadopago/webhook")({
   server: {
@@ -18,17 +18,15 @@ export const Route = createFileRoute("/api/mercadopago/webhook")({
           }
 
           const admin = gatewayAdmin();
-          const { data: connection, error } = await admin.from("mercadopago_connections" as never)
-            .select("access_token, is_active").eq("store_id", storeId).maybeSingle();
-          if (error) throw error;
-          const credentials = connection as { access_token?: string; is_active?: boolean } | null;
-          if (!credentials?.is_active || !credentials.access_token) return new Response("Unknown store", { status: 404 });
+          let accessToken: string;
+          try { accessToken = await getMercadoPagoAccessToken(storeId); }
+          catch { return new Response("Unknown store", { status: 404 }); }
 
           // The webhook body and return URL are notifications only. Always ask Mercado Pago
           // with this store's own token before changing a financial record.
           const resource = type === "order" ? `v1/orders/${id}` : `v1/payments/${id}`;
           const mpResponse = await fetch(`https://api.mercadopago.com/${resource}`, {
-            headers: { Authorization: `Bearer ${credentials.access_token}` },
+            headers: { Authorization: `Bearer ${accessToken}` },
           });
           if (!mpResponse.ok) {
             if (mpResponse.status === 404 || mpResponse.status === 403) return new Response("Payment not found", { status: 404 });

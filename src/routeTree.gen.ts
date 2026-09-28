@@ -25,6 +25,10 @@ import { Route as ApiMercadopagoCreatePaymentRouteImport } from './routes/api/me
 import { Route as ApiMercadopagoPublicConfigRouteImport } from './routes/api/mercadopago/public-config'
 import { Route as ApiMercadopagoWebhookRouteImport } from './routes/api/mercadopago/webhook'
 import { Route as LojaSlugItemSlugRouteImport } from './routes/loja.$slug.$itemSlug'
+import { Route as ApiMercadopagoOauthCallbackRouteImport } from './routes/api/mercadopago/oauth/callback'
+import { Route as ApiMercadopagoOauthDisconnectRouteImport } from './routes/api/mercadopago/oauth/disconnect'
+import { Route as ApiMercadopagoOauthStartRouteImport } from './routes/api/mercadopago/oauth/start'
+import { Route as ApiMercadopagoOauthStatusRouteImport } from './routes/api/mercadopago/oauth/status'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -107,6 +111,30 @@ const LojaSlugItemSlugRoute = LojaSlugItemSlugRouteImport.update({
   path: '/$itemSlug',
   getParentRoute: () => LojaSlugRoute,
 } as any)
+const ApiMercadopagoOauthCallbackRoute =
+  ApiMercadopagoOauthCallbackRouteImport.update({
+    id: '/api/mercadopago/oauth/callback',
+    path: '/api/mercadopago/oauth/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMercadopagoOauthDisconnectRoute =
+  ApiMercadopagoOauthDisconnectRouteImport.update({
+    id: '/api/mercadopago/oauth/disconnect',
+    path: '/api/mercadopago/oauth/disconnect',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMercadopagoOauthStartRoute =
+  ApiMercadopagoOauthStartRouteImport.update({
+    id: '/api/mercadopago/oauth/start',
+    path: '/api/mercadopago/oauth/start',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMercadopagoOauthStatusRoute =
+  ApiMercadopagoOauthStatusRouteImport.update({
+    id: '/api/mercadopago/oauth/status',
+    path: '/api/mercadopago/oauth/status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -124,6 +152,10 @@ export interface FileRoutesByFullPath {
   '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
   '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
+  '/api/mercadopago/oauth/callback': typeof ApiMercadopagoOauthCallbackRoute
+  '/api/mercadopago/oauth/disconnect': typeof ApiMercadopagoOauthDisconnectRoute
+  '/api/mercadopago/oauth/start': typeof ApiMercadopagoOauthStartRoute
+  '/api/mercadopago/oauth/status': typeof ApiMercadopagoOauthStatusRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -141,6 +173,10 @@ export interface FileRoutesByTo {
   '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
   '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
+  '/api/mercadopago/oauth/callback': typeof ApiMercadopagoOauthCallbackRoute
+  '/api/mercadopago/oauth/disconnect': typeof ApiMercadopagoOauthDisconnectRoute
+  '/api/mercadopago/oauth/start': typeof ApiMercadopagoOauthStartRoute
+  '/api/mercadopago/oauth/status': typeof ApiMercadopagoOauthStatusRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -160,6 +196,10 @@ export interface FileRoutesById {
   '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
   '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
+  '/api/mercadopago/oauth/callback': typeof ApiMercadopagoOauthCallbackRoute
+  '/api/mercadopago/oauth/disconnect': typeof ApiMercadopagoOauthDisconnectRoute
+  '/api/mercadopago/oauth/start': typeof ApiMercadopagoOauthStartRoute
+  '/api/mercadopago/oauth/status': typeof ApiMercadopagoOauthStatusRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -179,6 +219,10 @@ export interface FileRouteTypes {
     | '/api/mercadopago/public-config'
     | '/api/mercadopago/webhook'
     | '/loja/$slug/$itemSlug'
+    | '/api/mercadopago/oauth/callback'
+    | '/api/mercadopago/oauth/disconnect'
+    | '/api/mercadopago/oauth/start'
+    | '/api/mercadopago/oauth/status'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -196,6 +240,10 @@ export interface FileRouteTypes {
     | '/api/mercadopago/public-config'
     | '/api/mercadopago/webhook'
     | '/loja/$slug/$itemSlug'
+    | '/api/mercadopago/oauth/callback'
+    | '/api/mercadopago/oauth/disconnect'
+    | '/api/mercadopago/oauth/start'
+    | '/api/mercadopago/oauth/status'
   id:
     | '__root__'
     | '/'
@@ -214,6 +262,10 @@ export interface FileRouteTypes {
     | '/api/mercadopago/public-config'
     | '/api/mercadopago/webhook'
     | '/loja/$slug/$itemSlug'
+    | '/api/mercadopago/oauth/callback'
+    | '/api/mercadopago/oauth/disconnect'
+    | '/api/mercadopago/oauth/start'
+    | '/api/mercadopago/oauth/status'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -230,6 +282,10 @@ export interface RootRouteChildren {
   ApiMercadopagoCreatePaymentRoute: typeof ApiMercadopagoCreatePaymentRoute
   ApiMercadopagoPublicConfigRoute: typeof ApiMercadopagoPublicConfigRoute
   ApiMercadopagoWebhookRoute: typeof ApiMercadopagoWebhookRoute
+  ApiMercadopagoOauthCallbackRoute: typeof ApiMercadopagoOauthCallbackRoute
+  ApiMercadopagoOauthDisconnectRoute: typeof ApiMercadopagoOauthDisconnectRoute
+  ApiMercadopagoOauthStartRoute: typeof ApiMercadopagoOauthStartRoute
+  ApiMercadopagoOauthStatusRoute: typeof ApiMercadopagoOauthStatusRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -346,6 +402,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LojaSlugItemSlugRouteImport
       parentRoute: typeof LojaSlugRoute
     }
+    '/api/mercadopago/oauth/callback': {
+      id: '/api/mercadopago/oauth/callback'
+      path: '/api/mercadopago/oauth/callback'
+      fullPath: '/api/mercadopago/oauth/callback'
+      preLoaderRoute: typeof ApiMercadopagoOauthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mercadopago/oauth/disconnect': {
+      id: '/api/mercadopago/oauth/disconnect'
+      path: '/api/mercadopago/oauth/disconnect'
+      fullPath: '/api/mercadopago/oauth/disconnect'
+      preLoaderRoute: typeof ApiMercadopagoOauthDisconnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mercadopago/oauth/start': {
+      id: '/api/mercadopago/oauth/start'
+      path: '/api/mercadopago/oauth/start'
+      fullPath: '/api/mercadopago/oauth/start'
+      preLoaderRoute: typeof ApiMercadopagoOauthStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mercadopago/oauth/status': {
+      id: '/api/mercadopago/oauth/status'
+      path: '/api/mercadopago/oauth/status'
+      fullPath: '/api/mercadopago/oauth/status'
+      preLoaderRoute: typeof ApiMercadopagoOauthStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -388,6 +472,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMercadopagoCreatePaymentRoute: ApiMercadopagoCreatePaymentRoute,
   ApiMercadopagoPublicConfigRoute: ApiMercadopagoPublicConfigRoute,
   ApiMercadopagoWebhookRoute: ApiMercadopagoWebhookRoute,
+  ApiMercadopagoOauthCallbackRoute: ApiMercadopagoOauthCallbackRoute,
+  ApiMercadopagoOauthDisconnectRoute: ApiMercadopagoOauthDisconnectRoute,
+  ApiMercadopagoOauthStartRoute: ApiMercadopagoOauthStartRoute,
+  ApiMercadopagoOauthStatusRoute: ApiMercadopagoOauthStatusRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -29,18 +29,18 @@ export const Route = createFileRoute("/api/mercadopago/public-config")({
 
           const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
-          // Buscar na tabela mercadopago_connections
+          // Retorna apenas disponibilidade; tokens nunca saem do servidor.
           const { data: connection } = await supabase
             .from("mercadopago_connections" as any)
-            .select("public_key, is_sandbox, is_active, access_token")
+            .select("is_sandbox, is_active, access_token, encrypted_tokens")
             .eq("store_id", storeId)
             .maybeSingle();
 
-          if (connection && (connection as any).is_active && (connection as any).public_key && (connection as any).access_token) {
+          if (connection && (connection as any).is_active && ((connection as any).encrypted_tokens || (connection as any).access_token)) {
             return new Response(
               JSON.stringify({
                 isConfigured: true,
-                publicKey: (connection as any).public_key,
+                publicKey: null,
                 isSandbox: (connection as any).is_sandbox ?? true,
               }),
               { status: 200, headers: { "Content-Type": "application/json" } }
