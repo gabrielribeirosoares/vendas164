@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Package, RefreshCw, Download, Search, Sparkles, Key, ExternalLink, Settings } from "lucide-react";
+import { Package, RefreshCw, Download, Search, Sparkles, Key, ExternalLink, Settings, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, slugify } from "@/lib/format";
@@ -14,7 +14,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   fetchBlingProductsServer,
-  exchangeBlingCodeServer,
+  disconnectBlingServer,
   type BlingProductItem,
   blingStatusServer,
   beginBlingConnectionServer,
@@ -43,8 +43,6 @@ export function BlingIntegrationDialog({
   const [showConfig, setShowConfig] = useState(false);
   const [authenticating, setAuthenticating] = useState(false);
 
-  const [authCodeInput, setAuthCodeInput] = useState("");
-  const [authUrl, setAuthUrl] = useState("");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const connection = useQuery({
@@ -63,8 +61,6 @@ export function BlingIntegrationDialog({
     }
     setBlingProducts([]);
     setSelectedProductIds([]);
-    setAuthCodeInput("");
-    setAuthUrl("");
     setPage(1);
     setHasMore(false);
   }, [storeId]);
@@ -73,7 +69,7 @@ export function BlingIntegrationDialog({
     setAuthenticating(true);
     try {
       const result = await beginBlingConnectionServer({ data: { storeId } });
-      setAuthUrl(result.url);
+      window.location.assign(result.url);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível iniciar a conexão.");
     } finally {
@@ -81,17 +77,17 @@ export function BlingIntegrationDialog({
     }
   }
 
-  async function handleConnectWithCode() {
+  async function handleDisconnect() {
     setAuthenticating(true);
     try {
-      await exchangeBlingCodeServer({ data: { storeId, callbackUrl: authCodeInput.trim() } });
+      await disconnectBlingServer({ data: { storeId } });
       await connection.refetch();
       setShowConfig(false);
-      setAuthCodeInput("");
-      setAuthUrl("");
-      toast.success(`Bling conectado à loja ${storeName}.`);
+      setBlingProducts([]);
+      setSelectedProductIds([]);
+      toast.success(`Bling desconectado da loja ${storeName}.`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível conectar o Bling.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível desconectar o Bling.");
     } finally {
       setAuthenticating(false);
     }
@@ -276,48 +272,34 @@ export function BlingIntegrationDialog({
                 )}
               </div>
 
-              {/* Botão de Autorização e Campo de Código */}
+              {/* A autorização retorna automaticamente pelo callback do Bling. */}
               <div className="space-y-2.5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-background p-2.5 rounded-lg border border-border/40">
                   <div className="text-xs">
-                    <span className="font-semibold block">1. Autorizar acesso no Bling</span>
-                    <span className="text-muted-foreground text-[11px]">Abre a tela de permissão da conta no Bling</span>
+                    <span className="font-semibold block">Autorizar acesso no Bling</span>
+                    <span className="text-muted-foreground text-[11px]">Você voltará automaticamente ao painel após autorizar.</span>
                   </div>
-                  {!authUrl && (
-                    <Button size="sm" disabled={authenticating || !connection.data?.configured} onClick={beginAuthorization}>
-                      Preparar autorização
-                    </Button>
-                  )}
-                  {authUrl && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 text-xs gap-1.5 text-primary shrink-0 font-semibold"
-                      onClick={() => window.open(authUrl, "_blank", "noopener,noreferrer")}
-                    >
-                      <ExternalLink className="size-3.5" />
-                      1. Abrir Autorização
-                    </Button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Input
-                    placeholder="2. Cole o link completo retornado pelo Bling"
-                    aria-label="Link de retorno da autorização Bling"
-                    value={authCodeInput}
-                    onChange={(e) => setAuthCodeInput(e.target.value)}
-                    className="h-9 text-xs font-mono flex-1 bg-background"
-                  />
                   <Button
                     size="sm"
-                    className="h-9 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 font-semibold"
-                    onClick={handleConnectWithCode}
-                    disabled={authenticating || !authCodeInput}
+                    className="h-8 text-xs gap-1.5 shrink-0 font-semibold"
+                    disabled={authenticating || !connection.data?.configured}
+                    onClick={beginAuthorization}
                   >
-                    {authenticating ? "Conectando..." : "2. Conectar"}
+                    <ExternalLink className="size-3.5" />
+                    {authenticating ? "Abrindo Bling..." : isConnected ? "Reconectar Bling" : "Conectar Bling"}
                   </Button>
                 </div>
+                {isConnected && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/5"
+                    onClick={handleDisconnect}
+                    disabled={authenticating}
+                  >
+                    <Unplug className="size-3.5" /> Desconectar conta
+                  </Button>
+                )}
               </div>
             </div>
           )}

@@ -192,6 +192,18 @@ function SellerDashboard() {
     redirectToMainIfOnSubdomain();
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const bling = params.get("bling");
+    if (bling === "connected") {
+      toast.success("Bling conectado com sucesso.");
+      navigate({ search: { tab: "produtos" }, replace: true });
+    } else if (bling === "error") {
+      toast.error(params.get("reason") || "Não foi possível conectar o Bling.");
+      navigate({ search: { tab: "produtos" }, replace: true });
+    }
+  }, [navigate]);
+
   const { data: store, isLoading } = useQuery({
     queryKey: ["my-store", user?.id],
     enabled: !!user,
