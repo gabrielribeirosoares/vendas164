@@ -40,3 +40,24 @@ test('manual reservation removes the customer from the waitlist atomically', asy
     'waitlist removal must happen inside the reservation transaction before idempotency is recorded',
   );
 });
+
+test('product snapshot trigger is not exposed as a public RPC', async () => {
+  const migration = await read('supabase/migrations/20260928124500_harden_snapshot_product_trigger.sql');
+
+  assert.match(
+    migration,
+    /ALTER FUNCTION public\.snapshot_product_on_order\(\)\s+SET search_path = public, pg_temp;/,
+  );
+  assert.match(
+    migration,
+    /REVOKE ALL ON FUNCTION public\.snapshot_product_on_order\(\) FROM PUBLIC;/,
+  );
+  assert.match(
+    migration,
+    /REVOKE EXECUTE ON FUNCTION public\.snapshot_product_on_order\(\) FROM anon;/,
+  );
+  assert.match(
+    migration,
+    /REVOKE EXECUTE ON FUNCTION public\.snapshot_product_on_order\(\) FROM authenticated;/,
+  );
+});
