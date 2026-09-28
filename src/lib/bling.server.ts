@@ -7,6 +7,14 @@ type Connection = { store_id: string; encrypted_tokens: string | null; oauth_sta
 // This table is deliberately inaccessible to browser roles.
 const db = () => supabaseAdmin as unknown as import('@supabase/supabase-js').SupabaseClient;
 function config(storeId: string) {
+  const platformCredentials = {
+    clientId: process.env.BLING_CLIENT_ID || '',
+    clientSecret: process.env.BLING_CLIENT_SECRET || '',
+  };
+  if (platformCredentials.clientId && platformCredentials.clientSecret) return platformCredentials;
+
+  // Backwards compatibility while existing installations move to the single
+  // Vendas 1:64 OAuth application.
   let stores: Record<string, { clientId: string; clientSecret: string }>;
   try { stores = JSON.parse(process.env.BLING_STORE_CREDENTIALS || '{}'); }
   catch { throw new Error('A integração precisa ser configurada pelo administrador.'); }
@@ -41,7 +49,11 @@ async function exchange(storeId: string, params: Record<string, string>): Promis
   const creds = config(storeId);
   const response = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
     method: 'POST', signal: AbortSignal.timeout(15000),
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Basic ${Buffer.from(`${creds.clientId}:${creds.clientSecret}`).toString('base64')}` },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Basic ${Buffer.from(`${creds.clientId}:${creds.clientSecret}`).toString('base64')}`,
+      'enable-jwt': '1',
+    },
     body: new URLSearchParams(params),
   });
   if (!response.ok) throw new Error('Não foi possível autorizar o Bling. Reconecte a conta.');
@@ -64,25 +76,38 @@ export async function beginConnection(storeId: string) {
   url.search = new URLSearchParams({ response_type: 'code', client_id: creds.clientId, state }).toString();
   return { url: url.toString() };
 }
-export async function finishConnection(storeId: string, callbackUrl: string) {
+export async function finishConnection(callbackUrl: string) {
   const url = new URL(callbackUrl);
   const code = url.searchParams.get('code'); const state = url.searchParams.get('state');
-  if (!code || !state) throw new Error('Cole o link completo retornado pelo Bling, com code e state.');
+  if (url.searchParams.get('error')) throw new Error('A autorização foi cancelada ou recusada no Bling.');
+  if (!code || !state) throw new Error('O Bling não retornou uma autorização válida.');
   // Consume state atomically so a callback cannot be replayed.
   const { data, error } = await db().from('bling_connections').update({ oauth_state: null, oauth_expires_at: null })
-    .eq('store_id', storeId).eq('oauth_state', state).gt('oauth_expires_at', new Date().toISOString()).select('store_id').maybeSingle();
+    .eq('oauth_state', state).gt('oauth_expires_at', new Date().toISOString()).select('store_id').maybeSingle();
   if (error || !data) throw new Error('A autorização expirou. Abra uma nova autorização no Bling.');
+  const storeId = data.store_id as string;
   const tokens = await exchange(storeId, { grant_type: 'authorization_code', code });
   const saved = await db().from('bling_connections').update({ encrypted_tokens: encrypt(storeId, tokens), updated_at: new Date().toISOString() }).eq('store_id', storeId);
   if (saved.error) throw new Error('Não foi possível salvar a conexão. Autorize novamente.');
-  return { connected: true };
+  return { connected: true, storeId };
+}
+export async function disconnectConnection(storeId: string) {
+  const { error } = await db().from('bling_connections').update({
+    encrypted_tokens: null,
+    oauth_state: null,
+    oauth_expires_at: null,
+    refresh_lock_until: null,
+    updated_at: new Date().toISOString(),
+  }).eq('store_id', storeId);
+  if (error) throw new Error('Não foi possível desconectar a conta do Bling.');
+  return { disconnected: true };
 }
 export async function loadProducts(storeId: string, page: number) {
   const row = await connection(storeId);
   if (!row?.encrypted_tokens) throw new Error('Conecte sua conta do Bling para importar produtos.');
   let tokens = decrypt(storeId, row.encrypted_tokens);
   const request = (token: string) => fetch(`https://api.bling.com.br/Api/v3/produtos?limite=100&pagina=${page}`, {
-    signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'enable-jwt': '1' },
   });
   let response = await request(tokens.access_token);
   if (response.status === 401) {
