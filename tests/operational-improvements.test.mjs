@@ -89,3 +89,21 @@ test("painel do vendedor pagina pedidos e clientes no servidor", async () => {
   assert.doesNotMatch(notifications, /products:/);
   assert.doesNotMatch(notifications, /orders:/);
 });
+
+test("paginação do vendedor prioriza sale_type e preserva pedidos antigos", async () => {
+  const migration = await read(
+    "supabase/migrations/20260928130412_align_seller_pagination_sale_type.sql",
+  );
+
+  const readySaleType = migration.indexOf("WHEN o.sale_type = 'pronta_entrega'");
+  const preorderSaleType = migration.indexOf("WHEN o.sale_type = 'pre_venda'");
+  const legacyStatus = migration.indexOf("WHEN o.payment_status = 'pronta_entrega'");
+  const legacyProduct = migration.indexOf("to_jsonb(p)->>'category' = 'pronta_entrega'");
+
+  assert.ok(readySaleType >= 0);
+  assert.ok(readySaleType < preorderSaleType);
+  assert.ok(preorderSaleType < legacyStatus);
+  assert.ok(legacyStatus < legacyProduct);
+  assert.match(migration, /SECURITY INVOKER SET search_path = public, pg_temp/);
+  assert.match(migration, /REVOKE ALL ON FUNCTION public\.seller_orders_page[\s\S]*FROM PUBLIC, anon/);
+});
