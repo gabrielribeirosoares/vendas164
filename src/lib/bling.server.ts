@@ -4,6 +4,14 @@ import type { BlingProductItem } from './bling';
 
 type Tokens = { access_token: string; refresh_token: string; expires_in?: number };
 type Connection = { store_id: string; encrypted_tokens: string | null; oauth_state: string | null; oauth_expires_at: string | null };
+type BlingProductDetails = BlingProductItem & {
+  midia?: {
+    imagens?: {
+      externas?: Array<{ link?: string }>;
+      internas?: Array<{ linkMiniatura?: string }>;
+    };
+  };
+};
 // This table is deliberately inaccessible to browser roles.
 const db = () => supabaseAdmin as unknown as import('@supabase/supabase-js').SupabaseClient;
 function config(storeId: string) {
@@ -102,11 +110,12 @@ export async function disconnectConnection(storeId: string) {
   if (error) throw new Error('Não foi possível desconectar a conta do Bling.');
   return { disconnected: true };
 }
-export async function loadProducts(storeId: string, page: number) {
+
+async function authorizedBlingRequest(storeId: string, path: string) {
   const row = await connection(storeId);
   if (!row?.encrypted_tokens) throw new Error('Conecte sua conta do Bling para importar produtos.');
   let tokens = decrypt(storeId, row.encrypted_tokens);
-  const request = (token: string) => fetch(`https://api.bling.com.br/Api/v3/produtos?limite=100&pagina=${page}`, {
+  const request = (token: string) => fetch(`https://api.bling.com.br/Api/v3/${path}`, {
     signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'enable-jwt': '1' },
   });
   let response = await request(tokens.access_token);
@@ -128,8 +137,46 @@ export async function loadProducts(storeId: string, page: number) {
       response = await request(tokens.access_token);
     } finally { await db().from('bling_connections').update({ refresh_lock_until: null }).eq('store_id', storeId); }
   }
+  return response;
+}
+
+function safeHttpsUrl(value: unknown) {
+  if (typeof value !== 'string') return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadProducts(storeId: string, page: number) {
+  const response = await authorizedBlingRequest(storeId, `produtos?limite=100&pagina=${page}`);
   if (!response.ok) throw new Error(response.status === 429 ? 'O Bling limitou as consultas. Tente novamente em instantes.' : 'Não foi possível carregar os produtos do Bling.');
   const payload = await response.json();
   const products = (payload.data ?? []) as BlingProductItem[];
   return { products, hasMore: products.length === 100 };
+}
+
+export async function loadProductImage(storeId: string, productId: number, fallbackUrl?: string) {
+  const response = await authorizedBlingRequest(storeId, `produtos/${productId}`);
+  if (!response.ok) {
+    throw new Error(response.status === 429
+      ? 'O Bling limitou as consultas. Tente novamente em instantes.'
+      : 'Não foi possível consultar a imagem original do produto.');
+  }
+
+  const payload = await response.json() as { data?: BlingProductDetails };
+  const product = payload.data;
+  const externalImage = product?.midia?.imagens?.externas
+    ?.map((image) => safeHttpsUrl(image.link))
+    .find(Boolean);
+
+  if (externalImage) return { imageUrl: externalImage, imageQuality: 'original' as const };
+
+  const thumbnail = safeHttpsUrl(product?.imagemURL)
+    || product?.midia?.imagens?.internas?.map((image) => safeHttpsUrl(image.linkMiniatura)).find(Boolean)
+    || safeHttpsUrl(fallbackUrl);
+
+  return { imageUrl: thumbnail || null, imageQuality: thumbnail ? 'thumbnail' as const : 'missing' as const };
 }

@@ -50,3 +50,14 @@ export const fetchBlingProductsServer = createServerFn({ method: 'POST' })
     await assertOwner(context.supabase, context.userId, data.storeId);
     return (await import('./bling.server')).loadProducts(data.storeId, data.page);
   });
+
+export const fetchBlingProductImageServer = createServerFn({ method: 'POST' })
+  .middleware([requireSupabaseAuth])
+  .validator((data: unknown) => storeSchema.extend({
+    productId: z.number().int().positive(),
+    fallbackUrl: z.string().url().max(4096).optional(),
+  }).parse(data))
+  .handler(async ({ data, context }) => {
+    await assertOwner(context.supabase, context.userId, data.storeId);
+    return (await import('./bling.server')).loadProductImage(data.storeId, data.productId, data.fallbackUrl);
+  });

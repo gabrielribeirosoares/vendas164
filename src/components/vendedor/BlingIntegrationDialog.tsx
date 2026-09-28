@@ -14,6 +14,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   fetchBlingProductsServer,
+  fetchBlingProductImageServer,
   disconnectBlingServer,
   type BlingProductItem,
   blingStatusServer,
@@ -164,6 +165,7 @@ export function BlingIntegrationDialog({
     setImporting(true);
     try {
       let successCount = 0;
+      let thumbnailCount = 0;
 
       for (const item of itemsToImport) {
         const brand = detectBrand(item.nome);
@@ -171,6 +173,18 @@ export function BlingIntegrationDialog({
         const stockQty = Number(item.estoque?.saldoVirtualTotal ?? 1);
         const isPreVenda = importMode === "pre_venda";
         const slug = slugify(`${brand}-${model}`);
+
+        let imageUrl = item.imagemURL || null;
+        try {
+          const image = await fetchBlingProductImageServer({
+            data: { storeId, productId: item.id, fallbackUrl: item.imagemURL },
+          });
+          imageUrl = image.imageUrl;
+          if (image.imageQuality === "thumbnail") thumbnailCount++;
+        } catch (imageError) {
+          console.warn("Não foi possível consultar a imagem original no Bling:", item.id, imageError);
+          if (imageUrl) thumbnailCount++;
+        }
 
         const payload: any = {
           store_id: storeId,
@@ -180,7 +194,7 @@ export function BlingIntegrationDialog({
           price: Number(item.preco || 0),
           stock: stockQty > 0 ? stockQty : 1,
           initial_stock: stockQty > 0 ? stockQty : 1,
-          image_url: item.imagemURL || null,
+          image_url: imageUrl,
           scale: "1:64",
           is_open: true,
           slug: slug,
@@ -199,6 +213,11 @@ export function BlingIntegrationDialog({
 
       await queryClient.invalidateQueries({ queryKey: ["store-products", storeId] });
       toast.success(`🎉 ${successCount} produtos importados com sucesso para ${storeName}!`);
+      if (thumbnailCount > 0) {
+        toast.warning(`${thumbnailCount} produto(s) só possuem miniatura no Bling. Cadastre a foto como URL externa no Bling ou substitua a imagem no Vendas 1:64 para obter alta resolução.`, {
+          duration: 9000,
+        });
+      }
       onOpenChange(false);
     } catch (err: any) {
       toast.error("Erro ao importar: " + (err.message || "Tente novamente"));
