@@ -61,3 +61,18 @@ test('product snapshot trigger is not exposed as a public RPC', async () => {
     /REVOKE EXECUTE ON FUNCTION public\.snapshot_product_on_order\(\) FROM authenticated;/,
   );
 });
+
+test('legacy guest maintenance functions use a fixed search path', async () => {
+  const migration = await read(
+    'supabase/migrations/20260928132544_harden_legacy_guest_functions_search_path.sql',
+  );
+
+  assert.match(
+    migration,
+    /ALTER FUNCTION public\.merge_guest_profile\(UUID, UUID\[\]\)\s+SET search_path = public, pg_temp;/,
+  );
+  assert.match(
+    migration,
+    /ALTER FUNCTION public\.migrar_reservas_telefone_duplicado\(\)\s+SET search_path = public, pg_temp;/,
+  );
+});
