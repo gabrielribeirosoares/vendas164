@@ -14,6 +14,10 @@ test("Bling import prefers the original external product image", async () => {
   assert.match(server, /imageQuality: 'original'/);
   assert.match(server, /linkMiniatura/);
   assert.match(client, /fetchBlingProductImageServer/);
-  assert.match(dialog, /image\.imageQuality === "thumbnail"/);
-  assert.match(dialog, /só possuem miniatura no Bling/);
+  assert.match(dialog, /imageQuality = image\.imageQuality/);
+  assert.match(dialog, /imageQuality !== "original"/);
+  assert.match(dialog, /Corrigir imagens importadas/);
+  assert.match(dialog, /retryBlingImage/);
+  assert.match(dialog, /uploadReplacement/);
+  assert.match(dialog, /saveReplacementUrl/);
 });
