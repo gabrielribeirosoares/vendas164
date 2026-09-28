@@ -22,6 +22,7 @@ import { Route as ApiTrackingRouteImport } from './routes/api/tracking'
 import { Route as LojaSlugRouteImport } from './routes/loja.$slug'
 import { Route as ProdutoIdRouteImport } from './routes/produto.$id'
 import { Route as LojaSlugItemSlugRouteImport } from './routes/loja.$slug.$itemSlug'
+import { Route as ApiBlingOauthCallbackRouteImport } from './routes/api/bling/oauth/callback'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -87,6 +88,11 @@ const LojaSlugItemSlugRoute = LojaSlugItemSlugRouteImport.update({
   path: '/$itemSlug',
   getParentRoute: () => LojaSlugRoute,
 } as any)
+const ApiBlingOauthCallbackRoute = ApiBlingOauthCallbackRouteImport.update({
+  id: '/api/bling/oauth/callback',
+  path: '/api/bling/oauth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -101,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/loja/$slug': typeof LojaSlugRouteWithChildren
   '/produto/$id': typeof ProdutoIdRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
+  '/api/bling/oauth/callback': typeof ApiBlingOauthCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -115,6 +122,7 @@ export interface FileRoutesByTo {
   '/loja/$slug': typeof LojaSlugRouteWithChildren
   '/produto/$id': typeof ProdutoIdRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
+  '/api/bling/oauth/callback': typeof ApiBlingOauthCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -131,6 +139,7 @@ export interface FileRoutesById {
   '/loja/$slug': typeof LojaSlugRouteWithChildren
   '/produto/$id': typeof ProdutoIdRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
+  '/api/bling/oauth/callback': typeof ApiBlingOauthCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -147,6 +156,7 @@ export interface FileRouteTypes {
     | '/loja/$slug'
     | '/produto/$id'
     | '/loja/$slug/$itemSlug'
+    | '/api/bling/oauth/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -161,6 +171,7 @@ export interface FileRouteTypes {
     | '/loja/$slug'
     | '/produto/$id'
     | '/loja/$slug/$itemSlug'
+    | '/api/bling/oauth/callback'
   id:
     | '__root__'
     | '/'
@@ -176,6 +187,7 @@ export interface FileRouteTypes {
     | '/loja/$slug'
     | '/produto/$id'
     | '/loja/$slug/$itemSlug'
+    | '/api/bling/oauth/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -189,6 +201,7 @@ export interface RootRouteChildren {
   ApiTrackingRoute: typeof ApiTrackingRoute
   LojaSlugRoute: typeof LojaSlugRouteWithChildren
   ProdutoIdRoute: typeof ProdutoIdRoute
+  ApiBlingOauthCallbackRoute: typeof ApiBlingOauthCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -284,6 +297,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LojaSlugItemSlugRouteImport
       parentRoute: typeof LojaSlugRoute
     }
+    '/api/bling/oauth/callback': {
+      id: '/api/bling/oauth/callback'
+      path: '/api/bling/oauth/callback'
+      fullPath: '/api/bling/oauth/callback'
+      preLoaderRoute: typeof ApiBlingOauthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -323,6 +343,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiTrackingRoute: ApiTrackingRoute,
   LojaSlugRoute: LojaSlugRouteWithChildren,
   ProdutoIdRoute: ProdutoIdRoute,
+  ApiBlingOauthCallbackRoute: ApiBlingOauthCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

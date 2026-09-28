@@ -35,12 +35,12 @@ export const beginBlingConnectionServer = createServerFn({ method: 'POST' })
     return (await import('./bling.server')).beginConnection(data.storeId);
   });
 
-export const exchangeBlingCodeServer = createServerFn({ method: 'POST' })
+export const disconnectBlingServer = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
-  .validator((data: unknown) => storeSchema.extend({ callbackUrl: z.string().url().max(4096) }).parse(data))
+  .validator((data: unknown) => storeSchema.parse(data))
   .handler(async ({ data, context }) => {
     await assertOwner(context.supabase, context.userId, data.storeId);
-    return (await import('./bling.server')).finishConnection(data.storeId, data.callbackUrl);
+    return (await import('./bling.server')).disconnectConnection(data.storeId);
   });
 
 export const fetchBlingProductsServer = createServerFn({ method: 'POST' })
