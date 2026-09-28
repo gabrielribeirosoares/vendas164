@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect, useDeferredValue } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { brl, isProntaEntrega, whatsappLink } from '@/lib/format';
+import { brl, isOrderProntaEntrega, whatsappLink } from '@/lib/format';
 import { trackOrder } from '@/lib/trackingService';
 import { toast } from 'sonner';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -74,7 +74,7 @@ function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: stri
   const total = Number(o.total_price) * quantity;
   const customSignal = Number((o.products as any)?.down_payment_amount || 0);
   const expectedSignal = (customSignal > 0 ? customSignal : Math.round(Number(o.total_price) * 0.2 * 100) / 100) * quantity;
-  const isPronta = o.payment_status === "pronta_entrega" || isProntaEntrega(o.products);
+  const isPronta = isOrderProntaEntrega(o);
   const isSemSinal = o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada" || isPronta;
 
   let msg = `Olá ${displayName},\n\nAqui é o resumo da sua reserva:\n- Miniatura: *${modelName}*\n`;
@@ -90,7 +90,7 @@ function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: stri
     msg += `- Sinal pago: *${brl(Number(o.down_payment) * quantity)}*\n- Saldo restante: *${brl(dynamicBalance)}*\n`;
   } else if (o.payment_status === "quitado") {
     msg += `- Status: *Totalmente Quitado*\n`;
-  } else if (o.payment_status === "pronta_entrega" || (isPronta && isSemSinal)) {
+  } else if (isPronta && isSemSinal) {
     msg += `- Status: *Pronta Entrega (Envio Imediato)*\n`;
   } else if (isSemSinal) {
     msg += `- Pagamento na chegada do produto.\n`;
@@ -426,11 +426,11 @@ export function OrdersTab({
   );
   const activeOrdersCount = isServerPage ? orderPage.counts.all : activeOrders.length;
   const prontaEntregaOrdersCount = useMemo(
-    () => isServerPage ? orderPage.counts.ready : activeOrders.filter((o) => isProntaEntrega(o.products)).length,
+    () => isServerPage ? orderPage.counts.ready : activeOrders.filter(isOrderProntaEntrega).length,
     [activeOrders, isServerPage, orderPage]
   );
   const preVendaOrdersCount = useMemo(
-    () => isServerPage ? orderPage.counts.preorder : activeOrders.filter((o) => !isProntaEntrega(o.products)).length,
+    () => isServerPage ? orderPage.counts.preorder : activeOrders.filter((o) => !isOrderProntaEntrega(o)).length,
     [activeOrders, isServerPage, orderPage]
   );
 
@@ -505,9 +505,9 @@ export function OrdersTab({
 
       // Filtro por tipo de produto (Pré-venda vs Pronta Entrega)
       if (categoryFilter === "pronta_entrega") {
-        if (!isProntaEntrega(o.products)) return false;
+        if (!isOrderProntaEntrega(o)) return false;
       } else if (categoryFilter === "pre_venda") {
-        if (isProntaEntrega(o.products)) return false;
+        if (isOrderProntaEntrega(o)) return false;
       }
 
       // Ocultar cancelados por padrão caso o usuário não tenha filtrado especificamente por 'cancelado'
@@ -905,7 +905,7 @@ export function OrdersTab({
         cols.quitado.items.push(item);
       } else if (o.payment_status === "sinal_pago") {
         cols.sinal_pago.items.push(item);
-      } else if (o.payment_status === "pronta_entrega" || (isProntaEntrega(o.products) && (o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada"))) {
+      } else if (isOrderProntaEntrega(o) && (o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada" || o.payment_status === "pronta_entrega")) {
         cols.pronta_entrega.items.push(item);
       } else if (o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada") {
         cols.sem_sinal.items.push(item);
@@ -1254,7 +1254,7 @@ export function OrdersTab({
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1 mb-0.5">
-                                {isProntaEntrega(o.products) ? (
+                                {isOrderProntaEntrega(o) ? (
                                   <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[9px] px-1 py-0 h-3.5 gap-0.5">
                                     <Zap className="size-2.5 fill-current text-emerald-500" /> Pronta Entrega
                                   </Badge>
@@ -1390,7 +1390,7 @@ export function OrdersTab({
                           <div className="min-w-0 flex-1">
                             <div className="text-xs text-muted-foreground uppercase font-semibold tracking-wide flex items-center gap-1.5 flex-wrap">
                               <span>{o.products?.brand}</span>
-                              {isProntaEntrega(o.products) ? (
+                              {isOrderProntaEntrega(o) ? (
                                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs px-1.5 py-0.5 gap-1">
                                   <Zap className="size-2.5 fill-current text-emerald-500" /> Pronta Entrega
                                 </Badge>
@@ -1703,7 +1703,7 @@ export function OrdersTab({
                           </p>
                           <div className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1 flex-wrap mt-0.5">
                             <span>{o.products?.brand}</span>
-                            {isProntaEntrega(o.products) ? (
+                            {isOrderProntaEntrega(o) ? (
                               <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[8px] px-1 py-0 h-3.5 gap-0.5">
                                 <Zap className="size-2 fill-current text-emerald-500" /> Pronta
                               </Badge>
@@ -2119,4 +2119,3 @@ export function OrdersTab({
     </div>
   );
 }
-

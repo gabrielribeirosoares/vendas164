@@ -96,6 +96,9 @@ export type Database = {
           product_id: string
           remaining_balance: number | null
           reservation_expires_at: string | null
+          sale_type: string | null
+          payment_terms: string | null
+          signal_amount: number | null
           store_id: string
           total_price: number
           tracking_code: string | null
@@ -112,6 +115,9 @@ export type Database = {
           product_id: string
           remaining_balance?: number | null
           reservation_expires_at?: string | null
+          sale_type?: string | null
+          payment_terms?: string | null
+          signal_amount?: number | null
           store_id: string
           total_price?: number
           tracking_code?: string | null
@@ -128,6 +134,9 @@ export type Database = {
           product_id?: string
           remaining_balance?: number | null
           reservation_expires_at?: string | null
+          sale_type?: string | null
+          payment_terms?: string | null
+          signal_amount?: number | null
           store_id?: string
           total_price?: number
           tracking_code?: string | null

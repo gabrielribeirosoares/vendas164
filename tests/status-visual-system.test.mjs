@@ -37,3 +37,20 @@ test("pedidos exibem os dois tipos de status e reconhecem enviado", async () => 
   assert.match(orders, /<DeliveryBadge status=\{o\.delivery_status\}/);
   assert.match(orders, /<SelectItem value="enviado">Enviado<\/SelectItem>/);
 });
+
+test("modalidade da venda usa sale_type com compatibilidade para pedidos antigos", async () => {
+  const [format, orders] = await Promise.all([
+    readFile(formatPath, "utf8"),
+    readFile(ordersPath, "utf8"),
+  ]);
+
+  const authoritativeSaleType = format.indexOf('order?.sale_type === "pronta_entrega"');
+  const legacyPaymentStatus = format.indexOf('order?.payment_status === "pronta_entrega"');
+  const legacyProductFallback = format.indexOf('isProntaEntrega(order?.products)');
+
+  assert.ok(authoritativeSaleType >= 0);
+  assert.ok(authoritativeSaleType < legacyPaymentStatus);
+  assert.ok(legacyPaymentStatus < legacyProductFallback);
+  assert.match(orders, /isOrderProntaEntrega\(o\)/);
+  assert.doesNotMatch(orders, /isProntaEntrega\(o\.products\)/);
+});
