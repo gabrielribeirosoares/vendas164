@@ -107,3 +107,27 @@ test("paginação do vendedor prioriza sale_type e preserva pedidos antigos", as
   assert.match(migration, /SECURITY INVOKER SET search_path = public, pg_temp/);
   assert.match(migration, /REVOKE ALL ON FUNCTION public\.seller_orders_page[\s\S]*FROM PUBLIC, anon/);
 });
+
+test("chaves estrangeiras operacionais possuem índices de cobertura", async () => {
+  const migration = await read(
+    "supabase/migrations/20260928135042_add_foreign_key_indexes.sql",
+  );
+
+  const expectedIndexes = [
+    ["order_installments", "order_id"],
+    ["orders", "product_id"],
+    ["push_subscriptions", "store_id"],
+    ["push_subscriptions", "user_id"],
+    ["store_reviews", "store_id"],
+    ["stores", "owner_id"],
+    ["waitlist", "product_id"],
+    ["waitlist", "store_id"],
+  ];
+
+  for (const [table, column] of expectedIndexes) {
+    assert.match(
+      migration,
+      new RegExp(`CREATE INDEX IF NOT EXISTS ${table}_${column}_idx\\s+ON public\\.${table}\\(${column}\\);`),
+    );
+  }
+});
