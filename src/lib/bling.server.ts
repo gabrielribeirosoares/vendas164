@@ -8,7 +8,7 @@ type BlingProductDetails = BlingProductItem & {
   midia?: {
     imagens?: {
       externas?: Array<{ link?: string }>;
-      internas?: Array<{ linkMiniatura?: string }>;
+      internas?: Array<{ link?: string; linkMiniatura?: string }>;
     };
   };
 };
@@ -150,6 +150,41 @@ function safeHttpsUrl(value: unknown) {
   }
 }
 
+const MAX_BLING_IMAGE_BYTES = 4 * 1024 * 1024;
+const BLING_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+async function downloadInternalProductImage(value: unknown) {
+  const imageUrl = safeHttpsUrl(value);
+  if (!imageUrl) return null;
+
+  const url = new URL(imageUrl);
+  if (url.hostname !== 'orgbling.s3.amazonaws.com') return null;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    redirect: 'error',
+    signal: AbortSignal.timeout(20000),
+    headers: { Accept: 'image/jpeg,image/png,image/webp' },
+  });
+  if (!response.ok) throw new Error('A imagem original do Bling não pôde ser baixada.');
+
+  const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() || '';
+  if (!BLING_IMAGE_TYPES.has(contentType)) throw new Error('O Bling retornou uma imagem em formato incompatível.');
+
+  const declaredSize = Number(response.headers.get('content-length') || 0);
+  if (declaredSize > MAX_BLING_IMAGE_BYTES) throw new Error('A imagem original do Bling excede 4 MB.');
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_BLING_IMAGE_BYTES) {
+    throw new Error('A imagem original do Bling está vazia ou excede 4 MB.');
+  }
+
+  return {
+    imageData: Buffer.from(bytes).toString('base64'),
+    contentType,
+  };
+}
+
 export async function loadProducts(storeId: string, page: number) {
   const response = await authorizedBlingRequest(storeId, `produtos?limite=100&pagina=${page}`);
   if (!response.ok) throw new Error(response.status === 429 ? 'O Bling limitou as consultas. Tente novamente em instantes.' : 'Não foi possível carregar os produtos do Bling.');
@@ -172,11 +207,35 @@ export async function loadProductImage(storeId: string, productId: number, fallb
     ?.map((image) => safeHttpsUrl(image.link))
     .find(Boolean);
 
-  if (externalImage) return { imageUrl: externalImage, imageQuality: 'original' as const };
+  if (externalImage) return {
+    imageUrl: externalImage,
+    imageQuality: 'original' as const,
+    imageData: null,
+    contentType: null,
+  };
+
+  const internalImage = product?.midia?.imagens?.internas
+    ?.map((image) => image.link)
+    .find(Boolean);
+  if (internalImage) {
+    const downloaded = await downloadInternalProductImage(internalImage);
+    if (downloaded) {
+      return {
+        imageUrl: null,
+        imageQuality: 'original' as const,
+        ...downloaded,
+      };
+    }
+  }
 
   const thumbnail = safeHttpsUrl(product?.imagemURL)
     || product?.midia?.imagens?.internas?.map((image) => safeHttpsUrl(image.linkMiniatura)).find(Boolean)
     || safeHttpsUrl(fallbackUrl);
 
-  return { imageUrl: thumbnail || null, imageQuality: thumbnail ? 'thumbnail' as const : 'missing' as const };
+  return {
+    imageUrl: thumbnail || null,
+    imageQuality: thumbnail ? 'thumbnail' as const : 'missing' as const,
+    imageData: null,
+    contentType: null,
+  };
 }
