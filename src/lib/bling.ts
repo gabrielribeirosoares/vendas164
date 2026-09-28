@@ -10,6 +10,7 @@ export interface BlingProductItem {
   estoque?: { saldoVirtualTotal?: number };
   imagemURL?: string;
   descricaoCurta?: string;
+  marca?: { id?: number; descricao?: string } | string;
 }
 
 const storeSchema = z.object({ storeId: z.string().uuid() });

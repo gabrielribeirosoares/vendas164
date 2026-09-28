@@ -12,6 +12,12 @@ type BlingProductDetails = BlingProductItem & {
     };
   };
 };
+
+function getProductBrand(product?: BlingProductDetails) {
+  const brand = product?.marca;
+  const description = typeof brand === 'string' ? brand : brand?.descricao;
+  return typeof description === 'string' && description.trim() ? description.trim() : null;
+}
 // This table is deliberately inaccessible to browser roles.
 const db = () => supabaseAdmin as unknown as import('@supabase/supabase-js').SupabaseClient;
 function config(storeId: string) {
@@ -203,6 +209,7 @@ export async function loadProductImage(storeId: string, productId: number, fallb
 
   const payload = await response.json() as { data?: BlingProductDetails };
   const product = payload.data;
+  const brandName = getProductBrand(product);
   const externalImage = product?.midia?.imagens?.externas
     ?.map((image) => safeHttpsUrl(image.link))
     .find(Boolean);
@@ -212,6 +219,7 @@ export async function loadProductImage(storeId: string, productId: number, fallb
     imageQuality: 'original' as const,
     imageData: null,
     contentType: null,
+    brandName,
   };
 
   const internalImage = product?.midia?.imagens?.internas
@@ -223,6 +231,7 @@ export async function loadProductImage(storeId: string, productId: number, fallb
       return {
         imageUrl: null,
         imageQuality: 'original' as const,
+        brandName,
         ...downloaded,
       };
     }
@@ -237,5 +246,6 @@ export async function loadProductImage(storeId: string, productId: number, fallb
     imageQuality: thumbnail ? 'thumbnail' as const : 'missing' as const,
     imageData: null,
     contentType: null,
+    brandName,
   };
 }

@@ -17,8 +17,12 @@ test("Bling import prefers the original external product image", async () => {
   assert.match(server, /orgbling\.s3\.amazonaws\.com/);
   assert.match(server, /Buffer\.from\(bytes\)\.toString\('base64'\)/);
   assert.match(server, /MAX_BLING_IMAGE_BYTES/);
+  assert.match(server, /brand\?\.descricao/);
+  assert.match(server, /brandName/);
   assert.match(client, /fetchBlingProductImageServer/);
   assert.match(dialog, /imageQuality = image\.imageQuality/);
+  assert.match(dialog, /officialBrand = image\.brandName \|\| officialBrand/);
+  assert.match(dialog, /Marca do Bling/);
   assert.match(dialog, /persistResolvedBlingImage/);
   assert.match(dialog, /base64ToImageFile/);
   assert.match(dialog, /uploadImage\(data\.user\.id, file, "product"\)/);

@@ -156,9 +156,14 @@ export function BlingIntegrationDialog({
     }
   }
 
-  // Detecta marca com base no nome do produto
-  function detectBrand(name: string): string {
-    const lower = name.toLowerCase();
+  function getBlingBrandDescription(brand?: BlingProductItem["marca"]): string | null {
+    const description = typeof brand === "string" ? brand : brand?.descricao;
+    return description?.trim() || null;
+  }
+
+  // Prioriza a marca oficial do Bling e usa o nome do produto como fallback.
+  function detectBrand(name: string, officialBrand?: string | null): string {
+    const lower = `${officialBrand || ""} ${name}`.toLowerCase();
     if (lower.includes("kaido")) return "Kaido House";
     if (lower.includes("mini gt") || lower.includes("minigt")) return "Mini GT";
     if (lower.includes("hot wheels") || lower.includes("hotwheels") || lower.includes("rlc")) return "Hot Wheels";
@@ -170,7 +175,7 @@ export function BlingIntegrationDialog({
     if (lower.includes("spark")) return "Sparky";
     if (lower.includes("para64")) return "Para64";
     if (lower.includes("time micro") || lower.includes("timemicro")) return "Time Micro";
-    return "Colecionáveis";
+    return officialBrand?.trim() || "Colecionáveis";
   }
 
   const filteredBlingProducts = blingProducts.filter((p) => {
@@ -212,11 +217,9 @@ export function BlingIntegrationDialog({
       const qualityIssues: ImageQualityIssue[] = [];
 
       for (const item of itemsToImport) {
-        const brand = detectBrand(item.nome);
-        const model = item.nome.replace(new RegExp(`^${brand}\\s*`, "i"), "").trim() || item.nome;
         const stockQty = Number(item.estoque?.saldoVirtualTotal ?? 1);
         const isPreVenda = importMode === "pre_venda";
-        const slug = slugify(`${brand}-${model}`);
+        let officialBrand = getBlingBrandDescription(item.marca);
 
         let imageUrl = item.imagemURL || null;
         let imageQuality: "original" | "thumbnail" | "missing" = imageUrl ? "thumbnail" : "missing";
@@ -226,11 +229,17 @@ export function BlingIntegrationDialog({
           });
           imageUrl = await persistResolvedBlingImage(image, item.id);
           imageQuality = image.imageQuality;
+          officialBrand = image.brandName || officialBrand;
           if (imageQuality !== "original") thumbnailCount++;
         } catch (imageError) {
           console.warn("Não foi possível consultar a imagem original no Bling:", item.id, imageError);
           if (imageUrl) thumbnailCount++;
         }
+
+        const brand = detectBrand(item.nome, officialBrand);
+        const escapedBrand = brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const model = item.nome.replace(new RegExp(`^${escapedBrand}\\s*`, "i"), "").trim() || item.nome;
+        const slug = slugify(`${brand}-${model}`);
 
         const payload: any = {
           store_id: storeId,
@@ -648,7 +657,9 @@ export function BlingIntegrationDialog({
                       <div className="text-right shrink-0">
                         <span className="font-bold text-xs text-foreground block">{brl(item.preco)}</span>
                         <Badge variant="outline" className="text-[10px] py-0">
-                          {detectBrand(item.nome)}
+                          {getBlingBrandDescription(item.marca)
+                            ? detectBrand(item.nome, getBlingBrandDescription(item.marca))
+                            : "Marca do Bling"}
                         </Badge>
                       </div>
                     </div>
