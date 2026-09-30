@@ -97,5 +97,5 @@ test("InfinitePay callbacks verify status and amount with the provider before co
   assert.match(webhook, /verifyAndConfirmInfinitePay/);
   assert.match(settings, /store\.owner_id !== user\.id/);
   assert.match(createPayment, /provider: "infinitepay"/);
-  assert.match(createPayment, /order_nsu: attempt\.id/);
+  assert.match(createPayment, /order_nsu: paymentAttempt\\.id/);
 });

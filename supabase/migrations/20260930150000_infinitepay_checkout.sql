@@ -69,7 +69,7 @@ CREATE OR REPLACE FUNCTION public.create_gateway_payment_attempt(
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
-AS $
+AS $function$
 DECLARE
   v_order record;
   v_sorted_ids uuid[];
@@ -161,7 +161,7 @@ BEGIN
 
   RETURN p_attempt_id;
 END;
-$;
+$function$;
 
 REVOKE ALL ON FUNCTION public.create_gateway_payment_attempt(uuid, uuid, uuid, uuid[], text, numeric, text, text, integer, text, timestamptz)
   FROM PUBLIC, anon, authenticated;
