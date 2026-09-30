@@ -7,6 +7,8 @@ const customer = "10000000-0000-4000-8000-000000000001";
 const store = "20000000-0000-4000-8000-000000000001";
 const signalOrder = "30000000-0000-4000-8000-000000000001";
 const fullOrder = "30000000-0000-4000-8000-000000000002";
+const readyOrder = "30000000-0000-4000-8000-000000000003";
+const noSignalOrder = "30000000-0000-4000-8000-000000000004";
 
 test("payment attempts bind amount, customer, store and gateway confirmation", async () => {
   const db = new PGlite();
@@ -25,15 +27,24 @@ test("payment attempts bind amount, customer, store and gateway confirmation", a
       INSERT INTO public.stores VALUES ('${store}');
       INSERT INTO public.orders VALUES
         ('${signalOrder}','${store}','${customer}',150,25,'aguardando_sinal',null,null,null),
-        ('${fullOrder}','${store}','${customer}',100,0,'pendente',null,null,null);
+        ('${fullOrder}','${store}','${customer}',100,0,'pendente',null,null,null),
+        ('${readyOrder}','${store}','${customer}',1,0,'pronta_entrega',null,null,null),
+        ('${noSignalOrder}','${store}','${customer}',50,0,'sem_sinal',null,null,null);
       INSERT INTO public.order_installments VALUES
         ('40000000-0000-4000-8000-000000000001','${signalOrder}','pending',null),
-        ('40000000-0000-4000-8000-000000000002','${fullOrder}','pending',null);`);
+        ('40000000-0000-4000-8000-000000000002','${fullOrder}','pending',null),
+        ('40000000-0000-4000-8000-000000000003','${readyOrder}','pending',null),
+        ('40000000-0000-4000-8000-000000000004','${noSignalOrder}','pending',null);`);
     const migration = await readFile(
       new URL("../supabase/migrations/20260927200746_payment_attempts.sql", import.meta.url),
       "utf8",
     );
     await db.exec(migration);
+    const confirmationFix = await readFile(
+      new URL("../supabase/migrations/20260930220000_confirm_ready_order_payments.sql", import.meta.url),
+      "utf8",
+    );
+    await db.exec(confirmationFix);
 
     const privileges = (await db.query(`SELECT
       has_table_privilege('anon','public.gateway_payment_attempts','SELECT') AS anon_read,
@@ -79,6 +90,25 @@ test("payment attempts bind amount, customer, store and gateway confirmation", a
     )).rows[0].result.updated_count, 1);
     assert.equal((await db.query("SELECT payment_status FROM public.orders WHERE id=$1", [fullOrder])).rows[0].payment_status, "quitado");
     assert.equal((await db.query("SELECT status FROM public.order_installments WHERE order_id=$1", [fullOrder])).rows[0].status, "paid");
+
+    for (const [id, orderId, amount] of [
+      ["50000000-0000-4000-8000-000000000003", readyOrder, 1],
+      ["50000000-0000-4000-8000-000000000004", noSignalOrder, 50],
+    ]) {
+      await db.query(`INSERT INTO public.gateway_payment_attempts
+        (id,store_id,user_id,order_ids,request_key,amount,payment_method,max_installments,description,status,expires_at)
+        VALUES($1,$2,$3,$4::uuid[],repeat('c',64),$5,'pix',1,'Pagamento confirmado','pending',now()+interval '30 minutes')`,
+        [id, store, customer, [orderId], amount]);
+      const confirmation = (await db.query(
+        "SELECT public.confirm_gateway_payment_attempt($1,$2,'infinitepay',$3) AS result",
+        [id, amount, `infinitepay-${id}`],
+      )).rows[0].result;
+      assert.equal(confirmation.updated_count, 1);
+      assert.equal((await db.query("SELECT payment_status FROM public.orders WHERE id=$1", [orderId])).rows[0].payment_status, "quitado");
+      assert.equal((await db.query("SELECT gateway_status FROM public.orders WHERE id=$1", [orderId])).rows[0].gateway_status, "approved");
+      assert.equal((await db.query("SELECT status FROM public.order_installments WHERE order_id=$1", [orderId])).rows[0].status, "paid");
+      assert.equal((await db.query("SELECT status FROM public.gateway_payment_attempts WHERE id=$1", [id])).rows[0].status, "approved");
+    }
   } finally {
     await db.close();
   }
