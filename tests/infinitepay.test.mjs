@@ -35,6 +35,16 @@ test("InfinitePay payment attempts are locked per order and available only to se
       "utf8",
     );
     await db.exec(migration);
+    await db.exec(await readFile(new URL("../supabase/migrations/20260930173500_allow_unpaid_payment_statuses.sql", import.meta.url), "utf8"));
+    const payableStatuses = ["sem_sinal", "pronta_entrega"];
+    for (const [index, status] of payableStatuses.entries()) {
+      const id = `30000000-0000-4000-8000-${String(index + 2).padStart(12, "0")}`;
+      await db.query("INSERT INTO public.orders VALUES($1,$2,$3,150,0,$4)", [id, "20000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000001", status]);
+      const result = await db.query(`SELECT public.create_gateway_payment_attempt($1,$2,$3,$4::uuid[],$5,$6,$7,$8,$9,$10,$11::timestamptz) AS id`, [
+        `40000000-0000-4000-8000-${String(index + 10).padStart(12, "0")}`, "20000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000001", [id], String(index + 1).repeat(64), 150, "infinitepay", "infinitepay", 1, "Reserva miniatura", new Date(Date.now() + 3600_000).toISOString(),
+      ]);
+      assert.ok(result.rows[0].id);
+    }
 
     const grants = (await db.query(`SELECT
       has_table_privilege('anon','public.infinitepay_connections','SELECT') AS anon_read,
@@ -101,6 +111,8 @@ test("InfinitePay callbacks verify status and amount with the provider before co
   assert.match(createPayment, /order_nsu: paymentAttempt\.id/);
   assert.match(createPayment, /products\(model\)/);
   assert.doesNotMatch(createPayment, /products\(name/);
+  const paymentHelpers = await readFile(new URL("../src/lib/mercadoPago.server.ts", import.meta.url), "utf8");
+  assert.match(paymentHelpers, /case "sem_sinal":[\\s\\S]*case "pronta_entrega": amount = total/);
   assert.match(mercadoPagoCreatePayment, /products\(model, max_installments\)/);
   assert.doesNotMatch(mercadoPagoCreatePayment, /products\(name/);
 });
