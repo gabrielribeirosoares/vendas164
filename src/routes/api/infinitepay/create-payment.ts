@@ -122,7 +122,14 @@ export const Route = createFileRoute("/api/infinitepay/create-payment")({
             console.error("InfinitePay retornou URL de checkout malformada.");
             return fail("A InfinitePay retornou um link inválido. Tente novamente.", 502);
           }
-          if (parsedUrl.protocol !== "https:" || parsedUrl.hostname !== "checkout.infinitepay.com.br") {
+          const allowedCheckoutHosts = new Set(["checkout.infinitepay.com.br", "checkout.infinitepay.io"]);
+          if (
+            parsedUrl.protocol !== "https:"
+            || !allowedCheckoutHosts.has(parsedUrl.hostname)
+            || parsedUrl.port !== ""
+            || parsedUrl.username !== ""
+            || parsedUrl.password !== ""
+          ) {
             await admin.from("gateway_payment_attempts" as never)
               .update({ status: "failed", updated_at: new Date().toISOString() } as never)
               .eq("id", paymentAttempt.id).eq("status", "pending");
