@@ -85,11 +85,12 @@ test("InfinitePay payment attempts are locked per order and available only to se
 });
 
 test("InfinitePay callbacks verify status and amount with the provider before confirming orders", async () => {
-  const [server, webhook, settings, createPayment] = await Promise.all([
+  const [server, webhook, settings, createPayment, mercadoPagoCreatePayment] = await Promise.all([
     readFile(new URL("../src/lib/infinitePay.server.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/routes/api/infinitepay/webhook.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/routes/api/infinitepay/settings.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/routes/api/infinitepay/create-payment.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/routes/api/mercadopago/create-payment.ts", import.meta.url), "utf8"),
   ]);
   assert.match(server, /api\.checkout\.infinitepay\.io\/payment_check/);
   assert.match(server, /!check\.success \|\| !check\.paid \|\| Number\(check\.amount\) !== expectedCents/);
@@ -98,4 +99,8 @@ test("InfinitePay callbacks verify status and amount with the provider before co
   assert.match(settings, /store\.owner_id !== user\.id/);
   assert.match(createPayment, /provider: "infinitepay"/);
   assert.match(createPayment, /order_nsu: paymentAttempt\.id/);
+  assert.match(createPayment, /products\(model\)/);
+  assert.doesNotMatch(createPayment, /products\(name/);
+  assert.match(mercadoPagoCreatePayment, /products\(model, max_installments\)/);
+  assert.doesNotMatch(mercadoPagoCreatePayment, /products\(name/);
 });
