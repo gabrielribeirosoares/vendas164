@@ -50,11 +50,12 @@ export function CheckoutPaymentDialog({
   customerName = "",
   onPaymentSuccess,
 }: CheckoutPaymentDialogProps) {
-  const [activeTab, setActiveTab] = useState<"pix" | "card">("pix");
+  const [activeTab, setActiveTab] = useState<"pix" | "card" | "infinitepay">("pix");
   const [paymentConfig, setPaymentConfig] = useState<{
     isConfigured: boolean;
     publicKey: string | null;
     isSandbox: boolean;
+    infinitePayEnabled: boolean;
   } | null>(null);
 
   // Estados PIX
@@ -69,6 +70,7 @@ export function CheckoutPaymentDialog({
 
   // Estados Cartão (Checkout Pro Oficial do Mercado Pago)
   const [redirectingToMp, setRedirectingToMp] = useState(false);
+  const [redirectingToInfinitePay, setRedirectingToInfinitePay] = useState(false);
   const [cardError, setCardError] = useState("");
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -81,20 +83,26 @@ export function CheckoutPaymentDialog({
       setCardError("");
       setGeneratingPix(false);
       setRedirectingToMp(false);
+      setRedirectingToInfinitePay(false);
+      setActiveTab("pix");
     }
   }, [open]);
 
   // 1. Carregar configuração de pagamento da loja
   useEffect(() => {
     if (!open || !storeId) return;
+    setPaymentConfig(null);
 
-    fetch(`/api/mercadopago/public-config?storeId=${storeId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setPaymentConfig(data);
+    Promise.all([
+      fetch(`/api/mercadopago/public-config?storeId=${encodeURIComponent(storeId)}`).then((res) => res.json()),
+      fetch(`/api/infinitepay/public-config?storeId=${encodeURIComponent(storeId)}`).then((res) => res.json()),
+    ])
+      .then(([mercadoPago, infinitePay]) => {
+        setPaymentConfig({ ...mercadoPago, infinitePayEnabled: Boolean(infinitePay.enabled) });
+        if (!mercadoPago.isConfigured && infinitePay.enabled) setActiveTab("infinitepay");
       })
       .catch((err) => {
-        console.error("Erro ao carregar config MP:", err);
+        console.error("Erro ao carregar formas de pagamento:", err);
       });
   }, [open, storeId]);
 
@@ -309,6 +317,31 @@ export function CheckoutPaymentDialog({
     }
   }
 
+  async function handleRedirectToInfinitePay() {
+    setRedirectingToInfinitePay(true);
+    setCardError("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userToken = sessionData?.session?.access_token;
+      if (!userToken) throw new Error("Entre na sua conta para iniciar o pagamento.");
+      const response = await fetch("/api/infinitepay/create-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${userToken}` },
+        body: JSON.stringify({ storeId, orderIds, customerName, customerEmail }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível criar a cobrança InfinitePay.");
+      const checkoutUrl = String(result.checkoutUrl || "");
+      if (!checkoutUrl) throw new Error("A InfinitePay não retornou o link de checkout.");
+      window.location.assign(checkoutUrl);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível abrir a InfinitePay.";
+      setCardError(message);
+      toast.error(message);
+      setRedirectingToInfinitePay(false);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md p-0 overflow-hidden border-border/80 shadow-2xl bg-card">
@@ -363,7 +396,7 @@ export function CheckoutPaymentDialog({
             </DialogHeader>
 
             <div className="p-6 pt-4">
-              {paymentConfig && !paymentConfig.isConfigured ? (
+              {paymentConfig && !paymentConfig.isConfigured && !paymentConfig.infinitePayEnabled ? (
                 <div className="py-8 text-center space-y-4">
                   <div className="size-14 rounded-full bg-amber-500/15 text-amber-600 flex items-center justify-center mx-auto">
                     <AlertCircle className="size-7" />
@@ -371,7 +404,7 @@ export function CheckoutPaymentDialog({
                   <div className="space-y-1.5">
                     <p className="text-sm font-semibold text-foreground">Pagamento online indisponível</p>
                     <p className="text-xs text-muted-foreground leading-relaxed max-w-xs mx-auto">
-                      A loja <strong>{storeName}</strong> ainda não configurou o recebimento automático via Mercado Pago.
+                      A loja <strong>{storeName}</strong> ainda não configurou o recebimento automático pelo Mercado Pago ou pela InfinitePay.
                       Entre em contato com o vendedor para combinar outra forma de pagamento.
                     </p>
                   </div>
@@ -389,12 +422,15 @@ export function CheckoutPaymentDialog({
                 onValueChange={(val) => setActiveTab(val as any)}
                 className="w-full"
               >
-                <TabsList className="grid grid-cols-2 mb-4">
-                  <TabsTrigger value="pix" className="gap-2 text-xs font-semibold">
+                <TabsList className="grid grid-cols-3 mb-4">
+                  <TabsTrigger value="pix" disabled={!paymentConfig?.isConfigured} className="gap-2 text-xs font-semibold">
                     <QrCode className="size-4 text-emerald-600" /> PIX Instantâneo
                   </TabsTrigger>
-                  <TabsTrigger value="card" className="gap-2 text-xs font-semibold">
+                  <TabsTrigger value="card" disabled={!paymentConfig?.isConfigured} className="gap-2 text-xs font-semibold">
                     <CreditCard className="size-4 text-sky-600" /> Cartão de Crédito
+                  </TabsTrigger>
+                  <TabsTrigger value="infinitepay" disabled={!paymentConfig?.infinitePayEnabled} className="gap-2 text-[11px] font-semibold">
+                    InfinitePay
                   </TabsTrigger>
                 </TabsList>
 
@@ -536,6 +572,44 @@ export function CheckoutPaymentDialog({
 
                   <p className="text-[11px] text-center text-muted-foreground flex items-center justify-center gap-1">
                     <Lock className="size-3 text-primary" /> Transação processada em ambiente seguro do Mercado Pago
+                  </p>
+                </TabsContent>
+
+                <TabsContent value="infinitepay" className="space-y-4 mt-0">
+                  {cardError && (
+                    <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+                      {cardError}
+                    </div>
+                  )}
+                  <div className="space-y-3 rounded-xl border border-border/60 bg-muted/20 p-4">
+                    <div className="flex items-center gap-2">
+                      <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <CreditCard className="size-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-foreground">Pagamento pela InfinitePay</p>
+                        <p className="text-[11px] text-muted-foreground">PIX ou cartão no checkout seguro da loja.</p>
+                      </div>
+                    </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Você será direcionado para concluir o pagamento diretamente para <strong className="text-foreground">{storeName}</strong>.
+                    </p>
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background/80 p-3">
+                      <span className="text-xs text-muted-foreground">Total a pagar:</span>
+                      <span className="text-base font-bold text-foreground">{brl(amount)}</span>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={redirectingToInfinitePay}
+                    onClick={handleRedirectToInfinitePay}
+                    className="w-full gap-2 bg-primary text-primary-foreground font-bold shadow-md"
+                  >
+                    {redirectingToInfinitePay ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />}
+                    {redirectingToInfinitePay ? "Abrindo InfinitePay..." : "Pagar com InfinitePay"}
+                  </Button>
+                  <p className="flex items-center justify-center gap-1 text-center text-[11px] text-muted-foreground">
+                    <Lock className="size-3 text-primary" /> O pedido só será confirmado após validação do pagamento no servidor.
                   </p>
                 </TabsContent>
               </Tabs>

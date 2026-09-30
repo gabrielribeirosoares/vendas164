@@ -30,6 +30,11 @@ import { Route as ApiMercadopagoOauthCallbackRouteImport } from './routes/api/me
 import { Route as ApiMercadopagoOauthDisconnectRouteImport } from './routes/api/mercadopago/oauth/disconnect'
 import { Route as ApiMercadopagoOauthStartRouteImport } from './routes/api/mercadopago/oauth/start'
 import { Route as ApiMercadopagoOauthStatusRouteImport } from './routes/api/mercadopago/oauth/status'
+import { Route as ApiInfinitepayCreatePaymentRouteImport } from './routes/api/infinitepay/create-payment'
+import { Route as ApiInfinitepayPublicConfigRouteImport } from './routes/api/infinitepay/public-config'
+import { Route as ApiInfinitepayReturnRouteImport } from './routes/api/infinitepay/return'
+import { Route as ApiInfinitepaySettingsRouteImport } from './routes/api/infinitepay/settings'
+import { Route as ApiInfinitepayWebhookRouteImport } from './routes/api/infinitepay/webhook'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -107,6 +112,31 @@ const ApiMercadopagoWebhookRoute = ApiMercadopagoWebhookRouteImport.update({
   path: '/api/mercadopago/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInfinitepayCreatePaymentRoute = ApiInfinitepayCreatePaymentRouteImport.update({
+  id: '/api/infinitepay/create-payment',
+  path: '/api/infinitepay/create-payment',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInfinitepayPublicConfigRoute = ApiInfinitepayPublicConfigRouteImport.update({
+  id: '/api/infinitepay/public-config',
+  path: '/api/infinitepay/public-config',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInfinitepayReturnRoute = ApiInfinitepayReturnRouteImport.update({
+  id: '/api/infinitepay/return',
+  path: '/api/infinitepay/return',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInfinitepaySettingsRoute = ApiInfinitepaySettingsRouteImport.update({
+  id: '/api/infinitepay/settings',
+  path: '/api/infinitepay/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInfinitepayWebhookRoute = ApiInfinitepayWebhookRouteImport.update({
+  id: '/api/infinitepay/webhook',
+  path: '/api/infinitepay/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LojaSlugItemSlugRoute = LojaSlugItemSlugRouteImport.update({
   id: '/$itemSlug',
   path: '/$itemSlug',
@@ -157,6 +187,11 @@ export interface FileRoutesByFullPath {
   '/api/mercadopago/create-payment': typeof ApiMercadopagoCreatePaymentRoute
   '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
   '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
+  '/api/infinitepay/create-payment': typeof ApiInfinitepayCreatePaymentRoute
+  '/api/infinitepay/public-config': typeof ApiInfinitepayPublicConfigRoute
+  '/api/infinitepay/return': typeof ApiInfinitepayReturnRoute
+  '/api/infinitepay/settings': typeof ApiInfinitepaySettingsRoute
+  '/api/infinitepay/webhook': typeof ApiInfinitepayWebhookRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
   '/api/bling/oauth/callback': typeof ApiBlingOauthCallbackRoute
   '/api/mercadopago/oauth/callback': typeof ApiMercadopagoOauthCallbackRoute
@@ -227,6 +262,11 @@ export interface FileRouteTypes {
     | '/api/mercadopago/create-payment'
     | '/api/mercadopago/public-config'
     | '/api/mercadopago/webhook'
+    | '/api/infinitepay/create-payment'
+    | '/api/infinitepay/public-config'
+    | '/api/infinitepay/return'
+    | '/api/infinitepay/settings'
+    | '/api/infinitepay/webhook'
     | '/loja/$slug/$itemSlug'
     | '/api/bling/oauth/callback'
     | '/api/mercadopago/oauth/callback'
@@ -294,6 +334,11 @@ export interface RootRouteChildren {
   ApiMercadopagoCreatePaymentRoute: typeof ApiMercadopagoCreatePaymentRoute
   ApiMercadopagoPublicConfigRoute: typeof ApiMercadopagoPublicConfigRoute
   ApiMercadopagoWebhookRoute: typeof ApiMercadopagoWebhookRoute
+  ApiInfinitepayCreatePaymentRoute: typeof ApiInfinitepayCreatePaymentRoute
+  ApiInfinitepayPublicConfigRoute: typeof ApiInfinitepayPublicConfigRoute
+  ApiInfinitepayReturnRoute: typeof ApiInfinitepayReturnRoute
+  ApiInfinitepaySettingsRoute: typeof ApiInfinitepaySettingsRoute
+  ApiInfinitepayWebhookRoute: typeof ApiInfinitepayWebhookRoute
   ApiBlingOauthCallbackRoute: typeof ApiBlingOauthCallbackRoute
   ApiMercadopagoOauthCallbackRoute: typeof ApiMercadopagoOauthCallbackRoute
   ApiMercadopagoOauthDisconnectRoute: typeof ApiMercadopagoOauthDisconnectRoute
@@ -408,6 +453,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMercadopagoWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/infinitepay/create-payment': {
+      id: '/api/infinitepay/create-payment'
+      path: '/api/infinitepay/create-payment'
+      fullPath: '/api/infinitepay/create-payment'
+      preLoaderRoute: typeof ApiInfinitepayCreatePaymentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/infinitepay/public-config': {
+      id: '/api/infinitepay/public-config'
+      path: '/api/infinitepay/public-config'
+      fullPath: '/api/infinitepay/public-config'
+      preLoaderRoute: typeof ApiInfinitepayPublicConfigRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/infinitepay/return': {
+      id: '/api/infinitepay/return'
+      path: '/api/infinitepay/return'
+      fullPath: '/api/infinitepay/return'
+      preLoaderRoute: typeof ApiInfinitepayReturnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/infinitepay/settings': {
+      id: '/api/infinitepay/settings'
+      path: '/api/infinitepay/settings'
+      fullPath: '/api/infinitepay/settings'
+      preLoaderRoute: typeof ApiInfinitepaySettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/infinitepay/webhook': {
+      id: '/api/infinitepay/webhook'
+      path: '/api/infinitepay/webhook'
+      fullPath: '/api/infinitepay/webhook'
+      preLoaderRoute: typeof ApiInfinitepayWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/loja/$slug/$itemSlug': {
       id: '/loja/$slug/$itemSlug'
       path: '/$itemSlug'
@@ -492,6 +572,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMercadopagoCreatePaymentRoute: ApiMercadopagoCreatePaymentRoute,
   ApiMercadopagoPublicConfigRoute: ApiMercadopagoPublicConfigRoute,
   ApiMercadopagoWebhookRoute: ApiMercadopagoWebhookRoute,
+  ApiInfinitepayCreatePaymentRoute: ApiInfinitepayCreatePaymentRoute,
+  ApiInfinitepayPublicConfigRoute: ApiInfinitepayPublicConfigRoute,
+  ApiInfinitepayReturnRoute: ApiInfinitepayReturnRoute,
+  ApiInfinitepaySettingsRoute: ApiInfinitepaySettingsRoute,
+  ApiInfinitepayWebhookRoute: ApiInfinitepayWebhookRoute,
   ApiBlingOauthCallbackRoute: ApiBlingOauthCallbackRoute,
   ApiMercadopagoOauthCallbackRoute: ApiMercadopagoOauthCallbackRoute,
   ApiMercadopagoOauthDisconnectRoute: ApiMercadopagoOauthDisconnectRoute,

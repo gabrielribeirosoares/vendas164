@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, CreditCard, ExternalLink, Loader2, Lock, RefreshCw, ShieldCheck, Unplug } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,20 +32,27 @@ export function PaymentSettingsTab({ storeId, storeName = "sua loja" }: PaymentS
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
+  const [infinitePayHandle, setInfinitePayHandle] = useState("");
+  const [infinitePayConnected, setInfinitePayConnected] = useState(false);
 
   async function loadStatus(showToast = false) {
     setLoading(true);
     try {
       const token = await sessionToken();
-      const response = await fetch(`/api/mercadopago/oauth/status?storeId=${encodeURIComponent(storeId)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Não foi possível consultar a conexão.");
-      setStatus(result);
-      if (showToast) toast.success("Status da conexão atualizado.");
+      const headers = { Authorization: `Bearer ${token}` };
+      const [mpResponse, infinitePayResponse] = await Promise.all([
+        fetch(`/api/mercadopago/oauth/status?storeId=${encodeURIComponent(storeId)}`, { headers }),
+        fetch(`/api/infinitepay/settings?storeId=${encodeURIComponent(storeId)}`, { headers }),
+      ]);
+      const [mpResult, infinitePayResult] = await Promise.all([mpResponse.json(), infinitePayResponse.json()]);
+      if (!mpResponse.ok) throw new Error(mpResult.error || "Não foi possível consultar o Mercado Pago.");
+      if (!infinitePayResponse.ok) throw new Error(infinitePayResult.error || "Não foi possível consultar a InfinitePay.");
+      setStatus(mpResult);
+      setInfinitePayHandle(infinitePayResult.handle || "");
+      setInfinitePayConnected(Boolean(infinitePayResult.connected));
+      if (showToast) toast.success("Status das integrações atualizado.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível consultar a conexão.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível consultar as integrações.");
     } finally {
       setLoading(false);
     }
@@ -91,6 +99,49 @@ export function PaymentSettingsTab({ storeId, storeName = "sua loja" }: PaymentS
     }
   }
 
+  async function saveInfinitePay() {
+    setWorking(true);
+    try {
+      const token = await sessionToken();
+      const response = await fetch("/api/infinitepay/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ storeId, handle: infinitePayHandle }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível conectar a InfinitePay.");
+      setInfinitePayHandle(result.handle || "");
+      setInfinitePayConnected(true);
+      toast.success("InfinitePay conectada a esta loja.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível conectar a InfinitePay.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function disconnectInfinitePay() {
+    if (!confirm(`Deseja desconectar a InfinitePay da loja ${storeName}?`)) return;
+    setWorking(true);
+    try {
+      const token = await sessionToken();
+      const response = await fetch("/api/infinitepay/settings", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ storeId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível desconectar a InfinitePay.");
+      setInfinitePayHandle("");
+      setInfinitePayConnected(false);
+      toast.success("InfinitePay desconectada.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível desconectar a InfinitePay.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -108,6 +159,7 @@ export function PaymentSettingsTab({ storeId, storeName = "sua loja" }: PaymentS
           <p className="mt-2 text-xs text-muted-foreground">Verificando conexão com o Mercado Pago...</p>
         </Card>
       ) : (
+        <>
         <Card className="overflow-hidden border-border/50 bg-card">
           <CardHeader className="border-b bg-muted/20 p-5">
             <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
@@ -177,6 +229,63 @@ export function PaymentSettingsTab({ storeId, storeName = "sua loja" }: PaymentS
             )}
           </CardContent>
         </Card>
+
+        <Card className="overflow-hidden border-border/50 bg-card">
+          <CardHeader className="border-b bg-muted/20 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className={`flex size-11 items-center justify-center rounded-xl ${infinitePayConnected ? "bg-emerald-500/15 text-emerald-600" : "bg-primary/10 text-primary"}`}>
+                  {infinitePayConnected ? <CheckCircle2 className="size-6" /> : <CreditCard className="size-6" />}
+                </div>
+                <div>
+                  <CardTitle className="text-base font-bold">
+                    {infinitePayConnected ? "InfinitePay conectada" : "Conecte sua InfinitePay"}
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Cada loja usa sua própria InfiniteTag e recebe na própria conta.
+                  </CardDescription>
+                </div>
+              </div>
+              {infinitePayConnected && (
+                <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 font-bold text-emerald-600">
+                  Ativa
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4 p-5">
+            <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs">
+              <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
+              <p className="leading-relaxed text-muted-foreground">
+                Informe sua InfiniteTag sem o símbolo $. O checkout e a confirmação são processados pelo servidor; não pedimos senha, token ou chave secreta.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="infinitepay-handle" className="text-xs font-medium text-foreground">InfiniteTag da loja</label>
+              <Input
+                id="infinitepay-handle"
+                value={infinitePayHandle}
+                onChange={(event) => setInfinitePayHandle(event.target.value)}
+                placeholder="ex.: gabrielminiaturas"
+                autoComplete="off"
+                disabled={working}
+              />
+              <p className="text-[11px] text-muted-foreground">Ative antes o Checkout Integrado na sua conta InfinitePay.</p>
+            </div>
+            <div className="flex flex-wrap gap-2 border-t pt-4">
+              <Button onClick={saveInfinitePay} disabled={working || !infinitePayHandle.trim()} className="gap-2 text-xs font-semibold">
+                {working ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+                {infinitePayConnected ? "Salvar InfiniteTag" : "Conectar InfinitePay"}
+              </Button>
+              {infinitePayConnected && (
+                <Button variant="outline" onClick={disconnectInfinitePay} disabled={working} className="gap-2 text-xs text-destructive hover:bg-destructive/10">
+                  <Unplug className="size-4" /> Desconectar
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        </>
       )}
     </div>
   );

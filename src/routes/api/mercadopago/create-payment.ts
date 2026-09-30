@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
 import { gatewayAdmin, getMercadoPagoAccessToken, parseOrderIds, paymentAttemptKey, paymentAttemptReference, pendingAmount } from "@/lib/mercadoPago.server";
 
@@ -51,31 +52,39 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
           const now = new Date();
           await admin.from("gateway_payment_attempts" as never)
             .update({ status: "expired", updated_at: now.toISOString() } as never)
-            .eq("user_id", user.id).eq("store_id", storeId)
+            .eq("user_id", user.id).eq("store_id", storeId).eq("provider", "mercadopago")
             .in("status", ["created", "pending"]).lte("expires_at", now.toISOString());
 
           const expiresAt = new Date(now.getTime() + (method === "pix" ? 30 : 120) * 60_000).toISOString();
           const requestKey = paymentAttemptKey(storeId, user.id, orderIds, amountCents, method);
-          const attemptInput = {
-            store_id: storeId, user_id: user.id, order_ids: orderIds, amount,
-            request_key: requestKey,
-            payment_method: method, max_installments: maxInstallments,
-            description, expires_at: expiresAt,
-          };
-          let { data: attempt, error: attemptError } = await admin
-            .from("gateway_payment_attempts" as never).insert(attemptInput as never)
-            .select("id, response_payload, status").single();
-
-          if (attemptError?.code === "23505") {
-            const existing = await admin.from("gateway_payment_attempts" as never)
-              .select("id, response_payload, status")
-              .eq("store_id", storeId).eq("user_id", user.id).eq("request_key", requestKey)
-              .in("status", ["created", "pending"]).maybeSingle();
-            if (existing.error) throw existing.error;
-            attempt = existing.data;
-            attemptError = null;
+          const { data: attemptIdFromRpc, error: attemptError } = await admin.rpc(
+            "create_gateway_payment_attempt" as never,
+            {
+              p_attempt_id: randomUUID(),
+              p_store_id: storeId,
+              p_user_id: user.id,
+              p_order_ids: orderIds,
+              p_request_key: requestKey,
+              p_amount: amount,
+              p_payment_method: method,
+              p_provider: "mercadopago",
+              p_max_installments: maxInstallments,
+              p_description: description,
+              p_expires_at: expiresAt,
+            } as never,
+          );
+          if (attemptError) {
+            if (attemptError.message.includes("gateway_order_payment_in_progress")) {
+              return errorResponse("Já existe uma cobrança em andamento para este pedido. Conclua ou aguarde a confirmação antes de iniciar outra.", 409);
+            }
+            throw attemptError;
           }
-          if (attemptError || !attempt) throw attemptError || new Error("Não foi possível registrar a tentativa.");
+          const { data: attempt, error: loadAttemptError } = await admin
+            .from("gateway_payment_attempts" as never)
+            .select("id, response_payload, status")
+            .eq("id", String(attemptIdFromRpc))
+            .single();
+          if (loadAttemptError || !attempt) throw loadAttemptError || new Error("Não foi possível recuperar a tentativa de pagamento.");
           const paymentAttempt = attempt as unknown as Attempt;
           attemptId = paymentAttempt.id;
           if (paymentAttempt.response_payload) return Response.json(paymentAttempt.response_payload);

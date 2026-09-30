@@ -271,6 +271,14 @@ export async function confirmGatewayPayment(
 ) {
   if (payment.status !== "approved") return false;
   const attemptId = parsePaymentAttemptReference(payment.external_reference);
+  const { data: attempt, error: attemptError } = await admin
+    .from("gateway_payment_attempts" as never)
+    .select("provider")
+    .eq("id", attemptId)
+    .maybeSingle();
+  if (attemptError || (attempt as unknown as { provider?: string } | null)?.provider !== "mercadopago") {
+    throw new Error("A tentativa não pertence ao Mercado Pago.");
+  }
   const amount = Number(payment.transaction_amount);
   if (!Number.isFinite(amount) || amount <= 0 || Math.abs(Math.round(amount * 100) - amount * 100) > 0.000001) {
     throw new Error("Valor do pagamento inválido.");
