@@ -139,6 +139,8 @@ test("InfinitePay callbacks verify status and amount with the provider before co
   assert.match(mercadoPagoCreatePayment, /products\(model, max_installments\)/);
   assert.doesNotMatch(mercadoPagoCreatePayment, /products\(name/);
   assert.match(createPayment, /domínio de checkout não permitido/);
+  assert.match(createPayment, /checkout\.infinitepay\.com\.br/);
+  assert.match(createPayment, /checkout\.infinitepay\.io/);
   assert.match(mercadoPagoCreatePayment, /providerError\.message/);
   assert.match(mercadoPagoCreatePayment, /email ocultado/);
 });
