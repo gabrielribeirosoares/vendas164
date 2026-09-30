@@ -95,13 +95,17 @@ test("InfinitePay payment attempts are locked per order and available only to se
 });
 
 test("InfinitePay callbacks verify status and amount with the provider before confirming orders", async () => {
-  const [server, webhook, settings, createPayment, mercadoPagoCreatePayment] = await Promise.all([
+  const [server, webhook, settings, createPayment, mercadoPagoCreatePayment, checkoutDialog] = await Promise.all([
     readFile(new URL("../src/lib/infinitePay.server.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/routes/api/infinitepay/webhook.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/routes/api/infinitepay/settings.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/routes/api/infinitepay/create-payment.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/routes/api/mercadopago/create-payment.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/CheckoutPaymentDialog.tsx", import.meta.url), "utf8"),
   ]);
+  assert.doesNotMatch(checkoutDialog, /Gerar PIX automaticamente/);
+  assert.match(checkoutDialog, /paymentRequestRef\.current/);
+  assert.match(checkoutDialog, /disabled=\{!paymentConfig\?\.isConfigured \|\| paymentBusy\}/);
   assert.match(server, /api\.checkout\.infinitepay\.io\/payment_check/);
   assert.match(server, /!check\.success \|\| !check\.paid \|\| Number\(check\.amount\) !== expectedCents/);
   assert.ok(server.indexOf("api.checkout.infinitepay.io/payment_check") < server.indexOf('admin.rpc("confirm_gateway_payment_attempt"'));
