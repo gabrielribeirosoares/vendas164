@@ -112,7 +112,7 @@ test("InfinitePay callbacks verify status and amount with the provider before co
   assert.match(createPayment, /products\(model\)/);
   assert.doesNotMatch(createPayment, /products\(name/);
   const paymentHelpers = await readFile(new URL("../src/lib/mercadoPago.server.ts", import.meta.url), "utf8");
-  assert.match(paymentHelpers, /case "sem_sinal":[\\s\\S]*case "pronta_entrega": amount = total/);
+  assert.ok(paymentHelpers.includes('case "sem_sinal":') && paymentHelpers.includes('case "pronta_entrega": amount = total'));
   assert.match(mercadoPagoCreatePayment, /products\(model, max_installments\)/);
   assert.doesNotMatch(mercadoPagoCreatePayment, /products\(name/);
 });
