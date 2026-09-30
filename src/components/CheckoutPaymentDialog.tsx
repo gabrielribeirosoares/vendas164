@@ -74,6 +74,8 @@ export function CheckoutPaymentDialog({
   const [cardError, setCardError] = useState("");
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const paymentRequestRef = useRef(false);
+  const paymentBusy = generatingPix || redirectingToMp || redirectingToInfinitePay;
 
   // Resetar estados sempre que o modal abrir
   useEffect(() => {
@@ -105,13 +107,6 @@ export function CheckoutPaymentDialog({
         console.error("Erro ao carregar formas de pagamento:", err);
       });
   }, [open, storeId]);
-
-  // 2. Gerar PIX automaticamente ao abrir a aba PIX se configurado
-  useEffect(() => {
-    if (open && activeTab === "pix" && paymentConfig?.isConfigured && !pixData && !generatingPix && !paymentApproved) {
-      handleGeneratePix();
-    }
-  }, [open, activeTab, paymentConfig, pixData, paymentApproved]);
 
   // 3. Monitoramento em tempo real do pagamento (apenas se houver nova mudança de status)
   useEffect(() => {
@@ -209,7 +204,8 @@ export function CheckoutPaymentDialog({
 
   // Geração de PIX Dinâmico
   async function handleGeneratePix() {
-    if (generatingPix) return;
+    if (paymentRequestRef.current) return;
+    paymentRequestRef.current = true;
     setGeneratingPix(true);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -249,6 +245,7 @@ export function CheckoutPaymentDialog({
     } catch (err: any) {
       toast.error(err.message || "Erro ao gerar PIX");
     } finally {
+      paymentRequestRef.current = false;
       setGeneratingPix(false);
     }
   }
@@ -268,6 +265,8 @@ export function CheckoutPaymentDialog({
 
   // Redirecionar para o Checkout Pro Oficial do Mercado Pago
   async function handleRedirectToMercadoPago() {
+    if (paymentRequestRef.current) return;
+    paymentRequestRef.current = true;
     setRedirectingToMp(true);
     setCardError("");
     try {
@@ -314,10 +313,13 @@ export function CheckoutPaymentDialog({
       setCardError(err.message || "Erro ao abrir Mercado Pago.");
       toast.error(err.message || "Erro ao abrir Mercado Pago.");
       setRedirectingToMp(false);
+      paymentRequestRef.current = false;
     }
   }
 
   async function handleRedirectToInfinitePay() {
+    if (paymentRequestRef.current) return;
+    paymentRequestRef.current = true;
     setRedirectingToInfinitePay(true);
     setCardError("");
     try {
@@ -339,6 +341,7 @@ export function CheckoutPaymentDialog({
       setCardError(message);
       toast.error(message);
       setRedirectingToInfinitePay(false);
+      paymentRequestRef.current = false;
     }
   }
 
@@ -423,13 +426,13 @@ export function CheckoutPaymentDialog({
                 className="w-full"
               >
                 <TabsList className="grid grid-cols-3 mb-4">
-                  <TabsTrigger value="pix" disabled={!paymentConfig?.isConfigured} className="gap-2 text-xs font-semibold">
+                  <TabsTrigger value="pix" disabled={!paymentConfig?.isConfigured || paymentBusy} className="gap-2 text-xs font-semibold">
                     <QrCode className="size-4 text-emerald-600" /> PIX Instantâneo
                   </TabsTrigger>
                   <TabsTrigger value="card" disabled={!paymentConfig?.isConfigured} className="gap-2 text-xs font-semibold">
                     <CreditCard className="size-4 text-sky-600" /> Cartão de Crédito
                   </TabsTrigger>
-                  <TabsTrigger value="infinitepay" disabled={!paymentConfig?.infinitePayEnabled} className="gap-2 text-[11px] font-semibold">
+                  <TabsTrigger value="infinitepay" disabled={!paymentConfig?.infinitePayEnabled || paymentBusy} className="gap-2 text-[11px] font-semibold">
                     InfinitePay
                   </TabsTrigger>
                 </TabsList>
@@ -494,6 +497,7 @@ export function CheckoutPaymentDialog({
                         Pague com PIX dinâmico com baixa automática e aprovação imediata.
                       </p>
                       <Button
+                        disabled={paymentBusy}
                         onClick={handleGeneratePix}
                         className="bg-emerald-600 hover:bg-emerald-700 text-white w-full"
                       >
@@ -555,7 +559,7 @@ export function CheckoutPaymentDialog({
 
                   <Button
                     type="button"
-                    disabled={redirectingToMp}
+                    disabled={paymentBusy}
                     onClick={handleRedirectToMercadoPago}
                     className="w-full bg-[#009ee3] hover:bg-[#0081ba] text-white font-bold h-11 gap-2 text-sm shadow-md"
                   >
@@ -601,7 +605,7 @@ export function CheckoutPaymentDialog({
                   </div>
                   <Button
                     type="button"
-                    disabled={redirectingToInfinitePay}
+                    disabled={paymentBusy}
                     onClick={handleRedirectToInfinitePay}
                     className="w-full gap-2 bg-primary text-primary-foreground font-bold shadow-md"
                   >
