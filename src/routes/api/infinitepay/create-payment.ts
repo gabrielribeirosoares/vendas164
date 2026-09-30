@@ -118,7 +118,7 @@ export const Route = createFileRoute("/api/infinitepay/create-payment")({
           }
           const responsePayload = { checkoutUrl, orderIds };
           const { error: saveError } = await admin.from("gateway_payment_attempts" as never).update({
-            status: "pending", provider_resource_id: attempt.id, response_payload: responsePayload,
+            status: "pending", provider_resource_id: paymentAttempt.id, response_payload: responsePayload,
             updated_at: new Date().toISOString(),
           } as never).eq("id", paymentAttempt.id);
           if (saveError) throw saveError;
