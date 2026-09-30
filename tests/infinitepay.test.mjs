@@ -115,4 +115,7 @@ test("InfinitePay callbacks verify status and amount with the provider before co
   assert.ok(paymentHelpers.includes('case "sem_sinal":') && paymentHelpers.includes('case "pronta_entrega": amount = total'));
   assert.match(mercadoPagoCreatePayment, /products\(model, max_installments\)/);
   assert.doesNotMatch(mercadoPagoCreatePayment, /products\(name/);
+  assert.match(createPayment, /domínio de checkout não permitido/);
+  assert.match(mercadoPagoCreatePayment, /providerError\.message/);
+  assert.match(mercadoPagoCreatePayment, /email ocultado/);
 });
