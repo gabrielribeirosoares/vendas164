@@ -127,8 +127,8 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
             await admin.from("gateway_payment_attempts" as never)
               .update({ status: "failed", updated_at: new Date().toISOString() } as never).eq("id", paymentAttempt.id);
             const safeText = (value: unknown) => typeof value === "string"
-              ? value.replace(/[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}/g, "[email ocultado]")
-                  .replace(/\\b[A-Za-z0-9_-]{32,}\\b/g, "[valor ocultado]")
+              ? value.replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[email ocultado]")
+                  .replace(/\b[A-Za-z0-9_-]{32,}\b/g, "[valor ocultado]")
                   .slice(0, 180)
               : undefined;
             const providerError = result as { error?: unknown; message?: unknown; cause?: unknown };
