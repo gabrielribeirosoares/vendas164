@@ -429,7 +429,7 @@ export function CheckoutPaymentDialog({
                   <TabsTrigger value="pix" disabled={!paymentConfig?.isConfigured || paymentBusy} className="gap-2 text-xs font-semibold">
                     <QrCode className="size-4 text-emerald-600" /> PIX Instantâneo
                   </TabsTrigger>
-                  <TabsTrigger value="card" disabled={!paymentConfig?.isConfigured} className="gap-2 text-xs font-semibold">
+                  <TabsTrigger value="card" disabled={!paymentConfig?.isConfigured || paymentBusy} className="gap-2 text-xs font-semibold">
                     <CreditCard className="size-4 text-sky-600" /> Cartão de Crédito
                   </TabsTrigger>
                   <TabsTrigger value="infinitepay" disabled={!paymentConfig?.infinitePayEnabled || paymentBusy} className="gap-2 text-[11px] font-semibold">
