@@ -36,14 +36,33 @@ test("InfinitePay payment attempts are locked per order and available only to se
     );
     await db.exec(migration);
     await db.exec(await readFile(new URL("../supabase/migrations/20260930173500_allow_unpaid_payment_statuses.sql", import.meta.url), "utf8"));
+    await db.exec(await readFile(new URL("../supabase/migrations/20260930213000_recover_stale_gateway_attempts.sql", import.meta.url), "utf8"));
     const payableStatuses = ["sem_sinal", "pronta_entrega"];
     for (const [index, status] of payableStatuses.entries()) {
       const id = `30000000-0000-4000-8000-${String(index + 2).padStart(12, "0")}`;
       await db.query("INSERT INTO public.orders VALUES($1,$2,$3,150,0,$4)", [id, "20000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000001", status]);
+      if (index === 0) {
+        await db.query(`INSERT INTO public.gateway_payment_attempts(
+          id, store_id, user_id, order_ids, request_key, amount, payment_method, provider,
+          max_installments, description, status, expires_at, updated_at
+        ) VALUES($1,$2,$3,$4::uuid[],$5,150,'infinitepay','infinitepay',1,'Tentativa antiga',
+          'pending',$6,$7)`, [
+          "40000000-0000-4000-8000-000000000009", "20000000-0000-4000-8000-000000000001",
+          "10000000-0000-4000-8000-000000000001", [id], "c".repeat(64),
+          new Date(Date.now() + 3600_000).toISOString(), new Date(Date.now() - 10 * 60_000).toISOString(),
+        ]);
+        await db.query("INSERT INTO public.gateway_payment_attempt_order_locks(order_id,attempt_id) VALUES($1,$2)",
+          [id, "40000000-0000-4000-8000-000000000009"]);
+      }
       const result = await db.query(`SELECT public.create_gateway_payment_attempt($1,$2,$3,$4::uuid[],$5,$6,$7,$8,$9,$10,$11::timestamptz) AS id`, [
         `40000000-0000-4000-8000-${String(index + 10).padStart(12, "0")}`, "20000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000001", [id], String(index + 1).repeat(64), 150, "infinitepay", "infinitepay", 1, "Reserva miniatura", new Date(Date.now() + 3600_000).toISOString(),
       ]);
       assert.ok(result.rows[0].id);
+      if (index === 0) {
+        const stale = await db.query("SELECT status FROM public.gateway_payment_attempts WHERE id = $1",
+          ["40000000-0000-4000-8000-000000000009"]);
+        assert.equal(stale.rows[0].status, "failed");
+      }
     }
 
     const grants = (await db.query(`SELECT
