@@ -26,7 +26,7 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
           if (method !== "pix" && method !== "checkout_pro") return errorResponse("Forma de pagamento inválida.", 400);
 
           const [{ data: orders, error: orderError }, { data: store, error: storeError }] = await Promise.all([
-            admin.from("orders").select("id, store_id, user_id, total_price, down_payment, payment_status, installment_count, products(name, max_installments)").in("id", orderIds),
+            admin.from("orders").select("id, store_id, user_id, total_price, down_payment, payment_status, installment_count, products(model, max_installments)").in("id", orderIds),
             admin.from("stores").select("id, name").eq("id", storeId).maybeSingle(),
           ]);
           if (orderError || storeError) throw orderError || storeError;
@@ -37,10 +37,10 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
           const amountCents = orders.reduce((sum, order) => sum + pendingAmount(order), 0);
           const amount = Number((amountCents / 100).toFixed(2));
           const maxInstallments = Math.max(1, Math.min(12, ...orders.map((order) => {
-            const product = order.products as { name?: string; max_installments?: number } | null;
+            const product = order.products as { model?: string; max_installments?: number } | null;
             return Number(order.installment_count || product?.max_installments || 1);
           })));
-          const firstProduct = (orders[0]?.products as { name?: string } | null)?.name?.trim();
+          const firstProduct = (orders[0]?.products as { model?: string } | null)?.model?.trim();
           const description = (firstProduct
             ? `${firstProduct}${orders.length > 1 ? ` (+${orders.length - 1} itens)` : ""} — ${store.name}`
             : `Pedido — ${store.name}`).slice(0, 128);
