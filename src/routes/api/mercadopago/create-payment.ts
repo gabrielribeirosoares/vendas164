@@ -126,7 +126,25 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
           if (!response.ok) {
             await admin.from("gateway_payment_attempts" as never)
               .update({ status: "failed", updated_at: new Date().toISOString() } as never).eq("id", paymentAttempt.id);
-            console.error("Mercado Pago recusou criação de cobrança:", response.status);
+            const safeText = (value: unknown) => typeof value === "string"
+              ? value.replace(/[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}/g, "[email ocultado]")
+                  .replace(/\\b[A-Za-z0-9_-]{32,}\\b/g, "[valor ocultado]")
+                  .slice(0, 180)
+              : undefined;
+            const providerError = result as { error?: unknown; message?: unknown; cause?: unknown };
+            const causes = Array.isArray(providerError.cause)
+              ? providerError.cause.slice(0, 3).map((item) => {
+                  const cause = item as { code?: unknown; description?: unknown };
+                  return { code: safeText(String(cause.code ?? "")), description: safeText(cause.description) };
+                })
+              : undefined;
+            console.error("Mercado Pago recusou criação de cobrança:", {
+              status: response.status,
+              error: safeText(providerError.error),
+              message: safeText(providerError.message),
+              causes,
+              requestId: response.headers.get("x-request-id"),
+            });
             return errorResponse("Não foi possível gerar a cobrança. Tente novamente.", 502);
           }
 
