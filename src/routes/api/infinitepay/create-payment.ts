@@ -112,9 +112,23 @@ export const Route = createFileRoute("/api/infinitepay/create-payment")({
               .update({ status: "failed", updated_at: new Date().toISOString() } as never).eq("id", paymentAttempt.id);
             return fail("A InfinitePay não conseguiu criar a cobrança. Tente novamente.", 502);
           }
-          const parsedUrl = new URL(checkoutUrl);
+          let parsedUrl: URL;
+          try {
+            parsedUrl = new URL(checkoutUrl);
+          } catch {
+            await admin.from("gateway_payment_attempts" as never)
+              .update({ status: "failed", updated_at: new Date().toISOString() } as never)
+              .eq("id", paymentAttempt.id).eq("status", "pending");
+            console.error("InfinitePay retornou URL de checkout malformada.");
+            return fail("A InfinitePay retornou um link inválido. Tente novamente.", 502);
+          }
           if (parsedUrl.protocol !== "https:" || parsedUrl.hostname !== "checkout.infinitepay.com.br") {
-            throw new Error("A InfinitePay retornou um endereço de pagamento inválido.");
+            await admin.from("gateway_payment_attempts" as never)
+              .update({ status: "failed", updated_at: new Date().toISOString() } as never)
+              .eq("id", paymentAttempt.id).eq("status", "pending");
+            // Logamos somente o domínio, nunca o caminho ou parâmetros que contêm o identificador da cobrança.
+            console.error("InfinitePay retornou domínio de checkout não permitido:", parsedUrl.hostname);
+            return fail("A InfinitePay retornou um link inválido. Tente novamente.", 502);
           }
           const responsePayload = { checkoutUrl, orderIds };
           const { error: saveError } = await admin.from("gateway_payment_attempts" as never).update({
