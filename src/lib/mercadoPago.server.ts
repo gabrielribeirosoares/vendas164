@@ -235,7 +235,9 @@ export function pendingAmount(order: {
   switch (order.payment_status) {
     case "aguardando_sinal": amount = signal > 0 ? signal : total; break;
     case "sinal_pago": amount = total - signal; break;
-    case "pendente": amount = total; break;
+    case "pendente":
+    case "sem_sinal":
+    case "pronta_entrega": amount = total; break;
     default: throw new Error("Pedido indisponível para pagamento.");
   }
   if (amount <= 0) throw new Error("Pedido já está pago.");
