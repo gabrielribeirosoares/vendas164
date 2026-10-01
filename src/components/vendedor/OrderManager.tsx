@@ -5,7 +5,7 @@ import { brl, isOrderProntaEntrega, whatsappLink } from '@/lib/format';
 import { trackOrder } from '@/lib/trackingService';
 import { toast } from 'sonner';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw, FileSpreadsheet, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { MessageCircle, Clock, Package, Truck, CreditCard, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw, FileSpreadsheet, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { notifyCustomerOrderUpdateServer } from '@/lib/push';
 import { Card, CardContent } from '@/components/ui/card';
@@ -27,6 +27,16 @@ import { PackingSlipDialog, type PackingSlipItem } from './PackingSlipDialog';
 import { ProductThumbnail } from '@/components/ProductThumbnail';
 import { SellerOverview } from '@/components/vendedor/SellerOverview';
 import { InterfaceState } from '@/components/InterfaceState';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import type { Tables } from '@/integrations/supabase/types';
 
 export type Product = Tables<'products'>;
@@ -40,6 +50,30 @@ export type OrderRow = Tables<"orders"> & {
 };
 
 type GroupedOrderRow = { order: OrderRow; quantity: number; ids: string[] };
+type PendingStatusChange = {
+  kind: 'payment' | 'delivery';
+  newStatus: string;
+  item?: GroupedOrderRow;
+  orderIds: string[];
+  selectedCount: number;
+};
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  pronta_entrega: 'Pronta entrega',
+  sem_sinal: 'Sem sinal / pagar na chegada',
+  aguardando_sinal: 'Aguardando sinal',
+  sinal_pago: 'Sinal pago',
+  quitado: 'Quitado',
+  cancelado: 'Cancelado',
+};
+
+const DELIVERY_STATUS_LABELS: Record<string, string> = {
+  pendente: 'Pendente',
+  enviado: 'Enviado',
+  em_transito: 'Em trânsito',
+  entregue: 'Entregue',
+  cancelado: 'Cancelado',
+};
 
 type SellerOrdersPage = {
   groups: GroupedOrderRow[];
@@ -281,6 +315,7 @@ export function OrdersTab({
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [packingSlipOpen, setPackingSlipOpen] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<PendingStatusChange | null>(null);
 
   const {
     data: orderPage,
@@ -757,7 +792,12 @@ export function OrdersTab({
     toast.success("Reserva excluída!");
   }
 
-  async function handlePaymentStatusChange(item: GroupedOrderRow, newStatus: string) {
+  function handlePaymentStatusChange(item: GroupedOrderRow, newStatus: string) {
+    if (item.order.payment_status === newStatus) return;
+    setPendingStatusChange({ kind: 'payment', newStatus, item, orderIds: item.ids, selectedCount: 1 });
+  }
+
+  async function applyPaymentStatusChange(item: GroupedOrderRow, newStatus: string) {
     const { order: o, quantity, ids } = item;
     const groupId = ids[0];
     let downPayment = Number(drafts[groupId] ?? o.down_payment);
@@ -833,7 +873,12 @@ export function OrdersTab({
     }
   }
 
-  async function handleDeliveryStatusChange(item: GroupedOrderRow, newStatus: string) {
+  function handleDeliveryStatusChange(item: GroupedOrderRow, newStatus: string) {
+    if (item.order.delivery_status === newStatus) return;
+    setPendingStatusChange({ kind: 'delivery', newStatus, item, orderIds: item.ids, selectedCount: 1 });
+  }
+
+  async function applyDeliveryStatusChange(item: GroupedOrderRow, newStatus: string) {
     const { order: o, quantity, ids } = item;
     const wasCancelled = o.payment_status === "cancelado" || o.delivery_status === "cancelado";
     const isNowCancelled = newStatus === "cancelado";
@@ -852,6 +897,23 @@ export function OrdersTab({
     } else {
       toast.success("Status de envio atualizado.");
     }
+  }
+
+  async function confirmStatusChange() {
+    if (!pendingStatusChange) return;
+    const pending = pendingStatusChange;
+    setPendingStatusChange(null);
+
+    if (pending.item) {
+      if (pending.kind === 'payment') {
+        await applyPaymentStatusChange(pending.item, pending.newStatus);
+      } else {
+        await applyDeliveryStatusChange(pending.item, pending.newStatus);
+      }
+      return;
+    }
+
+    await applyBulkStatus(pending.kind, pending.newStatus, pending.orderIds, pending.selectedCount);
   }
 
   const rowVirtualizer = useVirtualizer({
@@ -931,14 +993,24 @@ export function OrdersTab({
     }
   };
 
-  const handleBulkStatus = async (statusType: "payment" | "delivery", newStatus: string) => {
+  const handleBulkStatus = (statusType: "payment" | "delivery", newStatus: string) => {
     if (selectedOrders.size === 0) return;
     const allIds: string[] = [];
     selectedOrders.forEach(groupId => {
       const item = rows.find(r => r.ids[0] === groupId);
       if (item) allIds.push(...item.ids);
     });
+    if (allIds.length === 0) return;
 
+    setPendingStatusChange({
+      kind: statusType,
+      newStatus,
+      orderIds: allIds,
+      selectedCount: selectedOrders.size,
+    });
+  };
+
+  const applyBulkStatus = async (statusType: "payment" | "delivery", newStatus: string, allIds: string[], selectedCount: number) => {
     const chunkSize = 40;
     if (statusType === "payment") {
       await updateGroup(allIds, { payment_status: newStatus });
@@ -950,7 +1022,7 @@ export function OrdersTab({
           } catch {}
         }
       }
-      toast.success(`${selectedOrders.size} reserva(s) atualizada(s)!`);
+      toast.success(`${selectedCount} reserva(s) atualizada(s)!`);
     } else {
       await updateGroup(allIds, { delivery_status: newStatus });
       if (newStatus === "cancelado") {
@@ -961,7 +1033,7 @@ export function OrdersTab({
           } catch {}
         }
       }
-      toast.success(`${selectedOrders.size} reserva(s) atualizada(s)!`);
+      toast.success(`${selectedCount} reserva(s) atualizada(s)!`);
     }
     setSelectedOrders(new Set());
   };
@@ -1010,6 +1082,33 @@ export function OrdersTab({
     queryClient.invalidateQueries();
   };
 
+  const workflowView = paymentFilter === "aguardando_sinal"
+    ? "cobrar-sinal"
+    : paymentFilter === "sinal_pago"
+      ? "saldo-pendente"
+      : paymentFilter === "quitado" && deliveryFilter === "pendente"
+        ? "preparar-envio"
+        : paymentFilter === "todos" && deliveryFilter === "todos"
+          ? "todas"
+          : "personalizado";
+
+  const setWorkflowView = (view: "todas" | "cobrar-sinal" | "saldo-pendente" | "preparar-envio") => {
+    setPage(0);
+    if (view === "cobrar-sinal") {
+      setPaymentFilter("aguardando_sinal");
+      setDeliveryFilter("todos");
+    } else if (view === "saldo-pendente") {
+      setPaymentFilter("sinal_pago");
+      setDeliveryFilter("todos");
+    } else if (view === "preparar-envio") {
+      setPaymentFilter("quitado");
+      setDeliveryFilter("pendente");
+    } else {
+      setPaymentFilter("todos");
+      setDeliveryFilter("todos");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <SellerOverview totals={overviewTotals} brandData={overviewBrands} />
@@ -1029,6 +1128,27 @@ export function OrdersTab({
         </div>
       )}
       <Card className="border-border/60 panel relative">
+        <div className="border-b border-border/50 bg-muted/15 px-3 py-3 sm:px-4">
+          <div className="mb-2">
+            <p className="text-sm font-semibold">Atendimento por etapa</p>
+            <p className="text-xs text-muted-foreground">Acesse rapidamente o que precisa de cobrança ou envio.</p>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
+            <Button type="button" size="sm" variant={workflowView === "todas" ? "default" : "outline"} onClick={() => setWorkflowView("todas")} className="h-9 shrink-0 gap-1.5 text-xs">
+              Todas as reservas
+            </Button>
+            <Button type="button" size="sm" variant={workflowView === "cobrar-sinal" ? "default" : "outline"} onClick={() => setWorkflowView("cobrar-sinal")} className="h-9 shrink-0 gap-1.5 text-xs">
+              <Clock className="size-3.5" /> Aguardando sinal
+            </Button>
+            <Button type="button" size="sm" variant={workflowView === "saldo-pendente" ? "default" : "outline"} onClick={() => setWorkflowView("saldo-pendente")} className="h-9 shrink-0 gap-1.5 text-xs">
+              <CreditCard className="size-3.5" /> Saldo a receber
+            </Button>
+            <Button type="button" size="sm" variant={workflowView === "preparar-envio" ? "default" : "outline"} onClick={() => setWorkflowView("preparar-envio")} className="h-9 shrink-0 gap-1.5 text-xs">
+              <Truck className="size-3.5" /> Preparar envio
+            </Button>
+          </div>
+        </div>
+
         {/* FILTRO POR TIPO DE PEDIDO (PRÉ-VENDA VS PRONTA ENTREGA) */}
         <div className="flex items-center gap-2 overflow-x-auto px-3 pb-1 pt-3 sm:flex-wrap sm:overflow-visible sm:p-4 sm:pb-0 [&>button]:shrink-0">
           <Button
@@ -2116,6 +2236,57 @@ export function OrdersTab({
       />
 
     </Card>
+      <AlertDialog
+        open={Boolean(pendingStatusChange)}
+        onOpenChange={(open) => { if (!open) setPendingStatusChange(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingStatusChange?.kind === 'payment' ? 'Confirmar situação financeira?' : 'Confirmar status do envio?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingStatusChange?.item && (
+                <span className="mb-2 block font-medium text-foreground">
+                  {pendingStatusChange.item.order.products?.brand} {pendingStatusChange.item.order.products?.model}
+                  {' · '}{pendingStatusChange.item.quantity} {pendingStatusChange.item.quantity === 1 ? 'unidade' : 'unidades'}
+                </span>
+              )}
+              {pendingStatusChange && !pendingStatusChange.item && (
+                <span className="mb-2 block font-medium text-foreground">
+                  {pendingStatusChange.selectedCount} reservas selecionadas
+                </span>
+              )}
+              A alteração será aplicada para <strong>
+                {pendingStatusChange?.kind === 'payment'
+                  ? PAYMENT_STATUS_LABELS[pendingStatusChange.newStatus] || pendingStatusChange.newStatus
+                  : DELIVERY_STATUS_LABELS[pendingStatusChange?.newStatus || ''] || pendingStatusChange?.newStatus}
+              </strong>.
+              {pendingStatusChange?.kind === 'payment' && pendingStatusChange.newStatus === 'quitado' && (
+                <span className="mt-2 block">Isso registra o pagamento integral e marca parcelas pendentes como pagas. Confirme somente após verificar o recebimento.</span>
+              )}
+              {pendingStatusChange?.kind === 'payment' && pendingStatusChange.newStatus === 'sinal_pago' && (
+                <span className="mt-2 block">Isso registra o recebimento do sinal. Confirme somente após verificar o pagamento.</span>
+              )}
+              {pendingStatusChange?.newStatus === 'cancelado' && (
+                <span className="mt-2 block text-destructive">O cancelamento pode devolver unidades ao estoque e remover parcelas pendentes.</span>
+              )}
+              {pendingStatusChange?.kind === 'delivery' && pendingStatusChange.newStatus === 'entregue' && (
+                <span className="mt-2 block">A reserva será marcada como entregue e poderá sair da lista de envios pendentes.</span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              className={pendingStatusChange?.newStatus === 'cancelado' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : ''}
+              onClick={(event) => { event.preventDefault(); void confirmStatusChange(); }}
+            >
+              Confirmar alteração
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
