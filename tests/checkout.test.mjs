@@ -41,6 +41,7 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/20260808150000_add_initial_stock_to_products.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260831121000_create_order_installments.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260831123600_fix_insert_order_installments.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260726124100_fix_profiles_rls_for_store_owners.sql', import.meta.url), 'utf8'));
   await db.exec('GRANT SELECT, INSERT, UPDATE, DELETE ON order_installments TO authenticated, anon;');
   await db.query('INSERT INTO stores(id,owner_id,name,slug) VALUES($1,$2,$3,$4)', [store,owner,'Loja','loja']);
   await db.exec(await readFile(new URL('../supabase/migrations/20260905190000_secure_checkout.sql', import.meta.url), 'utf8'));
@@ -52,6 +53,8 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/20260920145545_keep_presale_open_and_cleanup_customer_waitlist.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260831122700_add_installment_due_day.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260922183409_atomic_order_financial_management.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260923004537_seller_server_pagination.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260924165900_atomic_global_payment.sql', import.meta.url), 'utf8'));
 });
 after(() => db.close());
 test('checkout commits stock, order and exact-cent installments; retry returns same IDs', async () => {
@@ -159,6 +162,41 @@ test('manual reservations are atomic, owner-only and idempotent', async () => {
   assert.equal(await stock(missingCustomer),10);
 });
 
+test('global payment is atomic, idempotent, ordered, and restricted to the store', async () => {
+  const id = await product();
+  const [first, second] = await checkout([item(id, { quantity: 2, expected_total: 200, expected_signal: 40 })]);
+  const request = randomUUID();
+  const date = '2026-09-24';
+  const payments = [
+    { order_id: second, amount_cents: 10000, expected_balance_cents: 10000 },
+    { order_id: first, amount_cents: 5000, expected_balance_cents: 10000 },
+  ];
+  const apply = (key, entries) => db.query(
+    'SELECT apply_global_payment($1,$2,$3,$4,$5::jsonb) AS result',
+    [store, customer, key, date, JSON.stringify(entries)],
+  );
+
+  await asUser(customer);
+  await assert.rejects(apply(request, payments), /global_payment_access_denied|permission denied/);
+  await asUser(owner);
+  const initial = (await apply(request, payments)).rows[0].result;
+  assert.equal(initial.amount_cents, 15000);
+  assert.equal(initial.settled, 1);
+  assert.equal(initial.replayed, false);
+  assert.equal((await apply(request, payments)).rows[0].result.replayed, true);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM order_installments WHERE global_payment_request_id=$1', [request])).rows[0].n, 2);
+  assert.equal((await db.query('SELECT payment_status FROM orders WHERE id=$1', [second])).rows[0].payment_status, 'quitado');
+  await assert.rejects(apply(request, [{ ...payments[0], amount_cents: 100 }]), /global_payment_request_reused/);
+
+  const failedRequest = randomUUID();
+  await assert.rejects(apply(failedRequest, [
+    { order_id: first, amount_cents: 1000, expected_balance_cents: 5000 },
+    { order_id: second, amount_cents: 1000, expected_balance_cents: 10000 },
+  ]), /global_payment_balance_changed/);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM order_installments WHERE global_payment_request_id=$1', [failedRequest])).rows[0].n, 0);
+  await assert.rejects(apply(randomUUID(), [{ ...payments[1], expected_balance_cents: 10000 }]), /global_payment_balance_changed/);
+});
+
 test('customers cannot edit financial fields and administrators are explicit', async () => {
   const id = await product();
   const [orderId] = await checkout([item(id)]);
@@ -243,4 +281,44 @@ test('financial management replaces schedules and records payments atomically', 
     Number((await db.query("SELECT sum(amount) AS total FROM order_installments WHERE order_id=$1 AND status='paid'", [orderId])).rows[0].total),
     80,
   );
+});
+
+test('seller pagination filters grouped orders and aggregates clients on the server', async () => {
+  const firstProduct = await product({ price: 75 });
+  const secondProduct = await product({ price: 120 });
+  await checkout([item(firstProduct, { quantity: 2, expected_total: 150, expected_signal: 30 })]);
+  await checkout([item(secondProduct, { expected_total: 120, expected_signal: 24 })]);
+
+  await db.exec('RESET ROLE');
+  await db.query("INSERT INTO profiles(id,name,email,phone) VALUES($1,'Cliente Paginação','cliente@example.com','48999999999') ON CONFLICT (id) DO UPDATE SET name=excluded.name,email=excluded.email,phone=excluded.phone", [customer]);
+  await asUser(owner);
+
+  const firstPage = (await db.query(
+    "SELECT seller_orders_page($1,'Cliente Paginação','todos','todos','todos',null,null,null,1,1) AS page",
+    [store],
+  )).rows[0].page;
+  const secondPage = (await db.query(
+    "SELECT seller_orders_page($1,'Cliente Paginação','todos','todos','todos',null,null,null,2,1) AS page",
+    [store],
+  )).rows[0].page;
+  assert.equal(firstPage.groups.length, 1);
+  assert.ok(firstPage.total >= 2);
+  assert.notEqual(firstPage.groups[0].order.id, secondPage.groups[0].order.id);
+  assert.ok(firstPage.overview.activeCount >= 3);
+
+  const clients = (await db.query(
+    "SELECT seller_clients_page($1,'Cliente Paginação',1,25) AS page",
+    [store],
+  )).rows[0].page;
+  assert.equal(clients.total, 1);
+  assert.equal(clients.clients[0].profile.name, 'Cliente Paginação');
+  assert.ok(clients.clients[0].totalItems >= 3);
+
+  await asUser(customer);
+  await assert.rejects(
+    db.query("SELECT seller_orders_page($1,'','todos','todos','todos',null,null,null,1,25)", [store]),
+    /store_access_denied/,
+  );
+  await asUser('', 'anon');
+  await assert.rejects(db.query("SELECT seller_clients_page($1,'',1,25)", [store]), /permission denied/);
 });

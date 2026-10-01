@@ -177,17 +177,12 @@ export async function finishMercadoPagoConnection(callbackUrl: string, origin: s
 }
 
 export async function disconnectMercadoPago(storeId: string) {
-  const admin = gatewayAdmin();
-  const { error } = await admin.from("mercadopago_connections" as never).update({
+  const { error } = await gatewayAdmin().from("mercadopago_connections" as never).update({
     encrypted_tokens: null, access_token: null, refresh_token: null, public_key: null,
     is_active: false, oauth_state_hash: null, oauth_code_verifier: null,
     oauth_expires_at: null, refresh_lock_until: null, updated_at: new Date().toISOString(),
   } as never).eq("store_id", storeId);
   if (error) throw new Error("Não foi possível desconectar o Mercado Pago.");
-  const { error: providerError } = await admin.from("store_payment_provider_settings" as never)
-    .update({ active_provider: null, updated_at: new Date().toISOString() } as never)
-    .eq("store_id", storeId).eq("active_provider", "mercadopago");
-  if (providerError) throw new Error("Conta desconectada, mas não foi possível atualizar o provedor ativo no checkout.");
 }
 
 export async function getMercadoPagoAccessToken(storeId: string) {
@@ -245,7 +240,6 @@ export function pendingAmount(order: {
     case "sinal_pago": amount = total - signal; break;
     case "pendente":
     case "sem_sinal":
-    case "pagar_na_chegada":
     case "pronta_entrega": amount = total; break;
     default: throw new Error("Pedido indisponível para pagamento.");
   }

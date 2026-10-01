@@ -107,6 +107,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
 
   const { data: product, isLoading } = useQuery({
     queryKey: ["product", slug, itemSlug],
+    staleTime: 2 * 60 * 1000,
     retry: 2,
     queryFn: async () => {
       // Tenta buscar por slug primeiro.
@@ -140,6 +141,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
 
   const { data: waitlistData } = useQuery({
     queryKey: ["waitlist", product?.id],
+    staleTime: 30 * 1000,
     retry: 2,
     enabled: !!product?.id,
     queryFn: async () => {

@@ -86,7 +86,7 @@ BEGIN
     FOR UPDATE
   LOOP
     IF v_order.store_id <> p_store_id OR v_order.user_id <> p_user_id
-       OR v_order.payment_status NOT IN ('aguardando_sinal', 'sinal_pago', 'pendente', 'sem_sinal', 'pagar_na_chegada', 'pronta_entrega') THEN
+       OR v_order.payment_status NOT IN ('aguardando_sinal', 'sinal_pago', 'pendente', 'sem_sinal', 'pronta_entrega') THEN
       RAISE EXCEPTION 'gateway_order_not_payable';
     END IF;
     v_count := v_count + 1;
@@ -96,7 +96,7 @@ BEGIN
         THEN v_signal
       WHEN v_order.payment_status = 'sinal_pago'
         THEN greatest(0, v_order.total_price - v_signal)
-      WHEN v_order.payment_status IN ('pendente', 'sem_sinal', 'pagar_na_chegada', 'pronta_entrega')
+      WHEN v_order.payment_status IN ('pendente', 'sem_sinal', 'pronta_entrega')
         THEN v_order.total_price
       ELSE v_order.total_price
     END;
@@ -199,7 +199,7 @@ BEGIN
     FROM public.orders WHERE id = ANY(v_attempt.order_ids) ORDER BY id FOR UPDATE
   LOOP
     IF v_order.store_id <> v_attempt.store_id OR v_order.user_id <> v_attempt.user_id
-       OR v_order.payment_status NOT IN ('aguardando_sinal', 'sinal_pago', 'pendente', 'sem_sinal', 'pagar_na_chegada', 'pronta_entrega') THEN
+       OR v_order.payment_status NOT IN ('aguardando_sinal', 'sinal_pago', 'pendente', 'sem_sinal', 'pronta_entrega') THEN
       RAISE EXCEPTION 'gateway_order_not_payable';
     END IF;
     v_count := v_count + 1;

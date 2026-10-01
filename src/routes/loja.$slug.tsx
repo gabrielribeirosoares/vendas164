@@ -195,6 +195,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
     refetch: refetchStore,
   } = useQuery({
     queryKey: ["store", slug],
+    staleTime: 5 * 60 * 1000,
     retry: 2,
     queryFn: async () => {
       const { data: store, error } = await supabase
@@ -220,6 +221,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
     queryKey: ["catalog-page", store?.id, deferredSearchQuery, selectedBrand, selectedScale, selectedType, onlyInStock, sortBy, currentPage, itemsPerPage],
     enabled: !!store?.id,
     placeholderData: (previous) => previous,
+    staleTime: 2 * 60 * 1000,
     queryFn: async (): Promise<CatalogPage> => {
       const { data: page, error } = await supabase.rpc("catalog_page", {
         _store_id: store!.id,
@@ -246,6 +248,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
   const { data: isFollowing } = useQuery({
     queryKey: ["is-following-store", user?.id, data?.store?.id],
     enabled: !!user && !!data?.store?.id,
+    staleTime: 5 * 60 * 1000,
     retry: 2,
     queryFn: async () => {
       const { data: link } = await supabase

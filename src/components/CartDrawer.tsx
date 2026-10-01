@@ -22,6 +22,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useSession } from '@/lib/session';
+import { getProductCardImageUrl } from '@/lib/imageUrls';
 
 export function CartDrawer() {
   const [isOpen, setIsOpen] = useState(false);
@@ -156,7 +157,13 @@ export function CartDrawer() {
                         <div className="flex gap-3">
                           <div className="size-20 shrink-0 overflow-hidden rounded-xl border border-border/30 bg-muted/50">
                             {item.productSnapshot.image_url ? (
-                              <img src={item.productSnapshot.image_url} alt="" className="size-full object-contain p-1" />
+                              <img
+                                src={getProductCardImageUrl(item.productSnapshot.image_url)}
+                                alt=""
+                                loading="lazy"
+                                decoding="async"
+                                className="size-full object-contain p-1"
+                              />
                             ) : (
                               <ShoppingBag className="size-full p-5 text-muted-foreground" aria-hidden />
                             )}

@@ -58,8 +58,20 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
           try { accessToken = await getMercadoPagoAccessToken(storeId); }
           catch { return errorResponse("Esta loja ainda não conectou o Mercado Pago.", 400); }
 
-          // getMercadoPagoAccessToken above supports OAuth-encrypted tokens and legacy tokens.
-          // Do not require the legacy access_token column: OAuth connections intentionally keep it null.
+          const { data: mpConnection, error: mpConnectionError } = await admin
+            .from("mercadopago_connections" as never)
+            .select("is_active, access_token")
+            .eq("store_id", storeId)
+            .maybeSingle();
+          if (mpConnectionError) throw mpConnectionError;
+          const usableConnection = mpConnection as unknown as { is_active?: boolean; access_token?: string | null } | null;
+          if (!usableConnection?.is_active || !usableConnection.access_token) {
+            return errorResponse(
+              "Pagamentos de teste exigem conexão manual do Mercado Pago para confirmar automaticamente. Nenhuma cobrança foi criada.",
+              503,
+            );
+          }
+
           const now = new Date();
           await admin.from("gateway_payment_attempts" as never)
             .update({ status: "expired", updated_at: now.toISOString() } as never)

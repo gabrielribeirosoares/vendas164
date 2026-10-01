@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Car, CheckCircle2, Copy, CreditCard, ExternalLink, Loader2, MessageCircle, Package, Search, Sparkles, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
+import { BookmarkCheck, Car, CheckCircle2, CheckSquare, Copy, CreditCard, ExternalLink, Layers, Loader2, MessageCircle, Package, QrCode, Search, Sparkles, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { getStoreBrandImageUrl } from "@/lib/imageUrls";
@@ -11,10 +11,12 @@ import { InterfaceState } from "@/components/InterfaceState";
 import { ProductThumbnail } from "@/components/ProductThumbnail";
 import { PhoneInput } from "@/components/PhoneInput";
 import { Countdown } from "@/components/Countdown";
+import { PixPaymentDialog, type PixItemDetail } from "@/components/PixPaymentDialog";
 import { CheckoutPaymentDialog } from "@/components/CheckoutPaymentDialog";
 import { DeliveryBadge, PaymentBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { OrderInstallmentsDialog } from "@/components/vendedor/OrderInstallmentsDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,7 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { brl, getProductSignalAmount, isProntaEntrega, whatsappLink } from "@/lib/format";
+import { brl, getProductSignalAmount, isOrderProntaEntrega, whatsappLink } from "@/lib/format";
 import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
 import { getStoreFullUrl, getStoreDisplayDomain, redirectToMainIfOnSubdomain } from "@/lib/subdomain";
@@ -51,16 +53,6 @@ export const Route = createFileRoute("/_authenticated/painel")({
 
 const PAGE_SIZE = 10;
 
-function getOnlinePaymentAmount(order: any) {
-  const total = Number(order.total_price || 0);
-  const signal = Math.max(Number(order.down_payment || 0), Number(order.signal_amount || 0));
-  if (!Number.isFinite(total) || total <= 0) return 0;
-  if (order.payment_status === "aguardando_sinal") return signal > 0 ? Math.min(signal, total) : total;
-  if (order.payment_status === "sinal_pago") return Math.max(0, total - signal);
-  if (["pendente", "sem_sinal", "pagar_na_chegada", "pronta_entrega"].includes(order.payment_status)) return total;
-  return 0;
-}
-
 function CustomerDashboard() {
   return (
     <ErrorBoundary>
@@ -75,17 +67,29 @@ function CustomerDashboardContent() {
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [phonePromptOpen, setPhonePromptOpen] = useState(false);
   const [garageSearchQuery, setGarageSearchQuery] = useState("");
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [pixModalData, setPixModalData] = useState<{
+    open: boolean;
+    pixKey: string;
+    amount?: number;
+    storeName?: string;
+    storePhone?: string | null;
+    orderId?: string;
+    title?: string;
+    description?: string;
+    items?: PixItemDetail[];
+  } | null>(null);
   const [checkoutModalData, setCheckoutModalData] = useState<{
+    open: boolean;
     storeId: string;
     storeName: string;
-    orderId: string;
+    orderIds: string[];
     amount: number;
-    maxInstallments: number;
+    maxInstallments?: number;
   } | null>(null);
-  const [gatewayReturn, setGatewayReturn] = useState<{
-    attemptId: string | null;
-    state: "checking" | "pending" | "approved" | "failed";
-  } | null>(null);
+  const [mpReturnAttemptId, setMpReturnAttemptId] = useState<string | null>(null);
+  const [mpReturnState, setMpReturnState] = useState<"checking" | "pending" | "approved" | "failed" | null>(null);
+  const [mpReturnAmount, setMpReturnAmount] = useState<number | null>(null);
   const [statusCheckNonce, setStatusCheckNonce] = useState(0);
 
   // Redirect to main domain if accessed from a store subdomain
@@ -93,30 +97,27 @@ function CustomerDashboardContent() {
     redirectToMainIfOnSubdomain();
   }, []);
 
+  // Captura o retorno do Checkout Pro e mantém um identificador para consultar o webhook.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
-    const infinitePay = url.searchParams.get("infinitepay");
-    const status = url.searchParams.get("status") || url.searchParams.get("collection_status");
+    const mpStatus = url.searchParams.get("status") || url.searchParams.get("collection_status");
     const attemptId = url.searchParams.get("payment_attempt_id");
 
-    if (infinitePay === "confirmed") {
-      setGatewayReturn({ attemptId: null, state: "approved" });
-      void queryClient.invalidateQueries({ queryKey: ["my-orders"] });
-    } else if (infinitePay === "pending") {
-      setGatewayReturn({ attemptId: null, state: "pending" });
-    } else if (status) {
+    if (mpStatus) {
       if (attemptId && /^[0-9a-f-]{36}$/i.test(attemptId)) {
-        setGatewayReturn({ attemptId, state: "checking" });
-      } else if (status === "failure" || status === "rejected") {
-        setGatewayReturn({ attemptId: null, state: "failed" });
-      } else {
-        setGatewayReturn({ attemptId: null, state: "pending" });
+        setMpReturnAttemptId(attemptId);
+        setMpReturnState("checking");
+        toast.info("Voltando do Mercado Pago. Estamos verificando a confirmação do Pix...");
+      } else if (mpStatus === "approved") {
+        toast.info("O Mercado Pago informou a aprovação. Atualize suas reservas para conferir o status.");
+        queryClient.invalidateQueries({ queryKey: ["my-orders"] });
+      } else if (mpStatus === "pending" || mpStatus === "in_process") {
+        toast.info("Pagamento em processamento pelo Mercado Pago. O pedido será atualizado assim que compensado.");
+      } else if (mpStatus === "failure" || mpStatus === "rejected") {
+        toast.error("O Mercado Pago não concluiu o pagamento. Confira o status antes de tentar novamente.");
       }
-    }
 
-    if (infinitePay || status || attemptId) {
-      url.searchParams.delete("infinitepay");
       url.searchParams.delete("status");
       url.searchParams.delete("collection_status");
       url.searchParams.delete("payment_attempt_id");
@@ -124,8 +125,9 @@ function CustomerDashboardContent() {
     }
   }, [queryClient]);
 
+  // Consulta o status persistido pelo webhook. O parâmetro de retorno do gateway nunca é tratado como confirmação.
   useEffect(() => {
-    if (!gatewayReturn?.attemptId || !user) return;
+    if (!mpReturnAttemptId || !user) return;
     let active = true;
     let attempts = 0;
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -133,41 +135,46 @@ function CustomerDashboardContent() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.access_token) return;
-        const response = await fetch(`/api/mercadopago/payment-status?attemptId=${encodeURIComponent(gatewayReturn.attemptId!)}`, {
+        const response = await fetch(`/api/mercadopago/payment-status?attemptId=${encodeURIComponent(mpReturnAttemptId)}`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
         if (!response.ok) return;
-        const result = await response.json() as { status: string };
+        const result = await response.json() as { status: string; amount?: number };
         if (!active) return;
+        if (typeof result.amount === "number") setMpReturnAmount(result.amount);
         if (result.status === "approved") {
-          setGatewayReturn({ attemptId: gatewayReturn.attemptId, state: "approved" });
+          setMpReturnState("approved");
+          await queryClient.invalidateQueries({ queryKey: ["my-orders"] });
+          toast.success("Pix confirmado! O status das suas reservas foi atualizado.");
+          if (timer) clearInterval(timer);
+        } else if (result.status === "failed") {
+          setMpReturnState("failed");
           await queryClient.invalidateQueries({ queryKey: ["my-orders"] });
           if (timer) clearInterval(timer);
-        } else if (result.status === "failed" || result.status === "expired") {
-          setGatewayReturn({ attemptId: gatewayReturn.attemptId, state: "failed" });
-          if (timer) clearInterval(timer);
         } else {
-          setGatewayReturn({ attemptId: gatewayReturn.attemptId, state: "pending" });
+          setMpReturnState("pending");
         }
       } catch {
-        // Falhas transitórias não alteram o status financeiro do pedido.
+        // Mantém a consulta periódica; falhas transitórias não alteram o estado financeiro.
       }
     };
+
     void checkStatus();
     timer = setInterval(() => {
       attempts += 1;
       if (attempts >= 30) {
-        if (active) setGatewayReturn((current) => current?.state === "approved" || current?.state === "failed" ? current : { attemptId: gatewayReturn.attemptId, state: "pending" });
+        if (active) setMpReturnState((current) => current === "approved" || current === "failed" ? current : "pending");
         if (timer) clearInterval(timer);
         return;
       }
       void checkStatus();
     }, 3000);
+
     return () => {
       active = false;
       if (timer) clearInterval(timer);
     };
-  }, [gatewayReturn?.attemptId, queryClient, statusCheckNonce, user]);
+  }, [mpReturnAttemptId, queryClient, statusCheckNonce, user]);
 
   const { data: profile } = useQuery({
     queryKey: ["my-profile", user?.id],
@@ -388,6 +395,159 @@ function CustomerDashboardContent() {
     return s + Math.min(totalPrice, signalPaid + paidInsts);
   }, 0), [active]);
 
+  // Informações de pagamento de cada pedido pendente
+  const getOrderPaymentInfo = (o: any, qty: number = 1) => {
+    const isAguardando = o.payment_status === "aguardando_sinal";
+    let amount = 0;
+    let type: "sinal" | "saldo" = "saldo";
+
+    if (isAguardando) {
+      const signalInfo = getProductSignalAmount(o.products, qty);
+      amount = signalInfo.amount;
+      type = "sinal";
+    } else if (Number(o.remaining_balance || 0) > 0) {
+      amount = Number(o.remaining_balance) * qty;
+      type = "saldo";
+    } else {
+      amount = Number(o.total_price || 0) * qty;
+      type = "saldo";
+    }
+
+    const isGuestPayload = (key?: string | null) =>
+      !key || key.startsWith("GUEST:") || key.startsWith("{");
+    const rawOrderPix = !isGuestPayload(o.pix_key) ? o.pix_key : null;
+    const pixKey = rawOrderPix || o.stores?.pix_key || o.stores?.whatsapp_number || "";
+
+    const productName = `${o.products?.brand || ""} ${o.products?.model || ""}`.trim() || "Miniatura";
+    const isPayable =
+      o.payment_status !== "quitado" &&
+      o.payment_status !== "cancelado" &&
+      o.delivery_status !== "cancelado" &&
+      amount > 0 &&
+      !!pixKey;
+
+    return {
+      amount,
+      type,
+      pixKey,
+      productName,
+      isPayable,
+    };
+  };
+
+  const handleToggleOrderSelection = (order: any, _qty: number = 1) => {
+    const isSelected = selectedOrderIds.includes(order.id);
+    if (isSelected) {
+      setSelectedOrderIds(prev => prev.filter(id => id !== order.id));
+      return;
+    }
+
+    // Se já existem itens selecionados, verificar se são da mesma loja
+    if (selectedOrderIds.length > 0) {
+      const firstSelected = pendingOrders.find(po => po.id === selectedOrderIds[0]);
+      if (firstSelected && firstSelected.store_id !== order.store_id) {
+        toast.error(
+          `Você só pode pagar reservas da mesma loja juntas (${firstSelected.stores?.name || "loja anterior"}). Desmarque as anteriores para trocar de loja.`
+        );
+        return;
+      }
+    }
+
+    setSelectedOrderIds(prev => [...prev, order.id]);
+  };
+
+  const handleSelectAllFromStore = (storeId: string) => {
+    const storePayable = pendingOrders.filter(o => {
+      if (o.store_id !== storeId) return false;
+      const info = getOrderPaymentInfo(o, 1);
+      return info.isPayable;
+    });
+
+    if (storePayable.length === 0) {
+      toast.info("Nenhuma reserva pendente de pagamento nesta loja.");
+      return;
+    }
+
+    const ids = storePayable.map(o => o.id);
+    setSelectedOrderIds(ids);
+    const storeName = storePayable[0]?.stores?.name || "loja";
+    toast.success(`${ids.length} reserva(s) selecionada(s) da loja ${storeName}`);
+  };
+
+  const selectedOrdersData = useMemo(() => {
+    if (selectedOrderIds.length === 0) return null;
+    const selectedList = pendingOrders.filter(o => selectedOrderIds.includes(o.id));
+    if (selectedList.length === 0) return null;
+
+    const firstOrder = selectedList[0];
+    const store = firstOrder.stores;
+    const storeName = store?.name || "Loja";
+    const storePhone = store?.whatsapp_number || null;
+
+    const items: PixItemDetail[] = selectedList.map(o => {
+      const info = getOrderPaymentInfo(o, 1);
+      return {
+        orderId: o.id,
+        productName: info.productName,
+        quantity: 1,
+        amount: info.amount,
+        type: info.type,
+      };
+    });
+
+    const totalAmount = items.reduce((sum, it) => sum + it.amount, 0);
+    const pixKey = getOrderPaymentInfo(firstOrder, 1).pixKey;
+
+    return {
+      count: selectedList.length,
+      storeName,
+      storePhone,
+      pixKey,
+      totalAmount,
+      items,
+      storeId: firstOrder.store_id,
+    };
+  }, [selectedOrderIds, pendingOrders]);
+
+  // Identifica lojas que possuem 2 ou mais reservas pendentes de pagamento
+  const storesWithMultiplePayable = useMemo(() => {
+    const storeMap = new Map<string, { storeId: string; storeName: string; count: number; totalAmount: number }>();
+
+    for (const o of pendingOrders) {
+      const info = getOrderPaymentInfo(o, 1);
+      if (!info.isPayable) continue;
+      const sId = o.store_id || "unknown";
+      const sName = o.stores?.name || "Loja";
+      if (storeMap.has(sId)) {
+        const item = storeMap.get(sId)!;
+        item.count += 1;
+        item.totalAmount += info.amount;
+      } else {
+        storeMap.set(sId, { storeId: sId, storeName: sName, count: 1, totalAmount: info.amount });
+      }
+    }
+
+    return Array.from(storeMap.values()).filter(s => s.count >= 2);
+  }, [pendingOrders]);
+
+  const handlePaySelectedOrders = () => {
+    if (!selectedOrdersData) return;
+
+    const selectedList = pendingOrders.filter(o => selectedOrderIds.includes(o.id));
+    const maxInstallments = selectedList.length > 0
+      ? Math.min(...selectedList.map(o => Number(o.installment_count || (o.products as any)?.max_installments || 1)))
+      : 1;
+
+    setCheckoutModalData({
+      open: true,
+      storeId: selectedOrdersData.storeId,
+      storeName: selectedOrdersData.storeName,
+      orderIds: selectedOrderIds,
+      amount: selectedOrdersData.totalAmount,
+      maxInstallments,
+    });
+  };
+
   if (sessionLoading || ordersLoading) {
     return (
       <div className="min-h-screen">
@@ -422,24 +582,43 @@ function CustomerDashboardContent() {
     <div className="min-h-screen">
       <AppHeader />
       <main className="mx-auto max-w-6xl px-4 py-10">
-        {gatewayReturn && (
-          <div className={`mb-6 flex items-start gap-3 rounded-xl border p-4 ${gatewayReturn.state === "approved" ? "border-emerald-500/30 bg-emerald-500/10" : gatewayReturn.state === "failed" ? "border-destructive/30 bg-destructive/10" : "border-primary/25 bg-primary/5"}`} role="status" aria-live="polite">
-            {gatewayReturn.state === "approved" ? <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600" /> : gatewayReturn.state === "checking" ? <Loader2 className="mt-0.5 size-5 shrink-0 animate-spin text-primary" /> : <Wallet className="mt-0.5 size-5 shrink-0 text-primary" />}
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">
-                {gatewayReturn.state === "approved" ? "Pagamento confirmado" : gatewayReturn.state === "failed" ? "Pagamento não concluído" : gatewayReturn.state === "checking" ? "Confirmando o pagamento" : "Pagamento em confirmação"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {gatewayReturn.state === "approved" ? "A situação das suas reservas será atualizada abaixo." : gatewayReturn.state === "failed" ? "Confira a reserva antes de iniciar outra cobrança." : "Se já pagou, aguarde a confirmação do provedor. Não faça outro pagamento enquanto esta cobrança estiver pendente."}
-              </p>
+        {mpReturnState && (
+          <div className={`mt-6 flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between ${
+            mpReturnState === "approved"
+              ? "border-emerald-500/30 bg-emerald-500/10"
+              : mpReturnState === "failed"
+                ? "border-destructive/30 bg-destructive/10"
+                : "border-primary/25 bg-primary/5"
+          }`} role="status" aria-live="polite">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 shrink-0">
+                {mpReturnState === "approved" ? <CheckCircle2 className="size-5 text-emerald-600" /> :
+                  mpReturnState === "failed" ? <CreditCard className="size-5 text-destructive" /> :
+                    <Loader2 className="size-5 animate-spin text-primary" />}
+              </div>
+              <div>
+                <p className="text-sm font-semibold">
+                  {mpReturnState === "approved" ? "Pix confirmado" :
+                    mpReturnState === "failed" ? "Não foi possível concluir esta cobrança" :
+                      mpReturnState === "checking" ? "Confirmando seu pagamento..." : "Pagamento ainda em confirmação"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {mpReturnState === "approved"
+                    ? `Pagamento de ${brl(mpReturnAmount || 0)} recebido. O saldo e a situação da reserva estão atualizados abaixo.`
+                    : mpReturnState === "failed"
+                      ? "Confira a situação da reserva antes de iniciar outra cobrança."
+                      : "Se você já pagou o Pix, não pague novamente. Estamos aguardando a confirmação segura do Mercado Pago."}
+                </p>
+              </div>
             </div>
-            {gatewayReturn.state === "pending" && gatewayReturn.attemptId && (
-              <Button size="sm" variant="outline" onClick={() => { setGatewayReturn({ attemptId: gatewayReturn.attemptId, state: "checking" }); setStatusCheckNonce((value) => value + 1); }}>
+            {mpReturnState !== "approved" && mpReturnState !== "failed" && (
+              <Button variant="outline" size="sm" className="shrink-0" onClick={() => setStatusCheckNonce((value) => value + 1)}>
                 Verificar novamente
               </Button>
             )}
           </div>
         )}
+
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Meu painel</h1>
@@ -546,9 +725,71 @@ function CustomerDashboardContent() {
           </TabsList>
 
           <TabsContent value="reservas" className="mt-5 space-y-3 overflow-x-hidden">
-            {groupedPendingOrders.map(({ order: o, quantity: qty }) => (
-              <Card key={o.id} className="border-border/30 bg-card/60 overflow-hidden">
-                <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
+            {storesWithMultiplePayable.length > 0 && selectedOrderIds.length === 0 && (
+              <div className="p-3.5 bg-primary/5 border border-primary/20 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs mb-1">
+                <div className="flex items-center gap-2.5 text-foreground">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
+                    <Layers className="size-4" />
+                  </div>
+                  <div>
+                    <span className="font-semibold block">Pagamento Consolidado via PIX</span>
+                    <span className="text-muted-foreground text-[11px]">
+                      Você tem reservas acumuladas na mesma loja. Marque as caixinhas ou selecione todas para pagar um único PIX.
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                  {storesWithMultiplePayable.map((st) => (
+                    <Button
+                      key={st.storeId}
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10 font-medium"
+                      onClick={() => handleSelectAllFromStore(st.storeId)}
+                    >
+                      <CheckSquare className="size-3.5" /> Pagar todas de {st.storeName} ({st.count})
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {groupedPendingOrders.map(({ order: o, quantity: qty }) => {
+              const payInfo = getOrderPaymentInfo(o, qty);
+              const isSelected = selectedOrderIds.includes(o.id);
+
+              return (
+                <Card
+                  key={o.id}
+                  className={`border-border/30 bg-card/60 overflow-hidden transition-all duration-200 ${
+                    isSelected ? "ring-2 ring-emerald-500/50 bg-emerald-500/5 border-emerald-500/40" : ""
+                  }`}
+                >
+                  <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
+                    {payInfo.isPayable && (
+                      <div className="flex items-center justify-between pb-2.5 border-b border-border/20">
+                        <label
+                          htmlFor={`select-order-${o.id}`}
+                          className="flex items-center gap-2 text-xs font-medium cursor-pointer text-muted-foreground hover:text-foreground select-none"
+                        >
+                          <Checkbox
+                            id={`select-order-${o.id}`}
+                            checked={isSelected}
+                            onCheckedChange={() => handleToggleOrderSelection(o, qty)}
+                            className="data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
+                          />
+                          <span className={isSelected ? "font-semibold text-emerald-600 dark:text-emerald-400" : ""}>
+                            {isSelected ? "Selecionada para pagamento conjunto" : "Selecionar para pagar junto com outras"}
+                          </span>
+                        </label>
+                        {isSelected && (
+                          <Badge className="bg-emerald-600 text-white text-[11px] font-bold">
+                            {payInfo.type === "sinal" ? "Sinal: " : "Saldo: "}
+                            {brl(payInfo.amount)}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
                     <div className="size-10 shrink-0 overflow-hidden rounded-xl bg-muted sm:size-12">
                       {o.products?.image_url ? (
@@ -600,7 +841,7 @@ function CustomerDashboardContent() {
                     {(() => {
                       const signalInfo = getProductSignalAmount(o.products, qty);
                       const expectedSignal = signalInfo.amount;
-                      const isPronta = o.payment_status === "pronta_entrega" || isProntaEntrega(o.products);
+                      const isPronta = isOrderProntaEntrega(o);
                       const isAguardando = o.payment_status === "aguardando_sinal";
                       const isSinalPago = o.payment_status === "sinal_pago";
                       const isQuitado = o.payment_status === "quitado";
@@ -615,8 +856,8 @@ function CustomerDashboardContent() {
                                 const paidInsts = installments.filter((i: any) => i.status === "paid");
                                 const totalPaidInsts = paidInsts.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
                                 const signalPaid = (o.payment_status === "sinal_pago" || o.payment_status === "quitado") ? Number(o.down_payment || 0) * qty : 0;
-                                const totalPaid = totalPaidInsts + signalPaid;
                                 const totalOrder = Number(o.total_price) * qty;
+                                const totalPaid = o.payment_status === "quitado" ? totalOrder : Math.min(totalOrder, totalPaidInsts + signalPaid);
                                 const progress = totalOrder > 0 ? Math.min(100, Math.round((totalPaid / totalOrder) * 100)) : 0;
                                 
                                 return (
@@ -647,21 +888,6 @@ function CustomerDashboardContent() {
                                   isCustomer={true}
                                 />
                               </div>
-                              {getOnlinePaymentAmount(o) > 0 && (
-                                <Button
-                                  size="sm"
-                                  className="w-full gap-2 sm:w-auto"
-                                  onClick={() => setCheckoutModalData({
-                                    storeId: o.store_id,
-                                    storeName: o.stores?.name || "Loja",
-                                    orderId: o.id,
-                                    amount: getOnlinePaymentAmount(o),
-                                    maxInstallments: Math.max(1, Math.min(12, Number(o.installment_count || (o.products as any)?.max_installments || 1))),
-                                  })}
-                                >
-                                  <CreditCard className="size-4" /> Pagar online · {brl(getOnlinePaymentAmount(o))}
-                                </Button>
-                              )}
                             </div>
                           {isAguardando ? (
                             <>
@@ -685,7 +911,7 @@ function CustomerDashboardContent() {
                             <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
                               Totalmente Quitado
                             </p>
-                          ) : o.payment_status === "pronta_entrega" || isPronta ? (
+                          ) : isPronta ? (
                             <>
                               <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
                                 Pronta Entrega
@@ -714,8 +940,8 @@ function CustomerDashboardContent() {
                       const isAguardando = o.payment_status === "aguardando_sinal";
                       const signalInfo = getProductSignalAmount(o.products, qty);
                       const expectedSignal = signalInfo.amount;
-                      const isPronta = o.payment_status === "pronta_entrega" || isProntaEntrega(o.products);
-                      const msg = o.payment_status === "pronta_entrega" || isPronta
+                      const isPronta = isOrderProntaEntrega(o);
+                      const msg = isPronta
                         ? `Olá, gostaria de combinar o pagamento/envio da minha compra a pronta entrega de ${qty}x ${o.products?.brand} ${o.products?.model}.`
                         : o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada"
                           ? `Olá, gostaria de acompanhar minha reserva de ${qty}x ${o.products?.brand} ${o.products?.model}.`
@@ -731,7 +957,7 @@ function CustomerDashboardContent() {
                             rel="noreferrer"
                           >
                             <MessageCircle className="size-4" />
-                            {o.payment_status === "pronta_entrega" || isPronta ? "Falar com a loja" : o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada" ? "Falar com a loja" : "Comprovante"}
+                            {isPronta ? "Falar com a loja" : o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada" ? "Falar com a loja" : "Comprovante"}
                           </a>
                         </Button>
                       );
@@ -764,17 +990,36 @@ function CustomerDashboardContent() {
                             </span>
                           )}
                         </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="h-7 px-3 text-[11px] font-semibold gap-1"
-                          onClick={() => {
-                            navigator.clipboard.writeText(pixKey);
-                            toast.success("Chave PIX copiada para a área de transferência!");
-                          }}
-                        >
-                          <Copy className="size-3" /> Copiar PIX
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="h-7 px-3 text-[11px] font-semibold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                            onClick={() => {
+                              setCheckoutModalData({
+                                open: true,
+                                storeId: o.store_id || (o.stores as any)?.id || "",
+                                storeName: o.stores?.name || "Loja",
+                                orderIds: [o.id],
+                                amount: pixAmount,
+                                maxInstallments: Number(o.installment_count || (o.products as any)?.max_installments || 1),
+                              });
+                            }}
+                          >
+                            <CreditCard className="size-3.5" /> Pagar com PIX ou Cartão
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-7 px-2.5 text-[11px] font-semibold gap-1"
+                            onClick={() => {
+                              navigator.clipboard.writeText(pixKey);
+                              toast.success("Chave PIX copiada para a área de transferência!");
+                            }}
+                          >
+                            <Copy className="size-3" /> Copiar Chave
+                          </Button>
+                        </div>
                       </div>
                     );
                   })()}
@@ -812,7 +1057,8 @@ function CustomerDashboardContent() {
                   )}
                 </CardContent>
               </Card>
-            ))}
+            );
+          })}
             {!ordersLoading && !ordersQuery.isError && groupedPendingOrders.length === 0 && (
               <InterfaceState
                 compact
@@ -1044,20 +1290,83 @@ function CustomerDashboardContent() {
             )}
           </TabsContent>
         </Tabs>
+
+        {/* Barra Flutuante de Pagamento em Lote via PIX */}
+        {selectedOrdersData && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-2xl p-4 bg-background/95 backdrop-blur-md border border-emerald-500/40 rounded-2xl shadow-2xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-5 duration-200">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+                <Wallet className="size-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider truncate max-w-[200px]">
+                    {selectedOrdersData.storeName}
+                  </span>
+                  <Badge variant="secondary" className="text-[11px] font-bold">
+                    {selectedOrdersData.count} {selectedOrdersData.count === 1 ? "reserva" : "reservas"}
+                  </Badge>
+                </div>
+                <p className="text-sm font-bold text-foreground">
+                  Total PIX: <span className="text-emerald-600 dark:text-emerald-400 font-extrabold text-base">{brl(selectedOrdersData.totalAmount)}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedOrderIds([])}
+                className="text-xs text-muted-foreground hover:text-foreground h-8"
+              >
+                Limpar
+              </Button>
+              <Button
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5 shadow-md h-8 px-4 text-xs"
+                onClick={handlePaySelectedOrders}
+              >
+                <QrCode className="size-4" /> Pagar {selectedOrdersData.count} {selectedOrdersData.count === 1 ? "reserva" : "reservas"} via PIX
+              </Button>
+            </div>
+          </div>
+        )}
       </main>
+
+      {pixModalData && (
+        <PixPaymentDialog
+          open={pixModalData.open}
+          onOpenChange={(open) => {
+            if (!open) setPixModalData(null);
+          }}
+          pixKey={pixModalData.pixKey}
+          amount={pixModalData.amount}
+          storeName={pixModalData.storeName}
+          storePhone={pixModalData.storePhone}
+          orderId={pixModalData.orderId}
+          title={pixModalData.title}
+          description={pixModalData.description}
+          items={pixModalData.items}
+        />
+      )}
 
       {checkoutModalData && (
         <CheckoutPaymentDialog
-          open={true}
-          onOpenChange={(open) => { if (!open) setCheckoutModalData(null); }}
+          open={checkoutModalData.open}
+          onOpenChange={(open) => {
+            if (!open) setCheckoutModalData(null);
+          }}
           storeId={checkoutModalData.storeId}
           storeName={checkoutModalData.storeName}
-          orderIds={[checkoutModalData.orderId]}
+          orderIds={checkoutModalData.orderIds}
           amount={checkoutModalData.amount}
           maxInstallments={checkoutModalData.maxInstallments}
           customerEmail={user?.email || ""}
           customerName={profile?.name || ""}
-          onPaymentSuccess={() => { void queryClient.invalidateQueries({ queryKey: ["my-orders"] }); }}
+          onPaymentSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["my-orders"] });
+          }}
         />
       )}
 

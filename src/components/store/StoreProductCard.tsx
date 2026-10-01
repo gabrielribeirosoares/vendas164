@@ -43,6 +43,7 @@ export function StoreProductCard({
             src={getProductCardImageUrl(product.image_url)}
             alt={`${product.brand} ${product.model}`}
             loading="lazy"
+            decoding="async"
             width="480"
             height="360"
             className="size-full object-contain p-2 transition-transform duration-300 motion-safe:group-hover:scale-105 sm:p-3"

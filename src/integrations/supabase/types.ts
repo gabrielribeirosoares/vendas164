@@ -417,6 +417,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_global_payment: {
+        Args: { _store_id: string; _customer_id: string; _request_id: string; _payment_date: string; _payments: Json };
+        Returns: Json;
+      }
       create_manual_reservations: {
         Args: { _request_id: string; _product_id: string; _quantity: number; _order: Json };
         Returns: string[];
@@ -444,6 +448,14 @@ export type Database = {
       }
       replace_order_installments: {
         Args: { _order_ids: string[]; _count: number }
+        Returns: Json
+      }
+      seller_orders_page: {
+        Args: { _store_id: string; _search?: string; _payment?: string; _delivery?: string; _category?: string; _start_date?: string; _end_date?: string; _focus?: string; _page?: number; _page_size?: number }
+        Returns: Json
+      }
+      seller_clients_page: {
+        Args: { _store_id: string; _search?: string; _page?: number; _page_size?: number }
         Returns: Json
       }
     }

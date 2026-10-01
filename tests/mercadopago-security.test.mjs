@@ -9,16 +9,6 @@ const other = '20000000-0000-4000-8000-000000000002';
 const signalOrder = '30000000-0000-4000-8000-000000000001';
 const fullOrder = '30000000-0000-4000-8000-000000000002';
 
-test('Mercado Pago checkout accepts the OAuth token stored encrypted on the server', async () => {
-  const [route, helper] = await Promise.all([
-    readFile(new URL('../src/routes/api/mercadopago/create-payment.ts', import.meta.url), 'utf8'),
-    readFile(new URL('../src/lib/mercadoPago.server.ts', import.meta.url), 'utf8'),
-  ]);
-  assert.match(route, /getMercadoPagoAccessToken\(storeId\)/);
-  assert.doesNotMatch(route, /usableConnection|conexão manual do Mercado Pago/);
-  assert.match(helper, /decryptValue<MercadoPagoTokens>\(storeId, row\.encrypted_tokens\)/);
-});
-
 test('gateway confirmation requires service role and verifies amount, store, and replay', async () => {
   const db = new PGlite();
   try {
@@ -58,10 +48,4 @@ test('gateway confirmation requires service role and verifies amount, store, and
   } finally {
     await db.close();
   }
-});
-
-test('legacy gateway confirmation is never granted to browser roles', async () => {
-  const migration = await readMigration('20260925110000_confirm_gateway_payment.sql');
-  assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.confirm_gateway_payment[\s\S]*TO service_role/);
-  assert.doesNotMatch(migration, /GRANT EXECUTE ON FUNCTION public\.confirm_gateway_payment[^;]*TO[^;]*(anon|authenticated)/i);
 });

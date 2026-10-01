@@ -56,10 +56,6 @@ export const Route = createFileRoute("/api/infinitepay/settings")({
           const { error } = await admin.from("infinitepay_connections" as never)
             .delete().eq("store_id", storeId);
           if (error) throw error;
-          const { error: providerError } = await admin.from("store_payment_provider_settings" as never)
-            .update({ active_provider: null, updated_at: new Date().toISOString() } as never)
-            .eq("store_id", storeId).eq("active_provider", "infinitepay");
-          if (providerError) throw providerError;
           return Response.json({ connected: false, handle: "" });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Não foi possível desconectar a InfinitePay.";
