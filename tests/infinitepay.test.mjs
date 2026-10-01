@@ -166,3 +166,13 @@ test("InfinitePay callbacks verify status and amount with the provider before co
   assert.match(mercadoPagoCreatePayment, /providerError\.message/);
   assert.match(mercadoPagoCreatePayment, /email ocultado/);
 });
+
+test("InfinitePay uses the canonical production domain and returns to the customer panel", async () => {
+  const helper = await readFile(new URL("../src/lib/infinitePay.server.ts", import.meta.url), "utf8");
+  const createRoute = await readFile(new URL("../src/routes/api/infinitepay/create-payment.ts", import.meta.url), "utf8");
+  const returnRoute = await readFile(new URL("../src/routes/api/infinitepay/return.ts", import.meta.url), "utf8");
+
+  assert.match(helper, /const productionUrl = "https:\/\/www\.vendas164\.com\.br";[\s\S]*?process\.env\.VERCEL_ENV === "production"\s*\? productionUrl/);
+  assert.match(createRoute, /redirect_url:\s*`\$\{origin\}\/api\/infinitepay\/return`/);
+  assert.match(returnRoute, /Response\.redirect\(`\$\{appBaseUrl\(\)\}\/painel\?infinitepay=/);
+});

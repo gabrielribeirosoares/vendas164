@@ -9,8 +9,11 @@ export function infinitePayAdmin() {
 }
 
 export function appBaseUrl() {
-  const value = process.env.APP_URL
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://www.vendas164.com.br");
+  const productionUrl = "https://www.vendas164.com.br";
+  const value = process.env.VERCEL_ENV === "production"
+    ? productionUrl
+    : process.env.APP_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : productionUrl);
   const url = new URL(value);
   if (url.protocol !== "https:" && url.hostname !== "localhost") {
     throw new Error("A URL pública da aplicação precisa usar HTTPS.");
