@@ -49,6 +49,19 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
           try { accessToken = await getMercadoPagoAccessToken(storeId); }
           catch { return errorResponse("Esta loja ainda não conectou o Mercado Pago.", 400); }
 
+          const { data: mpConnection, error: mpConnectionError } = await admin
+            .from("mercadopago_connections" as never)
+            .select("is_active, access_token")
+            .eq("store_id", storeId)
+            .maybeSingle();
+          if (mpConnectionError) throw mpConnectionError;
+          if (!mpConnection?.is_active || !mpConnection.access_token) {
+            return errorResponse(
+              "Pagamentos de teste exigem conexão manual do Mercado Pago para confirmar automaticamente. Nenhuma cobrança foi criada.",
+              503,
+            );
+          }
+
           const now = new Date();
           await admin.from("gateway_payment_attempts" as never)
             .update({ status: "expired", updated_at: now.toISOString() } as never)
