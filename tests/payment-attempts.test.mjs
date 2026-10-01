@@ -153,6 +153,8 @@ test("Checkout Pro uses the registered attempt, description and installment limi
   assert.match(source, /external_reference: externalReference/);
   assert.match(source, /payment_methods: \{ installments: maxInstallments \}/);
   assert.match(source, /title: description/);
+  assert.match(source, /const itemDescription = `Miniatura colecionável em escala 1:64 — \$\{description\}`\.slice\(0, 256\)/);
+  assert.match(source, /title: description, description: itemDescription/);
   assert.doesNotMatch(source, /external_reference: orderIds\.join/);
 });
 

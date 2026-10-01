@@ -52,6 +52,7 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
           const description = (firstProduct
             ? `${firstProduct}${orders.length > 1 ? ` (+${orders.length - 1} itens)` : ""} — ${store.name}`
             : `Pedido — ${store.name}`).slice(0, 128);
+          const itemDescription = `Miniatura colecionável em escala 1:64 — ${description}`.slice(0, 256);
 
           let accessToken: string;
           try { accessToken = await getMercadoPagoAccessToken(storeId); }
@@ -148,7 +149,7 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
             : await fetch("https://api.mercadopago.com/checkout/preferences", {
                 method: "POST", headers,
                 body: JSON.stringify({
-                  items: [{ id: paymentAttempt.id, title: description, quantity: 1, unit_price: amount, currency_id: "BRL" }],
+                  items: [{ id: paymentAttempt.id, title: description, description: itemDescription, quantity: 1, unit_price: amount, currency_id: "BRL" }],
                   payer: { name: String(user.user_metadata?.name || "Cliente").slice(0, 100) },
                   payment_methods: { installments: maxInstallments },
                   back_urls: {
