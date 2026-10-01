@@ -55,7 +55,8 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
             .eq("store_id", storeId)
             .maybeSingle();
           if (mpConnectionError) throw mpConnectionError;
-          if (!mpConnection?.is_active || !mpConnection.access_token) {
+          const usableConnection = mpConnection as unknown as { is_active?: boolean; access_token?: string | null } | null;
+          if (!usableConnection?.is_active || !usableConnection.access_token) {
             return errorResponse(
               "Pagamentos de teste exigem conexão manual do Mercado Pago para confirmar automaticamente. Nenhuma cobrança foi criada.",
               503,
