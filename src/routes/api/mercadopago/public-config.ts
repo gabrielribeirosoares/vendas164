@@ -29,6 +29,15 @@ export const Route = createFileRoute("/api/mercadopago/public-config")({
 
           const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
+          const { data: selection, error: selectionError } = await supabase
+            .from("store_payment_provider_settings" as any)
+            .select("active_provider")
+            .eq("store_id", storeId)
+            .maybeSingle();
+          if (selectionError) throw selectionError;
+          const providerSelection = selection as unknown as { active_provider?: string } | null;
+          const isSelected = providerSelection?.active_provider === "mercadopago";
+
           // Retorna apenas disponibilidade; tokens nunca saem do servidor.
           const { data: connection } = await supabase
             .from("mercadopago_connections" as any)
@@ -39,7 +48,7 @@ export const Route = createFileRoute("/api/mercadopago/public-config")({
           if (connection && (connection as any).is_active && ((connection as any).encrypted_tokens || (connection as any).access_token)) {
             return new Response(
               JSON.stringify({
-                isConfigured: true,
+                isConfigured: isSelected,
                 publicKey: null,
                 isSandbox: (connection as any).is_sandbox ?? true,
               }),

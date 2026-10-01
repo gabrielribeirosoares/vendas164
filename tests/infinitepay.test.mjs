@@ -141,7 +141,8 @@ test("InfinitePay callbacks verify status and amount with the provider before co
   ]);
   assert.doesNotMatch(checkoutDialog, /Gerar PIX automaticamente/);
   assert.match(checkoutDialog, /paymentRequestRef\.current/);
-  assert.match(checkoutDialog, /disabled=\{!paymentConfig\?\.isConfigured \|\| paymentBusy\}/);
+  assert.match(checkoutDialog, /paymentConfig\?\.isConfigured && \(/);
+  assert.match(checkoutDialog, /paymentConfig\?\.infinitePayEnabled && \(/);
   assert.match(server, /api\.checkout\.infinitepay\.io\/payment_check/);
   assert.match(server, /!check\.success \|\| !check\.paid \|\| Number\(check\.amount\) !== expectedCents/);
   assert.ok(server.indexOf("api.checkout.infinitepay.io/payment_check") < server.indexOf('admin.rpc("confirm_gateway_payment_attempt"'));

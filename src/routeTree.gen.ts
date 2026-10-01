@@ -30,6 +30,7 @@ import { Route as ApiMercadopagoCreatePaymentRouteImport } from './routes/api/me
 import { Route as ApiMercadopagoPaymentStatusRouteImport } from './routes/api/mercadopago/payment-status'
 import { Route as ApiMercadopagoPublicConfigRouteImport } from './routes/api/mercadopago/public-config'
 import { Route as ApiMercadopagoWebhookRouteImport } from './routes/api/mercadopago/webhook'
+import { Route as ApiPaymentProviderSettingsRouteImport } from './routes/api/payment-provider/settings'
 import { Route as LojaSlugItemSlugRouteImport } from './routes/loja.$slug.$itemSlug'
 import { Route as ApiBlingOauthCallbackRouteImport } from './routes/api/bling/oauth/callback'
 import { Route as ApiMercadopagoOauthCallbackRouteImport } from './routes/api/mercadopago/oauth/callback'
@@ -146,6 +147,12 @@ const ApiMercadopagoWebhookRoute = ApiMercadopagoWebhookRouteImport.update({
   path: '/api/mercadopago/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPaymentProviderSettingsRoute =
+  ApiPaymentProviderSettingsRouteImport.update({
+    id: '/api/payment-provider/settings',
+    path: '/api/payment-provider/settings',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const LojaSlugItemSlugRoute = LojaSlugItemSlugRouteImport.update({
   id: '/$itemSlug',
   path: '/$itemSlug',
@@ -202,6 +209,7 @@ export interface FileRoutesByFullPath {
   '/api/mercadopago/payment-status': typeof ApiMercadopagoPaymentStatusRoute
   '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
   '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
+  '/api/payment-provider/settings': typeof ApiPaymentProviderSettingsRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
   '/api/bling/oauth/callback': typeof ApiBlingOauthCallbackRoute
   '/api/mercadopago/oauth/callback': typeof ApiMercadopagoOauthCallbackRoute
@@ -230,6 +238,7 @@ export interface FileRoutesByTo {
   '/api/mercadopago/payment-status': typeof ApiMercadopagoPaymentStatusRoute
   '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
   '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
+  '/api/payment-provider/settings': typeof ApiPaymentProviderSettingsRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
   '/api/bling/oauth/callback': typeof ApiBlingOauthCallbackRoute
   '/api/mercadopago/oauth/callback': typeof ApiMercadopagoOauthCallbackRoute
@@ -260,6 +269,7 @@ export interface FileRoutesById {
   '/api/mercadopago/payment-status': typeof ApiMercadopagoPaymentStatusRoute
   '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
   '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
+  '/api/payment-provider/settings': typeof ApiPaymentProviderSettingsRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
   '/api/bling/oauth/callback': typeof ApiBlingOauthCallbackRoute
   '/api/mercadopago/oauth/callback': typeof ApiMercadopagoOauthCallbackRoute
@@ -290,6 +300,7 @@ export interface FileRouteTypes {
     | '/api/mercadopago/payment-status'
     | '/api/mercadopago/public-config'
     | '/api/mercadopago/webhook'
+    | '/api/payment-provider/settings'
     | '/loja/$slug/$itemSlug'
     | '/api/bling/oauth/callback'
     | '/api/mercadopago/oauth/callback'
@@ -318,6 +329,7 @@ export interface FileRouteTypes {
     | '/api/mercadopago/payment-status'
     | '/api/mercadopago/public-config'
     | '/api/mercadopago/webhook'
+    | '/api/payment-provider/settings'
     | '/loja/$slug/$itemSlug'
     | '/api/bling/oauth/callback'
     | '/api/mercadopago/oauth/callback'
@@ -347,6 +359,7 @@ export interface FileRouteTypes {
     | '/api/mercadopago/payment-status'
     | '/api/mercadopago/public-config'
     | '/api/mercadopago/webhook'
+    | '/api/payment-provider/settings'
     | '/loja/$slug/$itemSlug'
     | '/api/bling/oauth/callback'
     | '/api/mercadopago/oauth/callback'
@@ -375,6 +388,7 @@ export interface RootRouteChildren {
   ApiMercadopagoPaymentStatusRoute: typeof ApiMercadopagoPaymentStatusRoute
   ApiMercadopagoPublicConfigRoute: typeof ApiMercadopagoPublicConfigRoute
   ApiMercadopagoWebhookRoute: typeof ApiMercadopagoWebhookRoute
+  ApiPaymentProviderSettingsRoute: typeof ApiPaymentProviderSettingsRoute
   ApiBlingOauthCallbackRoute: typeof ApiBlingOauthCallbackRoute
   ApiMercadopagoOauthCallbackRoute: typeof ApiMercadopagoOauthCallbackRoute
   ApiMercadopagoOauthDisconnectRoute: typeof ApiMercadopagoOauthDisconnectRoute
@@ -531,6 +545,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMercadopagoWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/payment-provider/settings': {
+      id: '/api/payment-provider/settings'
+      path: '/api/payment-provider/settings'
+      fullPath: '/api/payment-provider/settings'
+      preLoaderRoute: typeof ApiPaymentProviderSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/loja/$slug/$itemSlug': {
       id: '/loja/$slug/$itemSlug'
       path: '/$itemSlug'
@@ -621,6 +642,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMercadopagoPaymentStatusRoute: ApiMercadopagoPaymentStatusRoute,
   ApiMercadopagoPublicConfigRoute: ApiMercadopagoPublicConfigRoute,
   ApiMercadopagoWebhookRoute: ApiMercadopagoWebhookRoute,
+  ApiPaymentProviderSettingsRoute: ApiPaymentProviderSettingsRoute,
   ApiBlingOauthCallbackRoute: ApiBlingOauthCallbackRoute,
   ApiMercadopagoOauthCallbackRoute: ApiMercadopagoOauthCallbackRoute,
   ApiMercadopagoOauthDisconnectRoute: ApiMercadopagoOauthDisconnectRoute,

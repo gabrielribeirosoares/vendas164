@@ -20,6 +20,7 @@ type ConnectionStatus = {
   connectionType: "manual" | "oauth" | null;
   isLegacy: boolean;
 };
+type ActiveProvider = "mercadopago" | "infinitepay" | null;
 
 async function sessionToken() {
   const { data } = await supabase.auth.getSession();
@@ -34,27 +35,53 @@ export function PaymentSettingsTab({ storeId, storeName = "sua loja" }: PaymentS
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
   const [infinitePayHandle, setInfinitePayHandle] = useState("");
   const [infinitePayConnected, setInfinitePayConnected] = useState(false);
+  const [activeProvider, setActiveProvider] = useState<ActiveProvider>(null);
 
   async function loadStatus(showToast = false) {
     setLoading(true);
     try {
       const token = await sessionToken();
       const headers = { Authorization: `Bearer ${token}` };
-      const [mpResponse, infinitePayResponse] = await Promise.all([
+      const [mpResponse, infinitePayResponse, providerResponse] = await Promise.all([
         fetch(`/api/mercadopago/oauth/status?storeId=${encodeURIComponent(storeId)}`, { headers }),
         fetch(`/api/infinitepay/settings?storeId=${encodeURIComponent(storeId)}`, { headers }),
+        fetch(`/api/payment-provider/settings?storeId=${encodeURIComponent(storeId)}`, { headers }),
       ]);
-      const [mpResult, infinitePayResult] = await Promise.all([mpResponse.json(), infinitePayResponse.json()]);
+      const [mpResult, infinitePayResult, providerResult] = await Promise.all([
+        mpResponse.json(), infinitePayResponse.json(), providerResponse.json(),
+      ]);
       if (!mpResponse.ok) throw new Error(mpResult.error || "Não foi possível consultar o Mercado Pago.");
       if (!infinitePayResponse.ok) throw new Error(infinitePayResult.error || "Não foi possível consultar a InfinitePay.");
+      if (!providerResponse.ok) throw new Error(providerResult.error || "Não foi possível consultar a forma ativa no checkout.");
       setStatus(mpResult);
       setInfinitePayHandle(infinitePayResult.handle || "");
       setInfinitePayConnected(Boolean(infinitePayResult.connected));
+      setActiveProvider(providerResult.activeProvider || null);
       if (showToast) toast.success("Status das integrações atualizado.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível consultar as integrações.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function activateProvider(provider: Exclude<ActiveProvider, null>) {
+    setWorking(true);
+    try {
+      const token = await sessionToken();
+      const response = await fetch("/api/payment-provider/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ storeId, provider }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível atualizar o checkout.");
+      setActiveProvider(result.activeProvider);
+      toast.success(`${provider === "mercadopago" ? "Mercado Pago" : "InfinitePay"} selecionado para o checkout.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível atualizar o checkout.");
+    } finally {
+      setWorking(false);
     }
   }
 
@@ -151,6 +178,11 @@ export function PaymentSettingsTab({ storeId, storeName = "sua loja" }: PaymentS
         <p className="mt-1 text-sm text-muted-foreground">
           Receba por PIX e cartão diretamente na sua conta, sem copiar chaves ou tokens.
         </p>
+        <p className="mt-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+          {activeProvider
+            ? `No checkout, os clientes verão apenas ${activeProvider === "mercadopago" ? "Mercado Pago" : "InfinitePay"}. Você pode manter a outra integração conectada e alternar quando quiser.`
+            : "Escolha uma integração conectada para habilitar pagamentos automáticos. Apenas uma forma ficará disponível por vez."}
+        </p>
       </div>
 
       {loading ? (
@@ -172,15 +204,17 @@ export function PaymentSettingsTab({ storeId, storeName = "sua loja" }: PaymentS
                     {status?.connected ? "Mercado Pago conectado" : "Conecte sua conta do Mercado Pago"}
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    {status?.connected
-                      ? `Os pagamentos de ${storeName} são confirmados automaticamente.`
+                    {status?.connected && activeProvider === "mercadopago"
+                      ? `Os pagamentos de ${storeName} são confirmados automaticamente por este provedor.`
+                      : status?.connected
+                        ? "Conta conectada, mas não selecionada para o checkout desta loja."
                       : "Você será direcionado ao Mercado Pago para autorizar o Vendas164."}
                   </CardDescription>
                 </div>
               </div>
               {status?.connected && (
                 <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 font-bold text-emerald-600">
-                  {status.isLegacy ? "Conexão atual" : "OAuth seguro"}
+                  {activeProvider === "mercadopago" ? "Ativo no checkout" : status.isLegacy ? "Conectado" : "OAuth seguro"}
                 </Badge>
               )}
             </div>
@@ -217,6 +251,11 @@ export function PaymentSettingsTab({ storeId, storeName = "sua loja" }: PaymentS
                   <Unplug className="size-4" /> Desconectar
                 </Button>
               )}
+              {status?.connected && activeProvider !== "mercadopago" && (
+                <Button variant="outline" onClick={() => void activateProvider("mercadopago")} disabled={working} className="gap-2 text-xs">
+                  Usar Mercado Pago no checkout
+                </Button>
+              )}
               <Button variant="ghost" onClick={() => void loadStatus(true)} disabled={working} className="gap-2 text-xs text-muted-foreground">
                 <RefreshCw className="size-4" /> Atualizar status
               </Button>
@@ -248,7 +287,7 @@ export function PaymentSettingsTab({ storeId, storeName = "sua loja" }: PaymentS
               </div>
               {infinitePayConnected && (
                 <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 font-bold text-emerald-600">
-                  Ativa
+                  {activeProvider === "infinitepay" ? "Ativa no checkout" : "Conectada"}
                 </Badge>
               )}
             </div>
@@ -280,6 +319,11 @@ export function PaymentSettingsTab({ storeId, storeName = "sua loja" }: PaymentS
               {infinitePayConnected && (
                 <Button variant="outline" onClick={disconnectInfinitePay} disabled={working} className="gap-2 text-xs text-destructive hover:bg-destructive/10">
                   <Unplug className="size-4" /> Desconectar
+                </Button>
+              )}
+              {infinitePayConnected && activeProvider !== "infinitepay" && (
+                <Button variant="outline" onClick={() => void activateProvider("infinitepay")} disabled={working} className="gap-2 text-xs">
+                  Usar InfinitePay no checkout
                 </Button>
               )}
             </div>

@@ -86,7 +86,8 @@ export function CheckoutPaymentDialog({
     ])
       .then(([mercadoPago, infinitePay]) => {
         setPaymentConfig({ ...mercadoPago, infinitePayEnabled: Boolean(infinitePay.enabled) });
-        if (!mercadoPago.isConfigured && infinitePay.enabled) setActiveTab("infinitepay");
+        if (mercadoPago.isConfigured) setActiveTab("card");
+        else if (infinitePay.enabled) setActiveTab("infinitepay");
       })
       .catch((err) => {
         console.error("Erro ao carregar formas de pagamento:", err);
@@ -349,17 +350,21 @@ export function CheckoutPaymentDialog({
                 onValueChange={(val) => setActiveTab(val as any)}
                 className="w-full"
               >
-                <TabsList className="grid grid-cols-2 mb-4">
-                  <TabsTrigger value="card" disabled={!paymentConfig?.isConfigured || paymentBusy} className="gap-2 text-xs font-semibold">
-                    <CreditCard className="size-4 text-sky-600" /> MERCADO PAGO
-                  </TabsTrigger>
-                  <TabsTrigger value="infinitepay" disabled={!paymentConfig?.infinitePayEnabled || paymentBusy} className="gap-2 text-[11px] font-semibold">
-                    INFINITEPAY
-                  </TabsTrigger>
+                <TabsList className={`mb-4 grid ${paymentConfig?.isConfigured && paymentConfig?.infinitePayEnabled ? "grid-cols-2" : "grid-cols-1"}`}>
+                  {paymentConfig?.isConfigured && (
+                    <TabsTrigger value="card" disabled={paymentBusy} className="gap-2 text-xs font-semibold">
+                      <CreditCard className="size-4 text-sky-600" /> MERCADO PAGO
+                    </TabsTrigger>
+                  )}
+                  {paymentConfig?.infinitePayEnabled && (
+                    <TabsTrigger value="infinitepay" disabled={paymentBusy} className="gap-2 text-[11px] font-semibold">
+                      INFINITEPAY
+                    </TabsTrigger>
+                  )}
                 </TabsList>
 
                 {/* ABA CARTÃO DE CRÉDITO (CHECKOUT PRO OFICIAL MERCADO PAGO) */}
-                <TabsContent value="card" className="space-y-4 mt-0">
+                {paymentConfig?.isConfigured && <TabsContent value="card" className="space-y-4 mt-0">
                   {cardError && (
                     <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive flex items-center gap-2">
                       <AlertCircle className="size-4 shrink-0" />
@@ -428,9 +433,9 @@ export function CheckoutPaymentDialog({
                   <p className="text-[11px] text-center text-muted-foreground flex items-center justify-center gap-1">
                     <Lock className="size-3 text-primary" /> Transação processada em ambiente seguro do Mercado Pago
                   </p>
-                </TabsContent>
+                </TabsContent>}
 
-                <TabsContent value="infinitepay" className="space-y-4 mt-0">
+                {paymentConfig?.infinitePayEnabled && <TabsContent value="infinitepay" className="space-y-4 mt-0">
                   {cardError && (
                     <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
                       {cardError}
@@ -466,7 +471,7 @@ export function CheckoutPaymentDialog({
                   <p className="flex items-center justify-center gap-1 text-center text-[11px] text-muted-foreground">
                     <Lock className="size-3 text-primary" /> O pedido só será confirmado após validação do pagamento no servidor.
                   </p>
-                </TabsContent>
+                </TabsContent>}
               </Tabs>
               )}
             </div>

@@ -170,3 +170,57 @@ test("Mercado Pago returns to the branch with the attempt ID and exposes only th
   assert.match(paymentStatus, /status: attempt\.status/);
   assert.doesNotMatch(paymentStatus, /access_token|response_payload|provider_payment_id/);
 });
+
+test("exclusive payment provider migration backfills a single connection and leaves dual connections unselected", async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+      CREATE TABLE public.stores(id uuid PRIMARY KEY);
+      CREATE TABLE public.mercadopago_connections(
+        store_id uuid PRIMARY KEY REFERENCES public.stores(id), is_active boolean,
+        access_token text, encrypted_tokens text
+      );
+      CREATE TABLE public.infinitepay_connections(
+        store_id uuid PRIMARY KEY REFERENCES public.stores(id), is_active boolean
+      );
+      INSERT INTO public.stores VALUES
+        ('20000000-0000-4000-8000-000000000011'),
+        ('20000000-0000-4000-8000-000000000012'),
+        ('20000000-0000-4000-8000-000000000013');
+      INSERT INTO public.mercadopago_connections VALUES
+        ('20000000-0000-4000-8000-000000000011', true, 'encrypted', null),
+        ('20000000-0000-4000-8000-000000000013', true, null, 'ciphertext');
+      INSERT INTO public.infinitepay_connections VALUES
+        ('20000000-0000-4000-8000-000000000012', true),
+        ('20000000-0000-4000-8000-000000000013', true);`);
+
+    const migration = await readFile(
+      new URL("../supabase/migrations/20261001140000_exclusive_store_payment_provider.sql", import.meta.url),
+      "utf8",
+    );
+    await db.exec(migration);
+
+    const rows = (await db.query(`SELECT store_id, active_provider
+      FROM public.store_payment_provider_settings ORDER BY store_id`)).rows;
+    assert.deepEqual(rows.map((row) => row.active_provider), ["mercadopago", "infinitepay", null]);
+    const privileges = (await db.query(`SELECT
+      has_table_privilege('anon','public.store_payment_provider_settings','SELECT') AS anon_read,
+      has_table_privilege('authenticated','public.store_payment_provider_settings','UPDATE') AS user_write,
+      has_table_privilege('service_role','public.store_payment_provider_settings','UPDATE') AS service_write`)).rows[0];
+    assert.equal(privileges.anon_read, false);
+    assert.equal(privileges.user_write, false);
+    assert.equal(privileges.service_write, true);
+  } finally {
+    await db.close();
+  }
+});
+
+test("payment APIs enforce the store's selected provider and checkout hides the inactive option", async () => {
+  const mercadoPago = await readFile(new URL("../src/routes/api/mercadopago/create-payment.ts", import.meta.url), "utf8");
+  const infinitePay = await readFile(new URL("../src/routes/api/infinitepay/create-payment.ts", import.meta.url), "utf8");
+  const checkout = await readFile(new URL("../src/components/CheckoutPaymentDialog.tsx", import.meta.url), "utf8");
+  assert.match(mercadoPago, /O Mercado Pago não está selecionado como forma de pagamento desta loja/);
+  assert.match(infinitePay, /A InfinitePay não está selecionada como forma de pagamento desta loja/);
+  assert.match(checkout, /paymentConfig\?\.isConfigured && \(/);
+  assert.match(checkout, /paymentConfig\?\.infinitePayEnabled && \(/);
+});

@@ -25,6 +25,14 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
           const method = body.paymentMethodId as PaymentMethod;
           if (method !== "pix" && method !== "checkout_pro") return errorResponse("Forma de pagamento inválida.", 400);
 
+          const { data: providerSetting, error: providerSettingError } = await admin
+            .from("store_payment_provider_settings" as never)
+            .select("active_provider").eq("store_id", storeId).maybeSingle();
+          if (providerSettingError) throw providerSettingError;
+          if ((providerSetting as unknown as { active_provider?: string } | null)?.active_provider !== "mercadopago") {
+            return errorResponse("O Mercado Pago não está selecionado como forma de pagamento desta loja.", 409);
+          }
+
           const [{ data: orders, error: orderError }, { data: store, error: storeError }] = await Promise.all([
             admin.from("orders").select("id, store_id, user_id, total_price, down_payment, signal_amount, payment_status, installment_count, products(model, max_installments)").in("id", orderIds),
             admin.from("stores").select("id, name").eq("id", storeId).maybeSingle(),

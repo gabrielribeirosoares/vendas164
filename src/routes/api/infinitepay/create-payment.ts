@@ -23,6 +23,14 @@ export const Route = createFileRoute("/api/infinitepay/create-payment")({
           if (!/^[0-9a-f-]{36}$/i.test(storeId)) return fail("Loja inválida.", 400);
           const orderIds = parseOrderIds(body.orderIds);
 
+          const { data: providerSetting, error: providerSettingError } = await admin
+            .from("store_payment_provider_settings" as never)
+            .select("active_provider").eq("store_id", storeId).maybeSingle();
+          if (providerSettingError) throw providerSettingError;
+          if ((providerSetting as unknown as { active_provider?: string } | null)?.active_provider !== "infinitepay") {
+            return fail("A InfinitePay não está selecionada como forma de pagamento desta loja.", 409);
+          }
+
           const [{ data: orders, error: orderError }, { data: store, error: storeError }, { data: rawConnection, error: connectionError }] = await Promise.all([
             admin.from("orders").select("id, store_id, user_id, total_price, down_payment, signal_amount, payment_status, products(model)").in("id", orderIds),
             admin.from("stores").select("id, name").eq("id", storeId).maybeSingle(),
