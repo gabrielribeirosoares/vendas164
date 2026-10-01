@@ -87,31 +87,94 @@ function CustomerDashboardContent() {
     amount: number;
     maxInstallments?: number;
   } | null>(null);
+  const [mpReturnAttemptId, setMpReturnAttemptId] = useState<string | null>(null);
+  const [mpReturnState, setMpReturnState] = useState<"checking" | "pending" | "approved" | "failed" | null>(null);
+  const [mpReturnAmount, setMpReturnAmount] = useState<number | null>(null);
+  const [statusCheckNonce, setStatusCheckNonce] = useState(0);
 
   // Redirect to main domain if accessed from a store subdomain
   useEffect(() => {
     redirectToMainIfOnSubdomain();
   }, []);
 
-  // Tratar retorno do Mercado Pago Checkout Pro
+  // Captura o retorno do Checkout Pro e mantém um identificador para consultar o webhook.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const urlParams = new URLSearchParams(window.location.search);
-    const mpStatus = urlParams.get("status") || urlParams.get("collection_status");
+    const url = new URL(window.location.href);
+    const mpStatus = url.searchParams.get("status") || url.searchParams.get("collection_status");
+    const attemptId = url.searchParams.get("payment_attempt_id");
+
     if (mpStatus) {
-      if (mpStatus === "approved") {
-        toast.info("Pagamento recebido pelo Mercado Pago. Aguarde a confirmação do pedido.");
+      if (attemptId && /^[0-9a-f-]{36}$/i.test(attemptId)) {
+        setMpReturnAttemptId(attemptId);
+        setMpReturnState("checking");
+        toast.info("Voltando do Mercado Pago. Estamos verificando a confirmação do Pix...");
+      } else if (mpStatus === "approved") {
+        toast.info("O Mercado Pago informou a aprovação. Atualize suas reservas para conferir o status.");
         queryClient.invalidateQueries({ queryKey: ["my-orders"] });
       } else if (mpStatus === "pending" || mpStatus === "in_process") {
         toast.info("Pagamento em processamento pelo Mercado Pago. O pedido será atualizado assim que compensado.");
       } else if (mpStatus === "failure" || mpStatus === "rejected") {
-        toast.error("O pagamento não foi concluído no Mercado Pago. Tente novamente quando desejar.");
+        toast.error("O Mercado Pago não concluiu o pagamento. Confira o status antes de tentar novamente.");
       }
 
-      // Limpar parâmetros da URL
-      window.history.replaceState({}, document.title, window.location.pathname);
+      url.searchParams.delete("status");
+      url.searchParams.delete("collection_status");
+      url.searchParams.delete("payment_attempt_id");
+      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
     }
   }, [queryClient]);
+
+  // Consulta o status persistido pelo webhook. O parâmetro de retorno do gateway nunca é tratado como confirmação.
+  useEffect(() => {
+    if (!mpReturnAttemptId || !user) return;
+    let active = true;
+    let attempts = 0;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const checkStatus = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        const response = await fetch(`/api/mercadopago/payment-status?attemptId=${encodeURIComponent(mpReturnAttemptId)}`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (!response.ok) return;
+        const result = await response.json() as { status: string; amount?: number };
+        if (!active) return;
+        if (typeof result.amount === "number") setMpReturnAmount(result.amount);
+        if (result.status === "approved") {
+          setMpReturnState("approved");
+          await queryClient.invalidateQueries({ queryKey: ["my-orders"] });
+          toast.success("Pix confirmado! O status das suas reservas foi atualizado.");
+          if (timer) clearInterval(timer);
+        } else if (result.status === "failed") {
+          setMpReturnState("failed");
+          await queryClient.invalidateQueries({ queryKey: ["my-orders"] });
+          if (timer) clearInterval(timer);
+        } else {
+          setMpReturnState("pending");
+        }
+      } catch {
+        // Mantém a consulta periódica; falhas transitórias não alteram o estado financeiro.
+      }
+    };
+
+    void checkStatus();
+    timer = setInterval(() => {
+      attempts += 1;
+      if (attempts >= 30) {
+        if (active) setMpReturnState((current) => current === "approved" || current === "failed" ? current : "pending");
+        if (timer) clearInterval(timer);
+        return;
+      }
+      void checkStatus();
+    }, 3000);
+
+    return () => {
+      active = false;
+      if (timer) clearInterval(timer);
+    };
+  }, [mpReturnAttemptId, queryClient, statusCheckNonce, user]);
 
   const { data: profile } = useQuery({
     queryKey: ["my-profile", user?.id],
@@ -519,6 +582,43 @@ function CustomerDashboardContent() {
     <div className="min-h-screen">
       <AppHeader />
       <main className="mx-auto max-w-6xl px-4 py-10">
+        {mpReturnState && (
+          <div className={`mt-6 flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between ${
+            mpReturnState === "approved"
+              ? "border-emerald-500/30 bg-emerald-500/10"
+              : mpReturnState === "failed"
+                ? "border-destructive/30 bg-destructive/10"
+                : "border-primary/25 bg-primary/5"
+          }`} role="status" aria-live="polite">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 shrink-0">
+                {mpReturnState === "approved" ? <CheckCircle2 className="size-5 text-emerald-600" /> :
+                  mpReturnState === "failed" ? <CreditCard className="size-5 text-destructive" /> :
+                    <Loader2 className="size-5 animate-spin text-primary" />}
+              </div>
+              <div>
+                <p className="text-sm font-semibold">
+                  {mpReturnState === "approved" ? "Pix confirmado" :
+                    mpReturnState === "failed" ? "Não foi possível concluir esta cobrança" :
+                      mpReturnState === "checking" ? "Confirmando seu pagamento..." : "Pagamento ainda em confirmação"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {mpReturnState === "approved"
+                    ? `Pagamento de ${brl(mpReturnAmount || 0)} recebido. O saldo e a situação da reserva estão atualizados abaixo.`
+                    : mpReturnState === "failed"
+                      ? "Confira a situação da reserva antes de iniciar outra cobrança."
+                      : "Se você já pagou o Pix, não pague novamente. Estamos aguardando a confirmação segura do Mercado Pago."}
+                </p>
+              </div>
+            </div>
+            {mpReturnState !== "approved" && mpReturnState !== "failed" && (
+              <Button variant="outline" size="sm" className="shrink-0" onClick={() => setStatusCheckNonce((value) => value + 1)}>
+                Verificar novamente
+              </Button>
+            )}
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Meu painel</h1>

@@ -114,6 +114,20 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
             Authorization: `Bearer ${accessToken}`,
             "X-Idempotency-Key": paymentAttempt.id,
           };
+          const configuredAppUrl = process.env.VERCEL_ENV === "preview" && process.env.VERCEL_BRANCH_URL
+            ? `https://${process.env.VERCEL_BRANCH_URL}`
+            : process.env.APP_URL || "https://www.vendas164.com.br";
+          const appUrl = new URL(configuredAppUrl);
+          if (appUrl.protocol !== "https:" && appUrl.hostname !== "localhost") {
+            return errorResponse("A URL de retorno do pagamento precisa usar HTTPS.", 503);
+          }
+          const mercadoPagoReturnUrl = (status: string) => {
+            const url = new URL("/painel", appUrl.origin);
+            url.searchParams.set("status", status);
+            url.searchParams.set("payment_attempt_id", paymentAttempt.id);
+            return url.toString();
+          };
+
           const response = method === "pix"
             ? await fetch("https://api.mercadopago.com/v1/orders", {
                 method: "POST", headers,
@@ -130,9 +144,9 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
                   payer: { name: String(user.user_metadata?.name || "Cliente").slice(0, 100) },
                   payment_methods: { installments: maxInstallments },
                   back_urls: {
-                    success: "https://vendas164.com.br/painel?status=approved",
-                    pending: "https://vendas164.com.br/painel?status=pending",
-                    failure: "https://vendas164.com.br/painel?status=failure",
+                    success: mercadoPagoReturnUrl("approved"),
+                    pending: mercadoPagoReturnUrl("pending"),
+                    failure: mercadoPagoReturnUrl("failure"),
                   },
                   auto_return: "approved", external_reference: externalReference,
                   notification_url: notificationUrl.toString(),

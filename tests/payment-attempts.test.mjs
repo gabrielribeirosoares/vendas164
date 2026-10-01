@@ -155,3 +155,18 @@ test("Checkout Pro uses the registered attempt, description and installment limi
   assert.match(source, /title: description/);
   assert.doesNotMatch(source, /external_reference: orderIds\.join/);
 });
+
+
+test("Mercado Pago returns to the branch with the attempt ID and exposes only the owner's status", async () => {
+  const createPayment = await readFile(new URL("../src/routes/api/mercadopago/create-payment.ts", import.meta.url), "utf8");
+  const paymentStatus = await readFile(new URL("../src/routes/api/mercadopago/payment-status.ts", import.meta.url), "utf8");
+
+  assert.match(createPayment, /payment_attempt_id/);
+  assert.match(createPayment, /VERCEL_ENV === "preview" && process\.env\.VERCEL_BRANCH_URL/);
+  assert.match(createPayment, /success: mercadoPagoReturnUrl\("approved"\)/);
+  assert.match(paymentStatus, /admin\.auth\.getUser\(bearer\)/);
+  assert.match(paymentStatus, /\.eq\("user_id", user\.id\)/);
+  assert.match(paymentStatus, /\.eq\("provider", "mercadopago"\)/);
+  assert.match(paymentStatus, /status: attempt\.status/);
+  assert.doesNotMatch(paymentStatus, /access_token|response_payload|provider_payment_id/);
+});
