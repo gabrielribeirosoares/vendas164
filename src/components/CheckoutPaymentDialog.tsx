@@ -58,6 +58,7 @@ export function CheckoutPaymentDialog({
   const [redirectingToMp, setRedirectingToMp] = useState(false);
   const [redirectingToInfinitePay, setRedirectingToInfinitePay] = useState(false);
   const [cardError, setCardError] = useState("");
+  const [paymentApproved, setPaymentApproved] = useState(false);
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const paymentRequestRef = useRef(false);
