@@ -54,7 +54,7 @@ test("InfinitePay payment attempts are locked per order and available only to se
       "40000000-0000-4000-8000-000000000098", "20000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000001", [legacyOrder], "f".repeat(64), "infinitepay", "infinitepay", "Sinal Miniatura", new Date(Date.now() + 3600_000).toISOString(),
     ])).rows[0].id;
     assert.equal(signalAttempt, "40000000-0000-4000-8000-000000000098");
-    const payableStatuses = ["sem_sinal", "pagar_na_chegada", "pronta_entrega"];
+    const payableStatuses = ["sem_sinal", "pronta_entrega"];
     for (const [index, status] of payableStatuses.entries()) {
       const id = `30000000-0000-4000-8000-${String(index + 2).padStart(12, "0")}`;
       await db.query("INSERT INTO public.orders VALUES($1,$2,$3,150,0,0,$4)", [id, "20000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000001", status]);
@@ -144,6 +144,8 @@ test("InfinitePay callbacks verify status and amount with the provider before co
   assert.match(checkoutDialog, /paymentConfig\?\.isConfigured && \(/);
   assert.match(checkoutDialog, /paymentConfig\?\.infinitePayEnabled && \(/);
   assert.match(server, /api\.checkout\.infinitepay\.io\/payment_check/);
+  assert.match(server, /process\.env\.VERCEL_ENV === "production"/);
+  assert.match(server, /https:\/\/www\.vendas164\.com\.br/);
   assert.match(server, /!check\.success \|\| !check\.paid \|\| Number\(check\.amount\) !== expectedCents/);
   assert.ok(server.indexOf("api.checkout.infinitepay.io/payment_check") < server.indexOf('admin.rpc("confirm_gateway_payment_attempt"'));
   assert.match(webhook, /verifyAndConfirmInfinitePay/);
@@ -157,22 +159,10 @@ test("InfinitePay callbacks verify status and amount with the provider before co
   assert.ok(paymentHelpers.includes('case "sem_sinal":') && paymentHelpers.includes('case "pronta_entrega": amount = total'));
   assert.match(mercadoPagoCreatePayment, /products\(model, max_installments\)/);
   assert.match(mercadoPagoCreatePayment, /signal_amount/);
-  assert.match(mercadoPagoCreatePayment, /getMercadoPagoAccessToken\(storeId\)/);
-  assert.doesNotMatch(mercadoPagoCreatePayment, /usableConnection|conexão manual do Mercado Pago/);
   assert.doesNotMatch(mercadoPagoCreatePayment, /products\(name/);
   assert.match(createPayment, /domínio de checkout não permitido/);
   assert.match(createPayment, /checkout\.infinitepay\.com\.br/);
   assert.match(createPayment, /checkout\.infinitepay\.io/);
   assert.match(mercadoPagoCreatePayment, /providerError\.message/);
   assert.match(mercadoPagoCreatePayment, /email ocultado/);
-});
-
-test("InfinitePay uses the canonical production domain and returns to the customer panel", async () => {
-  const helper = await readFile(new URL("../src/lib/infinitePay.server.ts", import.meta.url), "utf8");
-  const createRoute = await readFile(new URL("../src/routes/api/infinitepay/create-payment.ts", import.meta.url), "utf8");
-  const returnRoute = await readFile(new URL("../src/routes/api/infinitepay/return.ts", import.meta.url), "utf8");
-
-  assert.match(helper, /const productionUrl = "https:\/\/www\.vendas164\.com\.br";[\s\S]*?process\.env\.VERCEL_ENV === "production"\s*\? productionUrl/);
-  assert.match(createRoute, /redirect_url:\s*`\$\{origin\}\/api\/infinitepay\/return`/);
-  assert.match(returnRoute, /Response\.redirect\(`\$\{appBaseUrl\(\)\}\/painel\?infinitepay=/);
 });

@@ -324,12 +324,7 @@ export function CheckoutPaymentDialog({
             </DialogHeader>
 
             <div className="p-6 pt-4">
-              {!paymentConfig ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-10 text-center" role="status" aria-live="polite">
-                  <Loader2 className="size-6 animate-spin text-primary" />
-                  <p className="text-xs text-muted-foreground">Consultando a forma de pagamento da loja...</p>
-                </div>
-              ) : !paymentConfig.isConfigured && !paymentConfig.infinitePayEnabled ? (
+              {paymentConfig && !paymentConfig.isConfigured && !paymentConfig.infinitePayEnabled ? (
                 <div className="py-8 text-center space-y-4">
                   <div className="size-14 rounded-full bg-amber-500/15 text-amber-600 flex items-center justify-center mx-auto">
                     <AlertCircle className="size-7" />
@@ -394,7 +389,7 @@ export function CheckoutPaymentDialog({
                     </div>
 
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      Você será redirecionado para a tela oficial do <strong>Mercado Pago</strong> para escolher PIX ou cartão, conforme as opções e condições da loja <strong className="text-foreground">{storeName}</strong>.
+                      Você será redirecionado para a tela oficial do <strong>Mercado Pago</strong> para pagar com cartão de crédito com as condições, parcelas e taxas configuradas pela loja <strong className="text-foreground">{storeName}</strong>.
                     </p>
 
                     <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground pt-1">
@@ -430,7 +425,7 @@ export function CheckoutPaymentDialog({
                       </>
                     ) : (
                       <>
-                        <ExternalLink className="size-4" /> Pagar pelo Mercado Pago
+                        <ExternalLink className="size-4" /> Pagar com Cartão no Mercado Pago
                       </>
                     )}
                   </Button>

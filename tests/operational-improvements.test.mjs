@@ -63,16 +63,71 @@ test("paginação extraída possui navegação acessível", async () => {
   assert.match(pagination, /Próxima/);
 });
 
-test("painel do vendedor carrega coleções completas somente nas abas necessárias", async () => {
+test("painel do vendedor pagina pedidos e clientes no servidor", async () => {
   const route = await read("src/routes/_authenticated/vendedor.tsx");
+  const orders = await read("src/components/vendedor/OrderManager.tsx");
+  const clients = await read("src/components/vendedor/ClientsManager.tsx");
   const notifications = await read("src/components/vendedor/SmartNotifications.tsx");
+  const migration = await read(
+    "supabase/migrations/20260923004537_seller_server_pagination.sql",
+  );
 
   assert.match(route, /const needsProducts =/);
   assert.match(route, /enabled: !!store && needsProducts/);
-  assert.match(route, /enabled: !!store && needsOrders/);
   assert.match(route, /enabled: !!store && needsFullWaitlist/);
   assert.match(route, /select\("id", \{ count: "exact", head: true \}\)/);
   assert.match(route, /waitlistCount=\{alertCounts\.waitlist\}/);
+  assert.doesNotMatch(route, /select\("\*, products\(\*\), order_installments\(\*\)"\)/);
+  assert.match(orders, /supabase\.rpc\("seller_orders_page"/);
+  assert.match(clients, /supabase\.rpc\("seller_clients_page"/);
+  assert.match(orders, /PAGE_SIZE_OPTIONS = \[10, 25, 50, 100\]/);
+  assert.match(migration, /FUNCTION public\.seller_orders_page/);
+  assert.match(migration, /FUNCTION public\.seller_clients_page/);
+  assert.match(migration, /SECURITY INVOKER/);
+  assert.match(migration, /REVOKE ALL ON FUNCTION public\.seller_orders_page[\s\S]*FROM PUBLIC, anon/);
+  assert.match(migration, /REVOKE ALL ON FUNCTION public\.seller_clients_page[\s\S]*FROM PUBLIC, anon/);
   assert.doesNotMatch(notifications, /products:/);
   assert.doesNotMatch(notifications, /orders:/);
+});
+
+test("paginação do vendedor prioriza sale_type e preserva pedidos antigos", async () => {
+  const migration = await read(
+    "supabase/migrations/20260928130412_align_seller_pagination_sale_type.sql",
+  );
+
+  const readySaleType = migration.indexOf("WHEN o.sale_type = 'pronta_entrega'");
+  const preorderSaleType = migration.indexOf("WHEN o.sale_type = 'pre_venda'");
+  const legacyStatus = migration.indexOf("WHEN o.payment_status = 'pronta_entrega'");
+  const legacyProduct = migration.indexOf("to_jsonb(p)->>'category' = 'pronta_entrega'");
+
+  assert.ok(readySaleType >= 0);
+  assert.ok(readySaleType < preorderSaleType);
+  assert.ok(preorderSaleType < legacyStatus);
+  assert.ok(legacyStatus < legacyProduct);
+  assert.match(migration, /SECURITY INVOKER SET search_path = public, pg_temp/);
+  assert.match(migration, /REVOKE ALL ON FUNCTION public\.seller_orders_page[\s\S]*FROM PUBLIC, anon/);
+});
+
+test("chaves estrangeiras operacionais possuem índices de cobertura", async () => {
+  const migration = await read(
+    "supabase/migrations/20260928135042_add_foreign_key_indexes.sql",
+  );
+
+  const expectedIndexes = [
+    ["order_installments", "order_id"],
+    ["orders", "product_id"],
+    ["push_subscriptions", "store_id"],
+    ["push_subscriptions", "user_id"],
+    ["store_reviews", "store_id"],
+    ["stores", "owner_id"],
+    ["waitlist", "product_id"],
+    ["waitlist", "store_id"],
+  ];
+
+  for (const [table, column] of expectedIndexes) {
+    assert.match(
+      migration,
+      new RegExp(`CREATE INDEX IF NOT EXISTS ${table}_${column}_idx\\s+ON public\\.${table}\\(${column}\\);`),
+    );
+  }
 });

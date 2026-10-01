@@ -20,6 +20,22 @@ export function isProntaEntrega(product: any): boolean {
   return false;
 }
 
+export type SaleType = "pre_venda" | "pronta_entrega";
+
+export function getOrderSaleType(order: any): SaleType {
+  if (order?.sale_type === "pronta_entrega" || order?.sale_type === "pre_venda") {
+    return order.sale_type;
+  }
+
+  // Compatibility for orders created before sale_type became authoritative.
+  if (order?.payment_status === "pronta_entrega") return "pronta_entrega";
+  return isProntaEntrega(order?.products) ? "pronta_entrega" : "pre_venda";
+}
+
+export function isOrderProntaEntrega(order: any): boolean {
+  return getOrderSaleType(order) === "pronta_entrega";
+}
+
 export function hasNoSignalRequirement(product: any): boolean {
   if (!product) return false;
   if (isProntaEntrega(product)) return true;

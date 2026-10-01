@@ -1,7 +1,7 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import React, { useState, useRef, useMemo, useEffect, useDeferredValue } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { brl, isProntaEntrega, whatsappLink } from '@/lib/format';
+import { brl, isOrderProntaEntrega, whatsappLink } from '@/lib/format';
 import { trackOrder } from '@/lib/trackingService';
 import { toast } from 'sonner';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -23,12 +23,15 @@ import { getCustomerFromCache } from '@/lib/customerCache';
 import { ManualReservationDialog } from './ManualReservationDialog';
 import { OrderInstallmentsDialog } from '@/components/vendedor/OrderInstallmentsDialog';
 import { SpreadsheetImporterDialog } from '@/components/vendedor/SpreadsheetImporterDialog';
+import { PackingSlipDialog, type PackingSlipItem } from './PackingSlipDialog';
 import { ProductThumbnail } from '@/components/ProductThumbnail';
+import { SellerOverview } from '@/components/vendedor/SellerOverview';
+import { InterfaceState } from '@/components/InterfaceState';
 import type { Tables } from '@/integrations/supabase/types';
 
 export type Product = Tables<'products'>;
 const DEFAULT_PAGE_SIZE = 25;
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 0]; // 0 = Todos
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 export type OrderRow = Tables<"orders"> & {
   products: Tables<"products"> | null;
@@ -36,18 +39,48 @@ export type OrderRow = Tables<"orders"> & {
   order_installments?: any[];
 };
 
+type GroupedOrderRow = { order: OrderRow; quantity: number; ids: string[] };
+
+type SellerOrdersPage = {
+  groups: GroupedOrderRow[];
+  total: number;
+  counts: { all: number; preorder: number; ready: number };
+  overview: {
+    projected: number;
+    received: number;
+    pending: number;
+    activeCount: number;
+    avgTicket: number;
+    paidInFull: number;
+  };
+  brands: Array<{ name: string; count: number }>;
+  legacyOrders?: OrderRow[];
+};
+
+function isMissingPaginationRpc(error: { code?: string; message?: string } | null) {
+  return !!error && (
+    error.code === "PGRST202" ||
+    error.code === "42883" ||
+    (error as any).status === 404 ||
+    (error as any).statusCode === 404 ||
+    error.message?.includes("Could not find the function") ||
+    error.message?.includes("seller_orders_page") ||
+    error.message?.includes("404")
+  );
+}
+
 function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: string) {
   const modelName = `${o.products?.brand || ''} ${o.products?.model || 'Miniatura'}`.trim();
   const total = Number(o.total_price) * quantity;
   const customSignal = Number((o.products as any)?.down_payment_amount || 0);
   const expectedSignal = (customSignal > 0 ? customSignal : Math.round(Number(o.total_price) * 0.2 * 100) / 100) * quantity;
-  const isPronta = o.payment_status === "pronta_entrega" || isProntaEntrega(o.products);
+  const isPronta = isOrderProntaEntrega(o);
   const isSemSinal = o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada" || isPronta;
 
   let msg = `Olá ${displayName},\n\nAqui é o resumo da sua reserva:\n- Miniatura: *${modelName}*\n`;
   if (quantity > 1) msg += `- Quantidade: ${quantity}x\n`;
   msg += `- Valor Total: *${brl(total)}*\n`;
-  
+
   if (o.payment_status === "aguardando_sinal") {
     msg += `- Sinal a pagar: *${brl(expectedSignal)}*\n`;
   } else if (o.payment_status === "sinal_pago") {
@@ -57,12 +90,12 @@ function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: stri
     msg += `- Sinal pago: *${brl(Number(o.down_payment) * quantity)}*\n- Saldo restante: *${brl(dynamicBalance)}*\n`;
   } else if (o.payment_status === "quitado") {
     msg += `- Status: *Totalmente Quitado*\n`;
-  } else if (o.payment_status === "pronta_entrega" || (isPronta && isSemSinal)) {
+  } else if (isPronta && isSemSinal) {
     msg += `- Status: *Pronta Entrega (Envio Imediato)*\n`;
   } else if (isSemSinal) {
     msg += `- Pagamento na chegada do produto.\n`;
   }
-  
+
   msg += `\nAgradecemos a preferência!`;
   return msg;
 }
@@ -210,6 +243,7 @@ export function OrdersTab({
   orders,
   storeId,
   storeColor,
+  storeName,
   products = [],
   focusFilter,
   onClearFocus,
@@ -217,6 +251,7 @@ export function OrdersTab({
   orders: OrderRow[];
   storeId?: string;
   storeColor?: string;
+  storeName?: string;
   products?: Product[];
   focusFilter?: "atrasado" | "envios";
   onClearFocus?: () => void;
@@ -232,6 +267,7 @@ export function OrdersTab({
   const [categoryFilter, setCategoryFilter] = useState<"todos" | "pre_venda" | "pronta_entrega">("todos");
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+  const deferredSearchQuery = useDeferredValue(searchQuery.trim());
 
   useEffect(() => {
     setPage(0);
@@ -244,6 +280,83 @@ export function OrdersTab({
   const [trackingUpdating, setTrackingUpdating] = useState<Set<string>>(new Set());
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [packingSlipOpen, setPackingSlipOpen] = useState(false);
+
+  const {
+    data: orderPage,
+    isFetching: isOrdersFetching,
+    isError: isOrdersError,
+    refetch: refetchOrders,
+  } = useQuery({
+    queryKey: [
+      "seller-orders-page",
+      storeId,
+      deferredSearchQuery,
+      paymentFilter,
+      deliveryFilter,
+      categoryFilter,
+      startDate,
+      endDate,
+      focusFilter,
+      page,
+      pageSize,
+    ],
+    enabled: !!storeId,
+    placeholderData: (previous) => previous,
+    queryFn: async (): Promise<SellerOrdersPage> => {
+      const { data, error } = await supabase.rpc("seller_orders_page", {
+        _store_id: storeId!,
+        _search: deferredSearchQuery,
+        _payment: paymentFilter,
+        _delivery: deliveryFilter,
+        _category: categoryFilter,
+        _start_date: startDate || undefined,
+        _end_date: endDate || undefined,
+        _focus: focusFilter || undefined,
+        _page: page + 1,
+        _page_size: pageSize,
+      });
+
+      if (!error) return data as unknown as SellerOrdersPage;
+      if (!isMissingPaginationRpc(error)) throw error;
+
+      const { data: legacyRows, error: legacyError } = await supabase
+        .from("orders")
+        .select("*, products(*), order_installments(*)")
+        .eq("store_id", storeId!)
+        .order("created_at", { ascending: false });
+      if (legacyError) throw legacyError;
+
+      const userIds = [...new Set((legacyRows ?? []).map((row) => row.user_id))];
+      const { data: people } = userIds.length
+        ? await supabase.from("profiles").select("id, name, email, phone").in("id", userIds)
+        : { data: [] };
+      const byId = new Map((people ?? []).map((person) => [person.id, person]));
+      const hydrated = (legacyRows ?? []).map((row) => {
+        const person = byId.get(row.user_id);
+        const cached = getCustomerFromCache(row.user_id);
+        return {
+          ...row,
+          profiles: person || cached
+            ? {
+                name: person?.name || cached?.name || null,
+                email: person?.email || cached?.email || null,
+                phone: person?.phone || cached?.phone || null,
+              }
+            : null,
+        } as OrderRow;
+      });
+
+      return {
+        groups: [],
+        total: hydrated.length,
+        counts: { all: 0, preorder: 0, ready: 0 },
+        overview: { projected: 0, received: 0, pending: 0, activeCount: 0, avgTicket: 0, paidInFull: 0 },
+        brands: [],
+        legacyOrders: hydrated,
+      };
+    },
+  });
 
   async function handleTrackingUpdate(orderId: string, code: string, currentStatus?: string) {
     if (!code?.trim()) return;
@@ -305,19 +418,57 @@ export function OrdersTab({
     }
   }
 
+  const sourceOrders = orderPage?.legacyOrders ?? orders;
+  const isServerPage = !!orderPage && !orderPage.legacyOrders;
   const activeOrders = useMemo(
-    () => orders.filter((o) => o.payment_status !== "cancelado" && o.delivery_status !== "cancelado"),
-    [orders]
+    () => sourceOrders.filter((o) => o.payment_status !== "cancelado" && o.delivery_status !== "cancelado"),
+    [sourceOrders]
   );
-  const activeOrdersCount = activeOrders.length;
+  const activeOrdersCount = isServerPage ? orderPage.counts.all : activeOrders.length;
   const prontaEntregaOrdersCount = useMemo(
-    () => activeOrders.filter((o) => isProntaEntrega(o.products)).length,
-    [activeOrders]
+    () => isServerPage ? orderPage.counts.ready : activeOrders.filter(isOrderProntaEntrega).length,
+    [activeOrders, isServerPage, orderPage]
   );
   const preVendaOrdersCount = useMemo(
-    () => activeOrders.filter((o) => !isProntaEntrega(o.products)).length,
-    [activeOrders]
+    () => isServerPage ? orderPage.counts.preorder : activeOrders.filter((o) => !isOrderProntaEntrega(o)).length,
+    [activeOrders, isServerPage, orderPage]
   );
+
+  const overviewTotals = useMemo(() => {
+    if (isServerPage) return orderPage.overview;
+    const projected = activeOrders.reduce((sum, order) => sum + Number(order.total_price), 0);
+    const received = activeOrders.reduce((sum, order) => {
+      const total = Number(order.total_price || 0);
+      const signal = ["sinal_pago", "quitado"].includes(order.payment_status)
+        ? Number(order.down_payment || 0)
+        : 0;
+      const installments = (order.order_installments || [])
+        .filter((item: any) => item.status === "paid")
+        .reduce((value: number, item: any) => value + Number(item.amount), 0);
+      return sum + Math.min(total, signal + installments);
+    }, 0);
+    return {
+      projected,
+      received,
+      pending: Math.max(0, projected - received),
+      activeCount: activeOrders.length,
+      avgTicket: activeOrders.length ? projected / activeOrders.length : 0,
+      paidInFull: activeOrders.filter((order) => order.payment_status === "quitado").length,
+    };
+  }, [activeOrders, isServerPage, orderPage]);
+
+  const overviewBrands = useMemo(() => {
+    if (isServerPage) return orderPage.brands;
+    const counts = new Map<string, number>();
+    activeOrders.forEach((order) => {
+      const brand = order.products?.brand || "Outros";
+      counts.set(brand, (counts.get(brand) || 0) + 1);
+    });
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [activeOrders, isServerPage, orderPage]);
 
   async function handleTrackingSave(ids: string[], code: string) {
     const { error } = await supabase
@@ -340,7 +491,7 @@ export function OrdersTab({
   }
 
   const filteredOrders = useMemo(() => {
-    return orders.filter((o) => {
+    return sourceOrders.filter((o) => {
       if (focusFilter === "atrasado" && (o.payment_status !== "aguardando_sinal" || !o.reservation_expires_at || new Date(o.reservation_expires_at) >= new Date())) return false;
       if (focusFilter === "envios" && (o.payment_status !== "quitado" || ["enviado", "em_transito", "cancelado", "entregue"].includes(o.delivery_status))) return false;
       if (startDate) {
@@ -354,9 +505,9 @@ export function OrdersTab({
 
       // Filtro por tipo de produto (Pré-venda vs Pronta Entrega)
       if (categoryFilter === "pronta_entrega") {
-        if (!isProntaEntrega(o.products)) return false;
+        if (!isOrderProntaEntrega(o)) return false;
       } else if (categoryFilter === "pre_venda") {
-        if (isProntaEntrega(o.products)) return false;
+        if (isOrderProntaEntrega(o)) return false;
       }
 
       // Ocultar cancelados por padrão caso o usuário não tenha filtrado especificamente por 'cancelado'
@@ -402,11 +553,10 @@ export function OrdersTab({
         trackingCode.includes(q)
       );
     });
-  }, [orders, focusFilter, searchQuery, startDate, endDate, paymentFilter, deliveryFilter, categoryFilter]);
-
-  type GroupedOrderRow = { order: OrderRow; quantity: number; ids: string[] };
+  }, [sourceOrders, focusFilter, searchQuery, startDate, endDate, paymentFilter, deliveryFilter, categoryFilter]);
 
   const groupedOrders = useMemo(() => {
+    if (isServerPage) return orderPage.groups;
     const map = new Map<string, GroupedOrderRow>();
     filteredOrders.forEach((o) => {
       // Agrupar pedidos do mesmo cliente, produto, status e criados na mesma leva
@@ -422,15 +572,115 @@ export function OrdersTab({
       }
     });
     return Array.from(map.values());
-  }, [filteredOrders]);
+  }, [filteredOrders, isServerPage, orderPage]);
 
-  const totalReservations = groupedOrders.length;
+  const packingSlipOrders: PackingSlipItem[] = useMemo(() => {
+    return groupedOrders.map((item) => {
+      const { order: o, quantity } = item;
+      let guestMeta: { name?: string; phone?: string } | null = null;
+      if (o.pix_key && typeof o.pix_key === "string") {
+        if (o.pix_key.startsWith("GUEST:")) {
+          try {
+            guestMeta = JSON.parse(o.pix_key.replace(/^GUEST:/, ""));
+          } catch {}
+        } else if (o.pix_key.startsWith('{"manual_guest":true')) {
+          try {
+            guestMeta = JSON.parse(o.pix_key);
+          } catch {}
+        }
+      }
+      const cached = getCustomerFromCache(o.id) || getCustomerFromCache(o.user_id);
+      const displayName =
+        guestMeta?.name ||
+        (o.profiles?.name && o.profiles.name !== "Cliente" && o.profiles.name !== "Cliente cadastrado"
+          ? o.profiles.name
+          : cached?.name) ||
+        (o.profiles?.email ? o.profiles.email.split("@")[0] : null) ||
+        (guestMeta?.phone || o.profiles?.phone || cached?.phone
+          ? `Cliente (${guestMeta?.phone || o.profiles?.phone || cached?.phone})`
+          : "Cliente sem nome");
+
+      const customerPhone = guestMeta?.phone || o.profiles?.phone || cached?.phone || null;
+
+      return {
+        orderId: o.id,
+        customerName: displayName,
+        customerPhone,
+        customerEmail: o.profiles?.email || null,
+        productName: o.products?.model || "Miniatura",
+        productBrand: o.products?.brand || "",
+        productScale: o.products?.scale || "1:64",
+        quantity,
+        paymentStatus: o.payment_status,
+        deliveryStatus: o.delivery_status,
+        remainingBalance: (Number(o.remaining_balance) || 0) * quantity,
+        trackingCode: o.tracking_code || null,
+        createdAt: o.created_at,
+      };
+    });
+  }, [groupedOrders]);
+
+  const totalReservations = isServerPage ? orderPage.total : groupedOrders.length;
   const isAllPages = pageSize === 0;
   const pages = isAllPages ? 1 : Math.max(1, Math.ceil(totalReservations / pageSize));
   const safePage = Math.min(page, Math.max(0, pages - 1));
   const startRow = totalReservations > 0 ? (isAllPages ? 1 : safePage * pageSize + 1) : 0;
   const endRow = isAllPages ? totalReservations : Math.min(totalReservations, (safePage + 1) * pageSize);
-  const rows = isAllPages ? groupedOrders : groupedOrders.slice(safePage * pageSize, (safePage + 1) * pageSize);
+  const rows = isServerPage ? groupedOrders : (isAllPages ? groupedOrders : groupedOrders.slice(safePage * pageSize, (safePage + 1) * pageSize));
+
+  async function loadOrdersForExport(): Promise<OrderRow[]> {
+    if (!isServerPage || !storeId) return filteredOrders;
+
+    const exportRows: OrderRow[] = [];
+    const exportPageSize = 100;
+    const exportPages = Math.max(1, Math.ceil(orderPage.total / exportPageSize));
+
+    for (let exportPage = 1; exportPage <= exportPages; exportPage += 1) {
+      const { data, error } = await supabase.rpc("seller_orders_page", {
+        _store_id: storeId,
+        _search: deferredSearchQuery,
+        _payment: paymentFilter,
+        _delivery: deliveryFilter,
+        _category: categoryFilter,
+        _start_date: startDate || undefined,
+        _end_date: endDate || undefined,
+        _focus: focusFilter || undefined,
+        _page: exportPage,
+        _page_size: exportPageSize,
+      });
+      if (error) throw error;
+
+      const result = data as unknown as SellerOrdersPage;
+      for (const group of result.groups) {
+        group.ids.forEach((id) => exportRows.push({ ...group.order, id }));
+      }
+    }
+
+    return exportRows;
+  }
+
+  async function handleFinancialExport() {
+    try {
+      const exportOrders = await loadOrdersForExport();
+      const financeiro = prepararDadosExportacaoFinanceira(exportOrders as any);
+      const csvRows = [
+        ["ID Pedido", "Cliente", "E-mail", "Telefone", "Modelo", "Marca", "Competência", "Status Pagamento", "Status Entrega", "Valor Total (R$)", "Sinal Recebido (R$)", "Saldo Provisionado (R$)"].join(";"),
+        ...financeiro.map((f) =>
+          [f.idPedido, `"${f.clienteNome}"`, `"${f.clienteEmail}"`, `"${f.clienteTelefone}"`, `"${f.produtoModelo}"`, `"${f.produtoMarca}"`, f.competenciaReserva, f.statusPagamento, f.statusEntrega, f.valorTotal, f.valorSinalRecebido, f.saldoProvisionado].join(";")
+        ),
+      ];
+      const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `relatorio-financeiro-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Relatório financeiro por competência exportado com sucesso!");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível exportar o relatório.");
+    }
+  }
 
   async function adjustStockOnCancel(productId: string, isCancelling: boolean, quantity: number) {
     if (!productId) return;
@@ -462,16 +712,16 @@ export function OrdersTab({
     patch: Partial<Pick<Tables<"orders">, "down_payment" | "payment_status" | "delivery_status" | "reservation_expires_at">>,
   ) {
     const chunkSize = 40;
-    
+
     // Pega os user_ids antes de atualizar, pra notificar
     const { data: ordersData } = await supabase.from("orders").select("user_id, id").in("id", ids);
-    
+
     for (let i = 0; i < ids.length; i += chunkSize) {
       const chunk = ids.slice(i, i + chunkSize);
       const { error } = await supabase.from("orders").update(patch).in("id", chunk);
       if (error) return toast.error("Não foi possível atualizar a reserva.");
     }
-    
+
     // Notifica os clientes afetados
     if (ordersData && (patch.payment_status || patch.delivery_status)) {
       const statusLabel = patch.payment_status || patch.delivery_status || "atualizado";
@@ -610,7 +860,7 @@ export function OrdersTab({
     estimateSize: () => 470,
     overscan: 5,
   });
-  
+
   const handleDragStart = (e: React.DragEvent, item: GroupedOrderRow) => {
     e.dataTransfer.setData("application/json", JSON.stringify(item.ids));
   };
@@ -655,7 +905,7 @@ export function OrdersTab({
         cols.quitado.items.push(item);
       } else if (o.payment_status === "sinal_pago") {
         cols.sinal_pago.items.push(item);
-      } else if (o.payment_status === "pronta_entrega" || (isProntaEntrega(o.products) && (o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada"))) {
+      } else if (isOrderProntaEntrega(o) && (o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada" || o.payment_status === "pronta_entrega")) {
         cols.pronta_entrega.items.push(item);
       } else if (o.payment_status === "sem_sinal" || o.payment_status === "pagar_na_chegada") {
         cols.sem_sinal.items.push(item);
@@ -762,6 +1012,16 @@ export function OrdersTab({
 
   return (
     <div className="space-y-6">
+      <SellerOverview totals={overviewTotals} brandData={overviewBrands} />
+      {isOrdersError && (
+        <InterfaceState
+          variant="error"
+          icon={RefreshCw}
+          title="Não foi possível carregar as reservas"
+          description="Nenhuma alteração foi realizada. Verifique a conexão e tente novamente."
+          action={<Button variant="outline" onClick={() => void refetchOrders()}>Tentar novamente</Button>}
+        />
+      )}
       {focusFilter && (
         <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-sm">
           <span>{focusFilter === "atrasado" ? "Sinais atrasados" : "Envios pendentes"}</span>
@@ -795,8 +1055,8 @@ export function OrdersTab({
             variant={categoryFilter === "pronta_entrega" ? "default" : "outline"}
             onClick={() => { setCategoryFilter("pronta_entrega"); setPage(0); }}
             className={`h-8 text-xs rounded-lg font-medium gap-1.5 ${
-              categoryFilter === "pronta_entrega" 
-                ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
+              categoryFilter === "pronta_entrega"
+                ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                 : "text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
             }`}
           >
@@ -864,27 +1124,22 @@ export function OrdersTab({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  const financeiro = prepararDadosExportacaoFinanceira(filteredOrders as any);
-                  const csvRows = [
-                    ["ID Pedido", "Cliente", "E-mail", "Telefone", "Modelo", "Marca", "Competência", "Status Pagamento", "Status Entrega", "Valor Total (R$)", "Sinal Recebido (R$)", "Saldo Provisionado (R$)"].join(";"),
-                    ...financeiro.map((f) =>
-                      [f.idPedido, `"${f.clienteNome}"`, `"${f.clienteEmail}"`, `"${f.clienteTelefone}"`, `"${f.produtoModelo}"`, `"${f.produtoMarca}"`, f.competenciaReserva, f.statusPagamento, f.statusEntrega, f.valorTotal, f.valorSinalRecebido, f.saldoProvisionado].join(";")
-                    ),
-                  ];
-                  const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `relatorio-financeiro-${new Date().toISOString().slice(0, 10)}.csv`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                  toast.success("Relatório financeiro por competência exportado com sucesso!");
-                }}
+                onClick={() => void handleFinancialExport()}
                 className="h-9 text-xs gap-1.5 border-border/80 no-print"
               >
                 <Download className="size-3.5 text-primary" />
                 <span><span className="sm:hidden">Exportar</span><span className="hidden sm:inline">Exportar Relatório Financeiro</span></span>
+              </Button>
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPackingSlipOpen(true)}
+                className="h-9 text-xs gap-1.5 border-border/80 no-print"
+                title="Romaneio de Separação e Despacho de Encomendas"
+              >
+                <Truck className="size-3.5 text-blue-500" />
+                <span><span className="sm:hidden">Romaneio</span><span className="hidden sm:inline">Romaneio de Envio</span></span>
               </Button>
             </div>
           </div>
@@ -948,8 +1203,8 @@ export function OrdersTab({
           {viewMode === "kanban" ? (
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 min-h-[500px] p-4 bg-muted/5">
               {Object.entries(kanbanBoard).map(([statusKey, col]) => (
-                <div 
-                  key={statusKey} 
+                <div
+                  key={statusKey}
                   className="flex flex-col gap-3 w-full bg-muted/20 rounded-xl p-3 border border-border/50"
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, statusKey === "entregue" ? "entregue" : statusKey)}
@@ -978,12 +1233,12 @@ export function OrdersTab({
                           : cached?.name) ||
                         (o.profiles?.email ? o.profiles.email.split("@")[0] : null) ||
                         (guestMeta?.phone || o.profiles?.phone || cached?.phone ? `Cliente (${guestMeta?.phone || o.profiles?.phone || cached?.phone})` : "Cliente sem nome");
-                      
+
                       const clientPhone = guestMeta?.phone || o.profiles?.phone || cached?.phone;
 
                       return (
-                        <div 
-                          key={groupId} 
+                        <div
+                          key={groupId}
                           draggable
                           onDragStart={(e) => handleDragStart(e, item)}
                           className={`bg-card rounded-lg p-3 border shadow-sm cursor-grab active:cursor-grabbing hover:border-primary/50 transition-colors ${selectedOrders.has(groupId) ? 'border-primary ring-1 ring-primary' : 'border-border'}`}
@@ -999,7 +1254,7 @@ export function OrdersTab({
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1 mb-0.5">
-                                {isProntaEntrega(o.products) ? (
+                                {isOrderProntaEntrega(o) ? (
                                   <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[9px] px-1 py-0 h-3.5 gap-0.5">
                                     <Zap className="size-2.5 fill-current text-emerald-500" /> Pronta Entrega
                                   </Badge>
@@ -1088,8 +1343,8 @@ export function OrdersTab({
                     const clientPhone = guestMeta?.phone || o.profiles?.phone || cached?.phone;
 
                     return (
-                      <div 
-                        key={virtualRow.key} 
+                      <div
+                        key={virtualRow.key}
                         data-index={virtualRow.index}
                         ref={rowVirtualizer.measureElement}
                         className="pb-4"
@@ -1135,7 +1390,7 @@ export function OrdersTab({
                           <div className="min-w-0 flex-1">
                             <div className="text-xs text-muted-foreground uppercase font-semibold tracking-wide flex items-center gap-1.5 flex-wrap">
                               <span>{o.products?.brand}</span>
-                              {isProntaEntrega(o.products) ? (
+                              {isOrderProntaEntrega(o) ? (
                                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs px-1.5 py-0.5 gap-1">
                                   <Zap className="size-2.5 fill-current text-emerald-500" /> Pronta Entrega
                                 </Badge>
@@ -1365,9 +1620,9 @@ export function OrdersTab({
             <TableHeader>
               <TableRow className="print:border-b-2">
                 <TableHead className="w-8 px-2 text-center no-print">
-                  <Checkbox 
-                    checked={rows.length > 0 && selectedOrders.size === rows.length} 
-                    onCheckedChange={toggleAllSelection} 
+                  <Checkbox
+                    checked={rows.length > 0 && selectedOrders.size === rows.length}
+                    onCheckedChange={toggleAllSelection}
                   />
                 </TableHead>
                 <TableHead className="w-[130px] min-w-[110px] max-w-[140px] px-2 whitespace-normal">Cliente</TableHead>
@@ -1406,9 +1661,9 @@ export function OrdersTab({
                 return (
                   <TableRow key={groupId} data-state={selectedOrders.has(groupId) ? "selected" : undefined} className="print:break-inside-avoid">
                     <TableCell className="no-print align-top py-2.5 px-2 text-center">
-                      <Checkbox 
-                        checked={selectedOrders.has(groupId)} 
-                        onCheckedChange={() => toggleSelection(groupId)} 
+                      <Checkbox
+                        checked={selectedOrders.has(groupId)}
+                        onCheckedChange={() => toggleSelection(groupId)}
                       />
                     </TableCell>
                     <TableCell className="w-[130px] min-w-[110px] max-w-[140px] align-top py-2.5 px-2">
@@ -1448,7 +1703,7 @@ export function OrdersTab({
                           </p>
                           <div className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1 flex-wrap mt-0.5">
                             <span>{o.products?.brand}</span>
-                            {isProntaEntrega(o.products) ? (
+                            {isOrderProntaEntrega(o) ? (
                               <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[8px] px-1 py-0 h-3.5 gap-0.5">
                                 <Zap className="size-2 fill-current text-emerald-500" /> Pronta
                               </Badge>
@@ -1677,6 +1932,7 @@ export function OrdersTab({
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border/60 px-4 py-3 text-xs bg-muted/10 no-print">
           <div className="flex items-center gap-2 text-muted-foreground flex-wrap justify-center sm:justify-start">
             <span>
+              {isOrdersFetching && <Loader2 className="mr-1.5 inline size-3 animate-spin" aria-hidden="true" />}
               Mostrando <strong className="text-foreground">{startRow}</strong>–<strong className="text-foreground">{endRow}</strong> de{" "}
               <strong className="text-foreground">{totalReservations}</strong>
               {!isAllPages && pages > 1 && ` (Pág. ${safePage + 1}/${pages})`}
@@ -1698,7 +1954,7 @@ export function OrdersTab({
                       : "bg-muted/40 hover:bg-muted text-muted-foreground"
                   }`}
                 >
-                  {opt === 0 ? "Todos" : opt}
+                  {opt}
                 </button>
               ))}
             </div>
@@ -1852,8 +2108,14 @@ export function OrdersTab({
         />
       )}
 
+      <PackingSlipDialog
+        open={packingSlipOpen}
+        onOpenChange={setPackingSlipOpen}
+        orders={packingSlipOrders}
+        storeName={storeName || "Minha Loja"}
+      />
+
     </Card>
     </div>
   );
 }
-

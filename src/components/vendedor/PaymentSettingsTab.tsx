@@ -117,7 +117,6 @@ export function PaymentSettingsTab({ storeId, storeName = "sua loja" }: PaymentS
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Não foi possível desconectar a conta.");
-      if (activeProvider === "mercadopago") setActiveProvider(null);
       toast.success("Conta do Mercado Pago desconectada.");
       await loadStatus();
     } catch (error) {
@@ -162,7 +161,6 @@ export function PaymentSettingsTab({ storeId, storeName = "sua loja" }: PaymentS
       if (!response.ok) throw new Error(result.error || "Não foi possível desconectar a InfinitePay.");
       setInfinitePayHandle("");
       setInfinitePayConnected(false);
-      if (activeProvider === "infinitepay") setActiveProvider(null);
       toast.success("InfinitePay desconectada.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível desconectar a InfinitePay.");

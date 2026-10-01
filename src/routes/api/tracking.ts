@@ -156,73 +156,184 @@ export const Route = createFileRoute("/api/tracking")({
 });
 
 async function trackWithMelhorEnvioApi(code: string, token: string): Promise<TrackingResult | null> {
-  const apiUrl = "https://melhorenvio.com.br/api/v2/me/shipment/tracking";
+  const cleanToken = token.trim().replace(/^Bearer\s+/i, "");
 
-  try {
-    const cleanToken = token.trim().replace(/^Bearer\s+/i, "");
-    const response = await fetchWithTimeout(apiUrl, {
+  // Se for código UUID do Melhor Envio (36 caracteres), consulta endpoint REST v2
+  if (code.length === 36) {
+    const apiUrl = "https://melhorenvio.com.br/api/v2/me/shipment/tracking";
+    try {
+      const response = await fetchWithTimeout(apiUrl, {
         "Authorization": `Bearer ${cleanToken}`,
         "Content-Type": "application/json",
         "Accept": "application/json",
         "User-Agent": "Vendas164 (contato@vendas164.com.br)",
       }, {
+        method: "POST",
+        body: JSON.stringify({ orders: [code] }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const item = data?.[code] || Object.values(data || {})[0];
+        if (item) {
+          const events: TrackingEvent[] = [];
+          for (const ev of item?.events || []) {
+            const dt = ev?.created_at ? new Date(ev.created_at) : null;
+            events.push({
+              date: dt ? dt.toLocaleDateString("pt-BR") : "",
+              time: dt ? dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "",
+              location: ev?.location || "Em trânsito",
+              status: ev?.description || ev?.status || "Atualização",
+              details: ev?.description || "",
+            });
+          }
+
+          let status: TrackingResult["status"] = "in_transit";
+          const rawStatus = (item?.status || "").toLowerCase();
+          if (
+            rawStatus === "delivered" ||
+            rawStatus === "entregue" ||
+            item?.delivered_at ||
+            events.some((e) => e.status.toLowerCase().includes("entregue"))
+          ) {
+            status = "delivered";
+          } else if (rawStatus === "canceled" || rawStatus === "cancelado") {
+            status = "not_found";
+          }
+
+          return {
+            code,
+            serviceName: item?.service?.name || "Melhor Envio (Correios/Transportadora)",
+            category: "Encomenda",
+            events,
+            status,
+            lastUpdate: events.length > 0 ? `${events[0].date} ${events[0].time}` : (item?.posted_at || null),
+          };
+        }
+      }
+    } catch (err) {
+      console.warn("[MelhorEnvioAPI] REST error, trying GraphQL:", err);
+    }
+  }
+
+  // Para códigos de rastreio dos Correios (ex: AD952582500BR), consulta a API GraphQL do Melhor Rastreio
+  try {
+    const headers = {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${cleanToken}`,
+      "User-Agent": "Vendas164 (contato@vendas164.com.br)",
+    };
+
+    const findQuery = `
+      query Find($tracker: TrackerTrackingCode!) {
+        findByTrackingCode(tracker: $tracker) {
+          id
+          deliveredAt
+          postedAt
+          lastEventAt
+          trackingEvents {
+            createdAt
+            description
+            status
+            title
+            location {
+              city
+              state
+            }
+          }
+        }
+      }
+    `;
+
+    let res = await fetchWithTimeout("https://api.melhorrastreio.com.br/graphql", headers, {
       method: "POST",
-      body: JSON.stringify({ orders: [code] }),
+      body: JSON.stringify({
+        query: findQuery,
+        variables: { tracker: { trackingCode: code } },
+      }),
     });
 
-    if (!response.ok) {
-      console.warn(`[MelhorEnvioAPI] Response not OK: ${response.status}`);
-      return null;
+    let data = await res.json();
+    let parcel = data?.data?.findByTrackingCode;
+
+    // Se o pacote ainda não foi cadastrado no Melhor Rastreio, cadastra via mutation
+    if (!parcel) {
+      const createMutation = `
+        mutation Create($tracker: TrackerInput!) {
+          createParcelWithTracker(tracker: $tracker) {
+            id
+            deliveredAt
+            postedAt
+            lastEventAt
+            trackingEvents {
+              createdAt
+              description
+              status
+              title
+              location {
+                city
+                state
+              }
+            }
+          }
+        }
+      `;
+
+      const createRes = await fetchWithTimeout("https://api.melhorrastreio.com.br/graphql", headers, {
+        method: "POST",
+        body: JSON.stringify({
+          query: createMutation,
+          variables: {
+            tracker: {
+              type: "correios",
+              shippingService: "unknown",
+              trackingCode: code,
+            },
+          },
+        }),
+      });
+
+      const createData = await createRes.json();
+      parcel = createData?.data?.createParcelWithTracker;
     }
 
-    const data = await response.json();
-    const item = data?.[code] || Object.values(data || {})[0];
-    if (!item) return null;
+    if (!parcel) return null;
 
     const events: TrackingEvent[] = [];
-    const rawEvents = item?.events || [];
-
-    for (const ev of rawEvents) {
-      const dt = ev?.created_at ? new Date(ev.created_at) : null;
+    for (const ev of parcel.trackingEvents || []) {
+      const dt = ev?.createdAt ? new Date(ev.createdAt) : null;
       events.push({
         date: dt ? dt.toLocaleDateString("pt-BR") : "",
         time: dt ? dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "",
-        location: ev?.location || "Em trânsito",
-        status: ev?.description || ev?.status || "Atualização",
-        details: ev?.description || "",
+        location: ev?.location ? [ev.location.city, ev.location.state].filter(Boolean).join(" - ") : "Em trânsito",
+        status: ev?.title || ev?.status || ev?.description || "Atualização",
+        details: ev?.description || ev?.title || "",
       });
     }
 
     let status: TrackingResult["status"] = "in_transit";
-    const rawStatus = (item?.status || "").toLowerCase();
-
     if (
-      rawStatus === "delivered" ||
-      rawStatus === "entregue" ||
-      item?.delivered_at ||
-      events.some(
-        (e) =>
-          e.status.toLowerCase().includes("entregue") ||
-          e.details.toLowerCase().includes("entregue")
-      )
+      parcel.deliveredAt ||
+      events.some((e) => e.status.toLowerCase().includes("entregue") || e.details.toLowerCase().includes("entregue"))
     ) {
       status = "delivered";
-    } else if (rawStatus === "canceled" || rawStatus === "cancelado") {
+    } else if (events.length === 0 && !parcel.postedAt) {
       status = "not_found";
-    } else if (events.length > 0 || rawStatus === "posted" || rawStatus === "in_transit") {
-      status = "in_transit";
     }
 
     return {
       code,
-      serviceName: item?.service?.name || "Melhor Envio (Correios/Transportadora)",
+      serviceName: "Correios",
       category: "Encomenda",
       events,
       status,
-      lastUpdate: events.length > 0 ? `${events[0].date} ${events[0].time}` : (item?.posted_at || null),
+      lastUpdate:
+        events.length > 0
+          ? `${events[0].date} ${events[0].time}`
+          : parcel.lastEventAt || parcel.postedAt || null,
     };
   } catch (err) {
-    console.error("[MelhorEnvioAPI] Fetch exception:", err);
+    console.error("[MelhorRastreioGraphQL] Exception:", err);
     return null;
   }
 }

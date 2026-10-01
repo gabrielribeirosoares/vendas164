@@ -1,8 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Car,
-  CreditCard,
   Clock,
+  CreditCard,
   Package,
   Palette,
   ShieldCheck,
@@ -72,10 +72,10 @@ const SECTIONS: Record<string, SellerSection> = {
   },
   pagamentos: {
     group: "Configuração",
-    title: "Conexão do Mercado Pago",
-    description: "Autorize a conta do Mercado Pago para vinculá-la com segurança à sua loja.",
+    title: "Pagamentos e Checkout",
+    description: "Conecte sua conta do Mercado Pago para receber via PIX automático e Cartão de Crédito.",
     icon: CreditCard,
-    accent: "text-sky-500 bg-sky-500/10",
+    accent: "text-emerald-500 bg-emerald-500/10",
   },
   admin_moderation: {
     group: "Administração",
