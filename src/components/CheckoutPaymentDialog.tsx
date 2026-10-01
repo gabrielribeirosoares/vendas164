@@ -351,10 +351,10 @@ export function CheckoutPaymentDialog({
               >
                 <TabsList className="grid grid-cols-2 mb-4">
                   <TabsTrigger value="card" disabled={!paymentConfig?.isConfigured || paymentBusy} className="gap-2 text-xs font-semibold">
-                    <CreditCard className="size-4 text-sky-600" /> Cartão de Crédito
+                    <CreditCard className="size-4 text-sky-600" /> MERCADO PAGO
                   </TabsTrigger>
                   <TabsTrigger value="infinitepay" disabled={!paymentConfig?.infinitePayEnabled || paymentBusy} className="gap-2 text-[11px] font-semibold">
-                    InfinitePay
+                    INFINITEPAY
                   </TabsTrigger>
                 </TabsList>
 
