@@ -83,14 +83,8 @@ Deno.serve(async (request: Request) => {
     if (!attempts?.length) return json({ received: true, ignored: true });
 
     const linkedOrderId = String(mp.order?.id || "");
-    if (
-      type === "payment" &&
-      mp.payment_method_id === "pix" &&
-      linkedOrderId &&
-      !/^ORD[A-Za-z0-9]+$/.test(linkedOrderId)
-    ) {
-      return json({ received: true });
-    }
+    // Checkout Pro Pix may include a numeric merchant_order_id in mp.order.id.
+    // Only an ORD... ID is the Orders API resource key used for duplicate suppression.
 
     const gatewayId = type === "order"
       ? "order:" + String(mp.id)
