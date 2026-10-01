@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import {
   CreditCard,
-  QrCode,
-  Copy,
   Check,
   Loader2,
   ShieldCheck,
@@ -18,8 +16,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { brl } from "@/lib/format";
 import { toast } from "sonner";
@@ -50,23 +46,13 @@ export function CheckoutPaymentDialog({
   customerName = "",
   onPaymentSuccess,
 }: CheckoutPaymentDialogProps) {
-  const [activeTab, setActiveTab] = useState<"pix" | "card" | "infinitepay">("pix");
+  const [activeTab, setActiveTab] = useState<"card" | "infinitepay">("card");
   const [paymentConfig, setPaymentConfig] = useState<{
     isConfigured: boolean;
     publicKey: string | null;
     isSandbox: boolean;
     infinitePayEnabled: boolean;
   } | null>(null);
-
-  // Estados PIX
-  const [generatingPix, setGeneratingPix] = useState(false);
-  const [pixData, setPixData] = useState<{
-    qrCode: string;
-    qrCodeBase64: string;
-    id: number | string;
-  } | null>(null);
-  const [copiedPix, setCopiedPix] = useState(false);
-  const [paymentApproved, setPaymentApproved] = useState(false);
 
   // Estados Cartão (Checkout Pro Oficial do Mercado Pago)
   const [redirectingToMp, setRedirectingToMp] = useState(false);
@@ -75,18 +61,16 @@ export function CheckoutPaymentDialog({
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const paymentRequestRef = useRef(false);
-  const paymentBusy = generatingPix || redirectingToMp || redirectingToInfinitePay;
+  const paymentBusy = redirectingToMp || redirectingToInfinitePay;
 
   // Resetar estados sempre que o modal abrir
   useEffect(() => {
     if (open) {
       setPaymentApproved(false);
-      setPixData(null);
       setCardError("");
-      setGeneratingPix(false);
       setRedirectingToMp(false);
       setRedirectingToInfinitePay(false);
-      setActiveTab("pix");
+      setActiveTab("card");
     }
   }, [open]);
 
@@ -201,67 +185,6 @@ export function CheckoutPaymentDialog({
     toast.success("Pagamento confirmado com sucesso!");
     if (onPaymentSuccess) onPaymentSuccess();
   }
-
-  // Geração de PIX Dinâmico
-  async function handleGeneratePix() {
-    if (paymentRequestRef.current) return;
-    paymentRequestRef.current = true;
-    setGeneratingPix(true);
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-
-      const res = await fetch("/api/mercadopago/create-payment", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          storeId,
-          orderIds,
-          amount,
-          paymentMethodId: "pix",
-          payer: {
-            email: customerEmail || "cliente@vendas164.com.br",
-            firstName: customerName || "Cliente",
-          },
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Não foi possível gerar a cobrança PIX.");
-      }
-
-      if (data.pix) {
-        setPixData({
-          qrCode: data.pix.qrCode,
-          qrCodeBase64: data.pix.qrCodeBase64,
-          id: data.id,
-        });
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao gerar PIX");
-    } finally {
-      paymentRequestRef.current = false;
-      setGeneratingPix(false);
-    }
-  }
-
-  // Copiar código PIX
-  const copyPixCode = async () => {
-    if (!pixData?.qrCode) return;
-    try {
-      await navigator.clipboard.writeText(pixData.qrCode);
-      setCopiedPix(true);
-      toast.success("Código PIX Copia e Cola copiado!");
-      setTimeout(() => setCopiedPix(false), 3000);
-    } catch {
-      toast.error("Erro ao copiar código PIX.");
-    }
-  };
 
   // Redirecionar para o Checkout Pro Oficial do Mercado Pago
   async function handleRedirectToMercadoPago() {
@@ -425,10 +348,7 @@ export function CheckoutPaymentDialog({
                 onValueChange={(val) => setActiveTab(val as any)}
                 className="w-full"
               >
-                <TabsList className="grid grid-cols-3 mb-4">
-                  <TabsTrigger value="pix" disabled={!paymentConfig?.isConfigured || paymentBusy} className="gap-2 text-xs font-semibold">
-                    <QrCode className="size-4 text-emerald-600" /> PIX Instantâneo
-                  </TabsTrigger>
+                <TabsList className="grid grid-cols-2 mb-4">
                   <TabsTrigger value="card" disabled={!paymentConfig?.isConfigured || paymentBusy} className="gap-2 text-xs font-semibold">
                     <CreditCard className="size-4 text-sky-600" /> Cartão de Crédito
                   </TabsTrigger>
@@ -436,76 +356,6 @@ export function CheckoutPaymentDialog({
                     InfinitePay
                   </TabsTrigger>
                 </TabsList>
-
-                {/* ABA PIX */}
-                <TabsContent value="pix" className="space-y-4 mt-0">
-                  {generatingPix ? (
-                    <div className="py-12 flex flex-col items-center justify-center space-y-3">
-                      <Loader2 className="size-8 animate-spin text-primary" />
-                      <p className="text-xs text-muted-foreground font-medium">
-                        Gerando QR Code PIX exclusivo...
-                      </p>
-                    </div>
-                  ) : pixData ? (
-                    <div className="space-y-4">
-                      <div className="flex flex-col items-center justify-center p-4 bg-white rounded-xl border shadow-inner">
-                        {pixData.qrCodeBase64 ? (
-                          <img
-                            src={`data:image/png;base64,${pixData.qrCodeBase64}`}
-                            alt="QR Code PIX"
-                            className="size-48 object-contain"
-                          />
-                        ) : (
-                          <div className="size-48 bg-muted flex items-center justify-center text-xs text-muted-foreground">
-                            QR Code Indisponível
-                          </div>
-                        )}
-                        <span className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1 font-medium">
-                          <Lock className="size-3 text-emerald-600" /> Escaneie com o app do seu banco
-                        </span>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">Código Copia e Cola:</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            readOnly
-                            value={pixData.qrCode}
-                            className="text-xs font-mono bg-muted/40 truncate"
-                          />
-                          <Button
-                            size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 gap-1.5"
-                            onClick={copyPixCode}
-                          >
-                            {copiedPix ? <Check className="size-4" /> : <Copy className="size-4" />}
-                            {copiedPix ? "Copiado!" : "Copiar"}
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 rounded-lg flex items-center gap-2.5">
-                        <div className="size-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
-                        <p className="text-xs text-emerald-800 dark:text-emerald-300">
-                          Aguardando confirmação bancária. Assim que transferir, o pedido aprova na hora!
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="py-6 text-center space-y-3">
-                      <p className="text-xs text-muted-foreground">
-                        Pague com PIX dinâmico com baixa automática e aprovação imediata.
-                      </p>
-                      <Button
-                        disabled={paymentBusy}
-                        onClick={handleGeneratePix}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white w-full"
-                      >
-                        Gerar QR Code PIX
-                      </Button>
-                    </div>
-                  )}
-                </TabsContent>
 
                 {/* ABA CARTÃO DE CRÉDITO (CHECKOUT PRO OFICIAL MERCADO PAGO) */}
                 <TabsContent value="card" className="space-y-4 mt-0">
