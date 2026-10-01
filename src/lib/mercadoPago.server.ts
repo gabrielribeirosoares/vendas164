@@ -177,12 +177,17 @@ export async function finishMercadoPagoConnection(callbackUrl: string, origin: s
 }
 
 export async function disconnectMercadoPago(storeId: string) {
-  const { error } = await gatewayAdmin().from("mercadopago_connections" as never).update({
+  const admin = gatewayAdmin();
+  const { error } = await admin.from("mercadopago_connections" as never).update({
     encrypted_tokens: null, access_token: null, refresh_token: null, public_key: null,
     is_active: false, oauth_state_hash: null, oauth_code_verifier: null,
     oauth_expires_at: null, refresh_lock_until: null, updated_at: new Date().toISOString(),
   } as never).eq("store_id", storeId);
   if (error) throw new Error("Não foi possível desconectar o Mercado Pago.");
+  const { error: providerError } = await admin.from("store_payment_provider_settings" as never)
+    .update({ active_provider: null, updated_at: new Date().toISOString() } as never)
+    .eq("store_id", storeId).eq("active_provider", "mercadopago");
+  if (providerError) throw new Error("Conta desconectada, mas não foi possível atualizar o provedor ativo no checkout.");
 }
 
 export async function getMercadoPagoAccessToken(storeId: string) {
@@ -224,10 +229,13 @@ export async function getMercadoPagoAccessToken(storeId: string) {
 export function pendingAmount(order: {
   total_price: number | null;
   down_payment: number | null;
+  signal_amount?: number | null;
   payment_status: string | null;
 }) {
   const total = Number(order.total_price);
-  const signal = Number(order.down_payment || 0);
+  // signal_amount is the configured deposit. Older order creation paths may
+  // leave down_payment at 0 until the deposit is actually paid.
+  const signal = Math.max(Number(order.down_payment || 0), Number(order.signal_amount || 0));
   if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(signal) || signal < 0 || signal > total) {
     throw new Error("Valor do pedido inválido.");
   }
@@ -235,7 +243,10 @@ export function pendingAmount(order: {
   switch (order.payment_status) {
     case "aguardando_sinal": amount = signal > 0 ? signal : total; break;
     case "sinal_pago": amount = total - signal; break;
-    case "pendente": amount = total; break;
+    case "pendente":
+    case "sem_sinal":
+    case "pagar_na_chegada":
+    case "pronta_entrega": amount = total; break;
     default: throw new Error("Pedido indisponível para pagamento.");
   }
   if (amount <= 0) throw new Error("Pedido já está pago.");
@@ -271,6 +282,14 @@ export async function confirmGatewayPayment(
 ) {
   if (payment.status !== "approved") return false;
   const attemptId = parsePaymentAttemptReference(payment.external_reference);
+  const { data: attempt, error: attemptError } = await admin
+    .from("gateway_payment_attempts" as never)
+    .select("provider")
+    .eq("id", attemptId)
+    .maybeSingle();
+  if (attemptError || (attempt as unknown as { provider?: string } | null)?.provider !== "mercadopago") {
+    throw new Error("A tentativa não pertence ao Mercado Pago.");
+  }
   const amount = Number(payment.transaction_amount);
   if (!Number.isFinite(amount) || amount <= 0 || Math.abs(Math.round(amount * 100) - amount * 100) > 0.000001) {
     throw new Error("Valor do pagamento inválido.");
