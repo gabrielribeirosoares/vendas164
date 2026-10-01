@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Car, CheckCircle2, Copy, ExternalLink, Loader2, MessageCircle, Package, Search, Sparkles, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
+import { BookmarkCheck, Car, CheckCircle2, Copy, CreditCard, ExternalLink, Loader2, MessageCircle, Package, Search, Sparkles, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { getStoreBrandImageUrl } from "@/lib/imageUrls";
@@ -11,6 +11,7 @@ import { InterfaceState } from "@/components/InterfaceState";
 import { ProductThumbnail } from "@/components/ProductThumbnail";
 import { PhoneInput } from "@/components/PhoneInput";
 import { Countdown } from "@/components/Countdown";
+import { CheckoutPaymentDialog } from "@/components/CheckoutPaymentDialog";
 import { DeliveryBadge, PaymentBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,16 @@ export const Route = createFileRoute("/_authenticated/painel")({
 
 const PAGE_SIZE = 10;
 
+function getOnlinePaymentAmount(order: any) {
+  const total = Number(order.total_price || 0);
+  const signal = Math.max(Number(order.down_payment || 0), Number(order.signal_amount || 0));
+  if (!Number.isFinite(total) || total <= 0) return 0;
+  if (order.payment_status === "aguardando_sinal") return signal > 0 ? Math.min(signal, total) : total;
+  if (order.payment_status === "sinal_pago") return Math.max(0, total - signal);
+  if (["pendente", "sem_sinal", "pagar_na_chegada", "pronta_entrega"].includes(order.payment_status)) return total;
+  return 0;
+}
+
 function CustomerDashboard() {
   return (
     <ErrorBoundary>
@@ -60,14 +71,103 @@ function CustomerDashboard() {
 
 function CustomerDashboardContent() {
   const { user, loading: sessionLoading } = useSession();
+  const queryClient = useQueryClient();
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [phonePromptOpen, setPhonePromptOpen] = useState(false);
   const [garageSearchQuery, setGarageSearchQuery] = useState("");
+  const [checkoutModalData, setCheckoutModalData] = useState<{
+    storeId: string;
+    storeName: string;
+    orderId: string;
+    amount: number;
+    maxInstallments: number;
+  } | null>(null);
+  const [gatewayReturn, setGatewayReturn] = useState<{
+    attemptId: string | null;
+    state: "checking" | "pending" | "approved" | "failed";
+  } | null>(null);
+  const [statusCheckNonce, setStatusCheckNonce] = useState(0);
 
   // Redirect to main domain if accessed from a store subdomain
   useEffect(() => {
     redirectToMainIfOnSubdomain();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const infinitePay = url.searchParams.get("infinitepay");
+    const status = url.searchParams.get("status") || url.searchParams.get("collection_status");
+    const attemptId = url.searchParams.get("payment_attempt_id");
+
+    if (infinitePay === "confirmed") {
+      setGatewayReturn({ attemptId: null, state: "approved" });
+      void queryClient.invalidateQueries({ queryKey: ["my-orders"] });
+    } else if (infinitePay === "pending") {
+      setGatewayReturn({ attemptId: null, state: "pending" });
+    } else if (status) {
+      if (attemptId && /^[0-9a-f-]{36}$/i.test(attemptId)) {
+        setGatewayReturn({ attemptId, state: "checking" });
+      } else if (status === "failure" || status === "rejected") {
+        setGatewayReturn({ attemptId: null, state: "failed" });
+      } else {
+        setGatewayReturn({ attemptId: null, state: "pending" });
+      }
+    }
+
+    if (infinitePay || status || attemptId) {
+      url.searchParams.delete("infinitepay");
+      url.searchParams.delete("status");
+      url.searchParams.delete("collection_status");
+      url.searchParams.delete("payment_attempt_id");
+      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, [queryClient]);
+
+  useEffect(() => {
+    if (!gatewayReturn?.attemptId || !user) return;
+    let active = true;
+    let attempts = 0;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const checkStatus = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        const response = await fetch(`/api/mercadopago/payment-status?attemptId=${encodeURIComponent(gatewayReturn.attemptId!)}`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (!response.ok) return;
+        const result = await response.json() as { status: string };
+        if (!active) return;
+        if (result.status === "approved") {
+          setGatewayReturn({ attemptId: gatewayReturn.attemptId, state: "approved" });
+          await queryClient.invalidateQueries({ queryKey: ["my-orders"] });
+          if (timer) clearInterval(timer);
+        } else if (result.status === "failed" || result.status === "expired") {
+          setGatewayReturn({ attemptId: gatewayReturn.attemptId, state: "failed" });
+          if (timer) clearInterval(timer);
+        } else {
+          setGatewayReturn({ attemptId: gatewayReturn.attemptId, state: "pending" });
+        }
+      } catch {
+        // Falhas transitórias não alteram o status financeiro do pedido.
+      }
+    };
+    void checkStatus();
+    timer = setInterval(() => {
+      attempts += 1;
+      if (attempts >= 30) {
+        if (active) setGatewayReturn((current) => current?.state === "approved" || current?.state === "failed" ? current : { attemptId: gatewayReturn.attemptId, state: "pending" });
+        if (timer) clearInterval(timer);
+        return;
+      }
+      void checkStatus();
+    }, 3000);
+    return () => {
+      active = false;
+      if (timer) clearInterval(timer);
+    };
+  }, [gatewayReturn?.attemptId, queryClient, statusCheckNonce, user]);
 
   const { data: profile } = useQuery({
     queryKey: ["my-profile", user?.id],
@@ -322,6 +422,24 @@ function CustomerDashboardContent() {
     <div className="min-h-screen">
       <AppHeader />
       <main className="mx-auto max-w-6xl px-4 py-10">
+        {gatewayReturn && (
+          <div className={`mb-6 flex items-start gap-3 rounded-xl border p-4 ${gatewayReturn.state === "approved" ? "border-emerald-500/30 bg-emerald-500/10" : gatewayReturn.state === "failed" ? "border-destructive/30 bg-destructive/10" : "border-primary/25 bg-primary/5"}`} role="status" aria-live="polite">
+            {gatewayReturn.state === "approved" ? <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600" /> : gatewayReturn.state === "checking" ? <Loader2 className="mt-0.5 size-5 shrink-0 animate-spin text-primary" /> : <Wallet className="mt-0.5 size-5 shrink-0 text-primary" />}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">
+                {gatewayReturn.state === "approved" ? "Pagamento confirmado" : gatewayReturn.state === "failed" ? "Pagamento não concluído" : gatewayReturn.state === "checking" ? "Confirmando o pagamento" : "Pagamento em confirmação"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {gatewayReturn.state === "approved" ? "A situação das suas reservas será atualizada abaixo." : gatewayReturn.state === "failed" ? "Confira a reserva antes de iniciar outra cobrança." : "Se já pagou, aguarde a confirmação do provedor. Não faça outro pagamento enquanto esta cobrança estiver pendente."}
+              </p>
+            </div>
+            {gatewayReturn.state === "pending" && gatewayReturn.attemptId && (
+              <Button size="sm" variant="outline" onClick={() => { setGatewayReturn({ attemptId: gatewayReturn.attemptId, state: "checking" }); setStatusCheckNonce((value) => value + 1); }}>
+                Verificar novamente
+              </Button>
+            )}
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Meu painel</h1>
@@ -529,6 +647,21 @@ function CustomerDashboardContent() {
                                   isCustomer={true}
                                 />
                               </div>
+                              {getOnlinePaymentAmount(o) > 0 && (
+                                <Button
+                                  size="sm"
+                                  className="w-full gap-2 sm:w-auto"
+                                  onClick={() => setCheckoutModalData({
+                                    storeId: o.store_id,
+                                    storeName: o.stores?.name || "Loja",
+                                    orderId: o.id,
+                                    amount: getOnlinePaymentAmount(o),
+                                    maxInstallments: Math.max(1, Math.min(12, Number(o.installment_count || (o.products as any)?.max_installments || 1))),
+                                  })}
+                                >
+                                  <CreditCard className="size-4" /> Pagar online · {brl(getOnlinePaymentAmount(o))}
+                                </Button>
+                              )}
                             </div>
                           {isAguardando ? (
                             <>
@@ -912,6 +1045,21 @@ function CustomerDashboardContent() {
           </TabsContent>
         </Tabs>
       </main>
+
+      {checkoutModalData && (
+        <CheckoutPaymentDialog
+          open={true}
+          onOpenChange={(open) => { if (!open) setCheckoutModalData(null); }}
+          storeId={checkoutModalData.storeId}
+          storeName={checkoutModalData.storeName}
+          orderIds={[checkoutModalData.orderId]}
+          amount={checkoutModalData.amount}
+          maxInstallments={checkoutModalData.maxInstallments}
+          customerEmail={user?.email || ""}
+          customerName={profile?.name || ""}
+          onPaymentSuccess={() => { void queryClient.invalidateQueries({ queryKey: ["my-orders"] }); }}
+        />
+      )}
 
       <AppFooter />
     </div>

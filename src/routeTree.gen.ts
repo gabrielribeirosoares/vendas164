@@ -21,6 +21,16 @@ import { Route as AuthenticatedVendedorRouteImport } from './routes/_authenticat
 import { Route as ApiTrackingRouteImport } from './routes/api/tracking'
 import { Route as LojaSlugRouteImport } from './routes/loja.$slug'
 import { Route as ProdutoIdRouteImport } from './routes/produto.$id'
+import { Route as ApiInfinitepayCreatePaymentRouteImport } from './routes/api/infinitepay/create-payment'
+import { Route as ApiInfinitepayPublicConfigRouteImport } from './routes/api/infinitepay/public-config'
+import { Route as ApiInfinitepayReturnRouteImport } from './routes/api/infinitepay/return'
+import { Route as ApiInfinitepaySettingsRouteImport } from './routes/api/infinitepay/settings'
+import { Route as ApiInfinitepayWebhookRouteImport } from './routes/api/infinitepay/webhook'
+import { Route as ApiMercadopagoCreatePaymentRouteImport } from './routes/api/mercadopago/create-payment'
+import { Route as ApiMercadopagoPaymentStatusRouteImport } from './routes/api/mercadopago/payment-status'
+import { Route as ApiMercadopagoPublicConfigRouteImport } from './routes/api/mercadopago/public-config'
+import { Route as ApiMercadopagoWebhookRouteImport } from './routes/api/mercadopago/webhook'
+import { Route as ApiPaymentProviderSettingsRouteImport } from './routes/api/payment-provider/settings'
 import { Route as LojaSlugItemSlugRouteImport } from './routes/loja.$slug.$itemSlug'
 import { Route as ApiBlingOauthCallbackRouteImport } from './routes/api/bling/oauth/callback'
 import { Route as ApiMercadopagoOauthCallbackRouteImport } from './routes/api/mercadopago/oauth/callback'
@@ -87,6 +97,62 @@ const ProdutoIdRoute = ProdutoIdRouteImport.update({
   path: '/produto/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInfinitepayCreatePaymentRoute =
+  ApiInfinitepayCreatePaymentRouteImport.update({
+    id: '/api/infinitepay/create-payment',
+    path: '/api/infinitepay/create-payment',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiInfinitepayPublicConfigRoute =
+  ApiInfinitepayPublicConfigRouteImport.update({
+    id: '/api/infinitepay/public-config',
+    path: '/api/infinitepay/public-config',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiInfinitepayReturnRoute = ApiInfinitepayReturnRouteImport.update({
+  id: '/api/infinitepay/return',
+  path: '/api/infinitepay/return',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInfinitepaySettingsRoute = ApiInfinitepaySettingsRouteImport.update({
+  id: '/api/infinitepay/settings',
+  path: '/api/infinitepay/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInfinitepayWebhookRoute = ApiInfinitepayWebhookRouteImport.update({
+  id: '/api/infinitepay/webhook',
+  path: '/api/infinitepay/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMercadopagoCreatePaymentRoute =
+  ApiMercadopagoCreatePaymentRouteImport.update({
+    id: '/api/mercadopago/create-payment',
+    path: '/api/mercadopago/create-payment',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMercadopagoPaymentStatusRoute =
+  ApiMercadopagoPaymentStatusRouteImport.update({
+    id: '/api/mercadopago/payment-status',
+    path: '/api/mercadopago/payment-status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMercadopagoPublicConfigRoute =
+  ApiMercadopagoPublicConfigRouteImport.update({
+    id: '/api/mercadopago/public-config',
+    path: '/api/mercadopago/public-config',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMercadopagoWebhookRoute = ApiMercadopagoWebhookRouteImport.update({
+  id: '/api/mercadopago/webhook',
+  path: '/api/mercadopago/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPaymentProviderSettingsRoute =
+  ApiPaymentProviderSettingsRouteImport.update({
+    id: '/api/payment-provider/settings',
+    path: '/api/payment-provider/settings',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const LojaSlugItemSlugRoute = LojaSlugItemSlugRouteImport.update({
   id: '/$itemSlug',
   path: '/$itemSlug',
@@ -134,6 +200,16 @@ export interface FileRoutesByFullPath {
   '/api/tracking': typeof ApiTrackingRoute
   '/loja/$slug': typeof LojaSlugRouteWithChildren
   '/produto/$id': typeof ProdutoIdRoute
+  '/api/infinitepay/create-payment': typeof ApiInfinitepayCreatePaymentRoute
+  '/api/infinitepay/public-config': typeof ApiInfinitepayPublicConfigRoute
+  '/api/infinitepay/return': typeof ApiInfinitepayReturnRoute
+  '/api/infinitepay/settings': typeof ApiInfinitepaySettingsRoute
+  '/api/infinitepay/webhook': typeof ApiInfinitepayWebhookRoute
+  '/api/mercadopago/create-payment': typeof ApiMercadopagoCreatePaymentRoute
+  '/api/mercadopago/payment-status': typeof ApiMercadopagoPaymentStatusRoute
+  '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
+  '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
+  '/api/payment-provider/settings': typeof ApiPaymentProviderSettingsRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
   '/api/bling/oauth/callback': typeof ApiBlingOauthCallbackRoute
   '/api/mercadopago/oauth/callback': typeof ApiMercadopagoOauthCallbackRoute
@@ -153,6 +229,16 @@ export interface FileRoutesByTo {
   '/api/tracking': typeof ApiTrackingRoute
   '/loja/$slug': typeof LojaSlugRouteWithChildren
   '/produto/$id': typeof ProdutoIdRoute
+  '/api/infinitepay/create-payment': typeof ApiInfinitepayCreatePaymentRoute
+  '/api/infinitepay/public-config': typeof ApiInfinitepayPublicConfigRoute
+  '/api/infinitepay/return': typeof ApiInfinitepayReturnRoute
+  '/api/infinitepay/settings': typeof ApiInfinitepaySettingsRoute
+  '/api/infinitepay/webhook': typeof ApiInfinitepayWebhookRoute
+  '/api/mercadopago/create-payment': typeof ApiMercadopagoCreatePaymentRoute
+  '/api/mercadopago/payment-status': typeof ApiMercadopagoPaymentStatusRoute
+  '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
+  '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
+  '/api/payment-provider/settings': typeof ApiPaymentProviderSettingsRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
   '/api/bling/oauth/callback': typeof ApiBlingOauthCallbackRoute
   '/api/mercadopago/oauth/callback': typeof ApiMercadopagoOauthCallbackRoute
@@ -174,6 +260,16 @@ export interface FileRoutesById {
   '/api/tracking': typeof ApiTrackingRoute
   '/loja/$slug': typeof LojaSlugRouteWithChildren
   '/produto/$id': typeof ProdutoIdRoute
+  '/api/infinitepay/create-payment': typeof ApiInfinitepayCreatePaymentRoute
+  '/api/infinitepay/public-config': typeof ApiInfinitepayPublicConfigRoute
+  '/api/infinitepay/return': typeof ApiInfinitepayReturnRoute
+  '/api/infinitepay/settings': typeof ApiInfinitepaySettingsRoute
+  '/api/infinitepay/webhook': typeof ApiInfinitepayWebhookRoute
+  '/api/mercadopago/create-payment': typeof ApiMercadopagoCreatePaymentRoute
+  '/api/mercadopago/payment-status': typeof ApiMercadopagoPaymentStatusRoute
+  '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
+  '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
+  '/api/payment-provider/settings': typeof ApiPaymentProviderSettingsRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
   '/api/bling/oauth/callback': typeof ApiBlingOauthCallbackRoute
   '/api/mercadopago/oauth/callback': typeof ApiMercadopagoOauthCallbackRoute
@@ -195,6 +291,16 @@ export interface FileRouteTypes {
     | '/api/tracking'
     | '/loja/$slug'
     | '/produto/$id'
+    | '/api/infinitepay/create-payment'
+    | '/api/infinitepay/public-config'
+    | '/api/infinitepay/return'
+    | '/api/infinitepay/settings'
+    | '/api/infinitepay/webhook'
+    | '/api/mercadopago/create-payment'
+    | '/api/mercadopago/payment-status'
+    | '/api/mercadopago/public-config'
+    | '/api/mercadopago/webhook'
+    | '/api/payment-provider/settings'
     | '/loja/$slug/$itemSlug'
     | '/api/bling/oauth/callback'
     | '/api/mercadopago/oauth/callback'
@@ -214,6 +320,16 @@ export interface FileRouteTypes {
     | '/api/tracking'
     | '/loja/$slug'
     | '/produto/$id'
+    | '/api/infinitepay/create-payment'
+    | '/api/infinitepay/public-config'
+    | '/api/infinitepay/return'
+    | '/api/infinitepay/settings'
+    | '/api/infinitepay/webhook'
+    | '/api/mercadopago/create-payment'
+    | '/api/mercadopago/payment-status'
+    | '/api/mercadopago/public-config'
+    | '/api/mercadopago/webhook'
+    | '/api/payment-provider/settings'
     | '/loja/$slug/$itemSlug'
     | '/api/bling/oauth/callback'
     | '/api/mercadopago/oauth/callback'
@@ -234,6 +350,16 @@ export interface FileRouteTypes {
     | '/api/tracking'
     | '/loja/$slug'
     | '/produto/$id'
+    | '/api/infinitepay/create-payment'
+    | '/api/infinitepay/public-config'
+    | '/api/infinitepay/return'
+    | '/api/infinitepay/settings'
+    | '/api/infinitepay/webhook'
+    | '/api/mercadopago/create-payment'
+    | '/api/mercadopago/payment-status'
+    | '/api/mercadopago/public-config'
+    | '/api/mercadopago/webhook'
+    | '/api/payment-provider/settings'
     | '/loja/$slug/$itemSlug'
     | '/api/bling/oauth/callback'
     | '/api/mercadopago/oauth/callback'
@@ -253,6 +379,16 @@ export interface RootRouteChildren {
   ApiTrackingRoute: typeof ApiTrackingRoute
   LojaSlugRoute: typeof LojaSlugRouteWithChildren
   ProdutoIdRoute: typeof ProdutoIdRoute
+  ApiInfinitepayCreatePaymentRoute: typeof ApiInfinitepayCreatePaymentRoute
+  ApiInfinitepayPublicConfigRoute: typeof ApiInfinitepayPublicConfigRoute
+  ApiInfinitepayReturnRoute: typeof ApiInfinitepayReturnRoute
+  ApiInfinitepaySettingsRoute: typeof ApiInfinitepaySettingsRoute
+  ApiInfinitepayWebhookRoute: typeof ApiInfinitepayWebhookRoute
+  ApiMercadopagoCreatePaymentRoute: typeof ApiMercadopagoCreatePaymentRoute
+  ApiMercadopagoPaymentStatusRoute: typeof ApiMercadopagoPaymentStatusRoute
+  ApiMercadopagoPublicConfigRoute: typeof ApiMercadopagoPublicConfigRoute
+  ApiMercadopagoWebhookRoute: typeof ApiMercadopagoWebhookRoute
+  ApiPaymentProviderSettingsRoute: typeof ApiPaymentProviderSettingsRoute
   ApiBlingOauthCallbackRoute: typeof ApiBlingOauthCallbackRoute
   ApiMercadopagoOauthCallbackRoute: typeof ApiMercadopagoOauthCallbackRoute
   ApiMercadopagoOauthDisconnectRoute: typeof ApiMercadopagoOauthDisconnectRoute
@@ -346,6 +482,76 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProdutoIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/infinitepay/create-payment': {
+      id: '/api/infinitepay/create-payment'
+      path: '/api/infinitepay/create-payment'
+      fullPath: '/api/infinitepay/create-payment'
+      preLoaderRoute: typeof ApiInfinitepayCreatePaymentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/infinitepay/public-config': {
+      id: '/api/infinitepay/public-config'
+      path: '/api/infinitepay/public-config'
+      fullPath: '/api/infinitepay/public-config'
+      preLoaderRoute: typeof ApiInfinitepayPublicConfigRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/infinitepay/return': {
+      id: '/api/infinitepay/return'
+      path: '/api/infinitepay/return'
+      fullPath: '/api/infinitepay/return'
+      preLoaderRoute: typeof ApiInfinitepayReturnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/infinitepay/settings': {
+      id: '/api/infinitepay/settings'
+      path: '/api/infinitepay/settings'
+      fullPath: '/api/infinitepay/settings'
+      preLoaderRoute: typeof ApiInfinitepaySettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/infinitepay/webhook': {
+      id: '/api/infinitepay/webhook'
+      path: '/api/infinitepay/webhook'
+      fullPath: '/api/infinitepay/webhook'
+      preLoaderRoute: typeof ApiInfinitepayWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mercadopago/create-payment': {
+      id: '/api/mercadopago/create-payment'
+      path: '/api/mercadopago/create-payment'
+      fullPath: '/api/mercadopago/create-payment'
+      preLoaderRoute: typeof ApiMercadopagoCreatePaymentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mercadopago/payment-status': {
+      id: '/api/mercadopago/payment-status'
+      path: '/api/mercadopago/payment-status'
+      fullPath: '/api/mercadopago/payment-status'
+      preLoaderRoute: typeof ApiMercadopagoPaymentStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mercadopago/public-config': {
+      id: '/api/mercadopago/public-config'
+      path: '/api/mercadopago/public-config'
+      fullPath: '/api/mercadopago/public-config'
+      preLoaderRoute: typeof ApiMercadopagoPublicConfigRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mercadopago/webhook': {
+      id: '/api/mercadopago/webhook'
+      path: '/api/mercadopago/webhook'
+      fullPath: '/api/mercadopago/webhook'
+      preLoaderRoute: typeof ApiMercadopagoWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/payment-provider/settings': {
+      id: '/api/payment-provider/settings'
+      path: '/api/payment-provider/settings'
+      fullPath: '/api/payment-provider/settings'
+      preLoaderRoute: typeof ApiPaymentProviderSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/loja/$slug/$itemSlug': {
       id: '/loja/$slug/$itemSlug'
       path: '/$itemSlug'
@@ -427,6 +633,16 @@ const rootRouteChildren: RootRouteChildren = {
   ApiTrackingRoute: ApiTrackingRoute,
   LojaSlugRoute: LojaSlugRouteWithChildren,
   ProdutoIdRoute: ProdutoIdRoute,
+  ApiInfinitepayCreatePaymentRoute: ApiInfinitepayCreatePaymentRoute,
+  ApiInfinitepayPublicConfigRoute: ApiInfinitepayPublicConfigRoute,
+  ApiInfinitepayReturnRoute: ApiInfinitepayReturnRoute,
+  ApiInfinitepaySettingsRoute: ApiInfinitepaySettingsRoute,
+  ApiInfinitepayWebhookRoute: ApiInfinitepayWebhookRoute,
+  ApiMercadopagoCreatePaymentRoute: ApiMercadopagoCreatePaymentRoute,
+  ApiMercadopagoPaymentStatusRoute: ApiMercadopagoPaymentStatusRoute,
+  ApiMercadopagoPublicConfigRoute: ApiMercadopagoPublicConfigRoute,
+  ApiMercadopagoWebhookRoute: ApiMercadopagoWebhookRoute,
+  ApiPaymentProviderSettingsRoute: ApiPaymentProviderSettingsRoute,
   ApiBlingOauthCallbackRoute: ApiBlingOauthCallbackRoute,
   ApiMercadopagoOauthCallbackRoute: ApiMercadopagoOauthCallbackRoute,
   ApiMercadopagoOauthDisconnectRoute: ApiMercadopagoOauthDisconnectRoute,

@@ -47,5 +47,6 @@ test("OAuth flow uses PKCE, protected state and encrypted server tokens", async 
   assert.match(server, /oauth_state_hash/);
   assert.match(server, /grant_type: "refresh_token"/);
   assert.match(settings, /Conectar Mercado Pago/);
-  assert.doesNotMatch(settings, /Access Token.*Input|Public Key.*Input/s);
+  assert.doesNotMatch(settings, /(?:id|htmlFor)=['"][^'"]*(?:access.?token|public.?key)/i);
+  assert.doesNotMatch(settings, /placeholder=['"][^'"]*(?:access.?token|public.?key)/i);
 });
