@@ -91,7 +91,10 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
           if (paymentAttempt.status === "pending") return errorResponse("A cobrança está sendo processada. Tente novamente em instantes.", 409);
 
           const externalReference = paymentAttemptReference(paymentAttempt.id);
-          const notificationUrl = `https://vendas164.com.br/api/mercadopago/webhook?store_id=${encodeURIComponent(storeId)}`;
+          const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+          if (!supabaseUrl) return errorResponse("Webhook de pagamento não está configurado.", 503);
+          const notificationUrl = new URL("/functions/v1/mercadopago-webhook", supabaseUrl);
+          notificationUrl.searchParams.set("store_id", storeId);
           const headers = {
             "Content-Type": "application/json",
             Authorization: `Bearer ${accessToken}`,
@@ -102,7 +105,7 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
                 method: "POST", headers,
                 body: JSON.stringify({
                   type: "online", external_reference: externalReference, total_amount: amount.toFixed(2),
-                  notification_url: notificationUrl, payer: { email: user.email },
+                  notification_url: notificationUrl.toString(), payer: { email: user.email },
                   transactions: { payments: [{ amount: amount.toFixed(2), payment_method: { id: "pix", type: "bank_transfer" } }] },
                 }),
               })
@@ -118,7 +121,7 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
                     failure: "https://vendas164.com.br/painel?status=failure",
                   },
                   auto_return: "approved", external_reference: externalReference,
-                  notification_url: notificationUrl,
+                  notification_url: notificationUrl.toString(),
                   statement_descriptor: store.name.replace(/[^A-Za-z0-9 ]/g, "").trim().slice(0, 16) || "VENDAS164",
                 }),
               });
