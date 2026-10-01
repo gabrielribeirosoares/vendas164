@@ -20,6 +20,7 @@ import {
   Car,
   Clock,
   User,
+  CreditCard,
   RefreshCw,
   Trash2,
 } from "lucide-react";
@@ -48,6 +49,7 @@ import { brl, slugify } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { OrdersTab, type OrderRow } from "@/components/vendedor/OrderManager";
 import { BrandingTab } from "@/components/vendedor/StoreSettings";
+import { PaymentSettingsTab } from "@/components/vendedor/PaymentSettingsTab";
 import { ClientsTab } from "@/components/vendedor/ClientsManager";
 import { SmartNotifications } from "@/components/vendedor/SmartNotifications";
 import { ProductsTab } from "@/components/vendedor/ProductManager";
@@ -200,6 +202,14 @@ function SellerDashboard() {
     } else if (bling === "error") {
       toast.error(params.get("reason") || "Não foi possível conectar o Bling.");
       navigate({ search: { tab: "produtos" }, replace: true });
+    }
+    const mercadoPago = params.get("mercadopago");
+    if (mercadoPago === "connected") {
+      toast.success("Conta do Mercado Pago conectada.");
+      navigate({ search: { tab: "pagamentos" }, replace: true });
+    } else if (mercadoPago === "error") {
+      toast.error(params.get("reason") || "Não foi possível conectar o Mercado Pago.");
+      navigate({ search: { tab: "pagamentos" }, replace: true });
     }
   }, [navigate]);
 
@@ -669,6 +679,9 @@ function SellerDashboard() {
             <TabsTrigger value="loja" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
               <Palette className="size-3.5 text-muted-foreground" /> Personalização
             </TabsTrigger>
+            <TabsTrigger value="pagamentos" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
+              <CreditCard className="size-3.5 text-muted-foreground" /> Pagamentos
+            </TabsTrigger>
             {isAdmin && (
               <TabsTrigger value="admin_moderation" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
                 <ShieldCheck className="size-3.5 text-muted-foreground" /> Moderação
@@ -747,6 +760,15 @@ function SellerDashboard() {
               >
                 <Palette className="size-3 text-muted-foreground" /> Personalização
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={activeTab === "pagamentos" ? "default" : "outline"}
+                onClick={() => setActiveTab("pagamentos")}
+                className="h-8 text-xs shrink-0 gap-1.5"
+              >
+                <CreditCard className="size-3 text-muted-foreground" /> Pagamentos
+              </Button>
               {isAdmin && (
                 <Button
                   type="button"
@@ -802,6 +824,10 @@ function SellerDashboard() {
 
           <TabsContent value="loja" className="mt-5">
             <BrandingTab store={store} userId={user!.id} />
+          </TabsContent>
+
+          <TabsContent value="pagamentos" className="mt-5">
+            <PaymentSettingsTab storeId={store.id} storeName={store.name} />
           </TabsContent>
 
           {isAdmin && (

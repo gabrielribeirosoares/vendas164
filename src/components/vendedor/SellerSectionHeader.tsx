@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Car,
+  CreditCard,
   Clock,
   Package,
   Palette,
@@ -68,6 +69,13 @@ const SECTIONS: Record<string, SellerSection> = {
     description: "Ajuste identidade visual, informações e canais de contato.",
     icon: Palette,
     accent: "text-fuchsia-500 bg-fuchsia-500/10",
+  },
+  pagamentos: {
+    group: "Configuração",
+    title: "Conexão do Mercado Pago",
+    description: "Autorize a conta do Mercado Pago para vinculá-la com segurança à sua loja.",
+    icon: CreditCard,
+    accent: "text-sky-500 bg-sky-500/10",
   },
   admin_moderation: {
     group: "Administração",

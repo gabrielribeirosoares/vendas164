@@ -53,7 +53,7 @@ test("cabeçalho usa a identidade padrão quando a loja não possui logo", async
   const occurrences = header.match(/src="\/icons\/vendas164-default\.png"/g) ?? [];
 
   assert.equal(occurrences.length, 2);
-  assert.match(header, /updateAppFavicon\(icon\)/);
+  assert.match(header, /updateAppFavicon\(getStoreBrandImageUrl\(icon, 64\)\)/);
 });
 
 test("favicon dinâmico volta ao ícone padrão fora de uma loja personalizada", async () => {
