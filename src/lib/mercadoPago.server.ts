@@ -224,10 +224,13 @@ export async function getMercadoPagoAccessToken(storeId: string) {
 export function pendingAmount(order: {
   total_price: number | null;
   down_payment: number | null;
+  signal_amount?: number | null;
   payment_status: string | null;
 }) {
   const total = Number(order.total_price);
-  const signal = Number(order.down_payment || 0);
+  // signal_amount is the configured deposit. Older order creation paths may
+  // leave down_payment at 0 until the deposit is actually paid.
+  const signal = Math.max(Number(order.down_payment || 0), Number(order.signal_amount || 0));
   if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(signal) || signal < 0 || signal > total) {
     throw new Error("Valor do pedido inválido.");
   }

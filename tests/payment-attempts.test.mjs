@@ -9,6 +9,7 @@ const signalOrder = "30000000-0000-4000-8000-000000000001";
 const fullOrder = "30000000-0000-4000-8000-000000000002";
 const readyOrder = "30000000-0000-4000-8000-000000000003";
 const noSignalOrder = "30000000-0000-4000-8000-000000000004";
+const legacySignalOrder = "30000000-0000-4000-8000-000000000005";
 
 test("payment attempts bind amount, customer, store and gateway confirmation", async () => {
   const db = new PGlite();
@@ -19,17 +20,18 @@ test("payment attempts bind amount, customer, store and gateway confirmation", a
       CREATE TABLE public.stores(id uuid PRIMARY KEY);
       CREATE TABLE public.orders(
         id uuid PRIMARY KEY, store_id uuid NOT NULL, user_id uuid NOT NULL,
-        total_price numeric NOT NULL, down_payment numeric, payment_status text NOT NULL,
+        total_price numeric NOT NULL, down_payment numeric, signal_amount numeric, payment_status text NOT NULL,
         payment_method text, gateway_payment_id text, gateway_status text
       );
       CREATE TABLE public.order_installments(id uuid PRIMARY KEY,order_id uuid,status text,paid_at timestamptz);
       INSERT INTO auth.users VALUES ('${customer}');
       INSERT INTO public.stores VALUES ('${store}');
       INSERT INTO public.orders VALUES
-        ('${signalOrder}','${store}','${customer}',150,25,'aguardando_sinal',null,null,null),
-        ('${fullOrder}','${store}','${customer}',100,0,'pendente',null,null,null),
-        ('${readyOrder}','${store}','${customer}',1,0,'pronta_entrega',null,null,null),
-        ('${noSignalOrder}','${store}','${customer}',50,0,'sem_sinal',null,null,null);
+        ('${signalOrder}','${store}','${customer}',150,25,25,'aguardando_sinal',null,null,null),
+        ('${fullOrder}','${store}','${customer}',100,0,0,'pendente',null,null,null),
+        ('${readyOrder}','${store}','${customer}',1,0,0,'pronta_entrega',null,null,null),
+        ('${noSignalOrder}','${store}','${customer}',50,0,0,'sem_sinal',null,null,null),
+        ('${legacySignalOrder}','${store}','${customer}',100,0,1,'aguardando_sinal',null,null,null);
       INSERT INTO public.order_installments VALUES
         ('40000000-0000-4000-8000-000000000001','${signalOrder}','pending',null),
         ('40000000-0000-4000-8000-000000000002','${fullOrder}','pending',null),
@@ -45,6 +47,11 @@ test("payment attempts bind amount, customer, store and gateway confirmation", a
       "utf8",
     );
     await db.exec(confirmationFix);
+    const signalFix = await readFile(
+      new URL("../supabase/migrations/20261001124948_fix_gateway_signal_amount.sql", import.meta.url),
+      "utf8",
+    );
+    await db.exec(signalFix);
 
     const privileges = (await db.query(`SELECT
       has_table_privilege('anon','public.gateway_payment_attempts','SELECT') AS anon_read,
@@ -53,6 +60,33 @@ test("payment attempts bind amount, customer, store and gateway confirmation", a
     assert.equal(privileges.anon_read, false);
     assert.equal(privileges.user_execute, false);
     assert.equal(privileges.service_execute, true);
+
+    const legacyAttempt = "50000000-0000-4000-8000-000000000005";
+    await db.query(`INSERT INTO public.gateway_payment_attempts
+      (id,store_id,user_id,order_ids,request_key,amount,payment_method,max_installments,description,status,expires_at)
+      VALUES($1,$2,$3,$4::uuid[],repeat('d',64),1,'pix',1,'Sinal R$ 1','pending',now()+interval '30 minutes')`,
+      [legacyAttempt, store, customer, [legacySignalOrder]]);
+    const signalConfirmation = (await db.query(
+      "SELECT public.confirm_gateway_payment_attempt($1,1,'pix','pay-signal-1') AS result",
+      [legacyAttempt],
+    )).rows[0].result;
+    assert.equal(signalConfirmation.updated_count, 1);
+    const legacySignal = (await db.query(
+      "SELECT payment_status, down_payment, signal_amount FROM public.orders WHERE id=$1",
+      [legacySignalOrder],
+    )).rows[0];
+    assert.equal(legacySignal.payment_status, "sinal_pago");
+    assert.equal(Number(legacySignal.down_payment), 1);
+    assert.equal(Number(legacySignal.signal_amount), 1);
+
+    await db.query(`INSERT INTO public.orders
+      (id,store_id,user_id,total_price,down_payment,signal_amount,payment_status)
+      VALUES('30000000-0000-4000-8000-000000000006',$1,$2,100,0,1,'aguardando_sinal')`, [store, customer]);
+    const syncedSignal = (await db.query(
+      "SELECT down_payment, signal_amount FROM public.orders WHERE id='30000000-0000-4000-8000-000000000006'",
+    )).rows[0];
+    assert.equal(Number(syncedSignal.down_payment), 1);
+    assert.equal(Number(syncedSignal.signal_amount), 1);
 
     const attempt = "50000000-0000-4000-8000-000000000001";
     await db.query(`INSERT INTO public.gateway_payment_attempts

@@ -26,7 +26,7 @@ export const Route = createFileRoute("/api/mercadopago/create-payment")({
           if (method !== "pix" && method !== "checkout_pro") return errorResponse("Forma de pagamento inválida.", 400);
 
           const [{ data: orders, error: orderError }, { data: store, error: storeError }] = await Promise.all([
-            admin.from("orders").select("id, store_id, user_id, total_price, down_payment, payment_status, installment_count, products(model, max_installments)").in("id", orderIds),
+            admin.from("orders").select("id, store_id, user_id, total_price, down_payment, signal_amount, payment_status, installment_count, products(model, max_installments)").in("id", orderIds),
             admin.from("stores").select("id, name").eq("id", storeId).maybeSingle(),
           ]);
           if (orderError || storeError) throw orderError || storeError;

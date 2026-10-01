@@ -12,8 +12,9 @@ test("InfinitePay payment attempts are locked per order and available only to se
       CREATE TABLE public.stores(id uuid PRIMARY KEY);
       CREATE TABLE public.orders(
         id uuid PRIMARY KEY, store_id uuid NOT NULL, user_id uuid NOT NULL,
-        total_price numeric NOT NULL, down_payment numeric, payment_status text NOT NULL
+        total_price numeric NOT NULL, down_payment numeric, signal_amount numeric, payment_status text NOT NULL
       );
+      CREATE TABLE public.order_installments(id uuid PRIMARY KEY,order_id uuid,status text,paid_at timestamptz);
       CREATE TABLE public.gateway_payment_attempts (
         id uuid PRIMARY KEY, store_id uuid NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
         user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -29,7 +30,9 @@ test("InfinitePay payment attempts are locked per order and available only to se
       INSERT INTO public.stores VALUES ('20000000-0000-4000-8000-000000000001');
       INSERT INTO public.orders VALUES
         ('30000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
-         '10000000-0000-4000-8000-000000000001',150,25,'aguardando_sinal');`);
+         '10000000-0000-4000-8000-000000000001',150,25,25,'aguardando_sinal'),
+        ('30000000-0000-4000-8000-000000000099','20000000-0000-4000-8000-000000000001',
+         '10000000-0000-4000-8000-000000000001',100,0,1,'aguardando_sinal');`);
     const migration = await readFile(
       new URL("../supabase/migrations/20260930150000_infinitepay_checkout.sql", import.meta.url),
       "utf8",
@@ -37,10 +40,24 @@ test("InfinitePay payment attempts are locked per order and available only to se
     await db.exec(migration);
     await db.exec(await readFile(new URL("../supabase/migrations/20260930173500_allow_unpaid_payment_statuses.sql", import.meta.url), "utf8"));
     await db.exec(await readFile(new URL("../supabase/migrations/20260930213000_recover_stale_gateway_attempts.sql", import.meta.url), "utf8"));
+    await db.exec(await readFile(new URL("../supabase/migrations/20260930220000_confirm_ready_order_payments.sql", import.meta.url), "utf8"));
+    await db.exec(await readFile(new URL("../supabase/migrations/20261001124948_fix_gateway_signal_amount.sql", import.meta.url), "utf8"));
+
+    const legacyOrder = "30000000-0000-4000-8000-000000000099";
+    await assert.rejects(
+      db.query(`SELECT public.create_gateway_payment_attempt($1,$2,$3,$4::uuid[],$5,100,$6,$7,1,$8,$9::timestamptz)`, [
+        "40000000-0000-4000-8000-000000000099", "20000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000001", [legacyOrder], "e".repeat(64), "infinitepay", "infinitepay", "Sinal Miniatura", new Date(Date.now() + 3600_000).toISOString(),
+      ]),
+      /gateway_amount_or_orders_mismatch/,
+    );
+    const signalAttempt = (await db.query(`SELECT public.create_gateway_payment_attempt($1,$2,$3,$4::uuid[],$5,1,$6,$7,1,$8,$9::timestamptz) AS id`, [
+      "40000000-0000-4000-8000-000000000098", "20000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000001", [legacyOrder], "f".repeat(64), "infinitepay", "infinitepay", "Sinal Miniatura", new Date(Date.now() + 3600_000).toISOString(),
+    ])).rows[0].id;
+    assert.equal(signalAttempt, "40000000-0000-4000-8000-000000000098");
     const payableStatuses = ["sem_sinal", "pronta_entrega"];
     for (const [index, status] of payableStatuses.entries()) {
       const id = `30000000-0000-4000-8000-${String(index + 2).padStart(12, "0")}`;
-      await db.query("INSERT INTO public.orders VALUES($1,$2,$3,150,0,$4)", [id, "20000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000001", status]);
+      await db.query("INSERT INTO public.orders VALUES($1,$2,$3,150,0,0,$4)", [id, "20000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000001", status]);
       if (index === 0) {
         await db.query(`INSERT INTO public.gateway_payment_attempts(
           id, store_id, user_id, order_ids, request_key, amount, payment_method, provider,
@@ -133,10 +150,12 @@ test("InfinitePay callbacks verify status and amount with the provider before co
   assert.match(createPayment, /provider: "infinitepay"/);
   assert.match(createPayment, /order_nsu: paymentAttempt\.id/);
   assert.match(createPayment, /products\(model\)/);
+  assert.match(createPayment, /signal_amount/);
   assert.doesNotMatch(createPayment, /products\(name/);
   const paymentHelpers = await readFile(new URL("../src/lib/mercadoPago.server.ts", import.meta.url), "utf8");
   assert.ok(paymentHelpers.includes('case "sem_sinal":') && paymentHelpers.includes('case "pronta_entrega": amount = total'));
   assert.match(mercadoPagoCreatePayment, /products\(model, max_installments\)/);
+  assert.match(mercadoPagoCreatePayment, /signal_amount/);
   assert.doesNotMatch(mercadoPagoCreatePayment, /products\(name/);
   assert.match(createPayment, /domínio de checkout não permitido/);
   assert.match(createPayment, /checkout\.infinitepay\.com\.br/);

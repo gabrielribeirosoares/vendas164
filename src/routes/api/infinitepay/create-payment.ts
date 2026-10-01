@@ -24,7 +24,7 @@ export const Route = createFileRoute("/api/infinitepay/create-payment")({
           const orderIds = parseOrderIds(body.orderIds);
 
           const [{ data: orders, error: orderError }, { data: store, error: storeError }, { data: rawConnection, error: connectionError }] = await Promise.all([
-            admin.from("orders").select("id, store_id, user_id, total_price, down_payment, payment_status, products(model)").in("id", orderIds),
+            admin.from("orders").select("id, store_id, user_id, total_price, down_payment, signal_amount, payment_status, products(model)").in("id", orderIds),
             admin.from("stores").select("id, name").eq("id", storeId).maybeSingle(),
             admin.from("infinitepay_connections" as never).select("handle, is_active").eq("store_id", storeId).maybeSingle(),
           ]);
