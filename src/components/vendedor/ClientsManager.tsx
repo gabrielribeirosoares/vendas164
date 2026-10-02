@@ -435,6 +435,16 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
       : current;
   }, [allClients, selectedClient, selectedClientOrders, usesServerPagination]);
 
+  const lastRecordedPaymentAt = useMemo(() => {
+    const timestamps = (currentSelectedClient?.orders || []).flatMap((order: OrderRow) =>
+      (order.order_installments || [])
+        .filter((installment: any) => installment.status === "paid" && installment.paid_at)
+        .map((installment: any) => new Date(installment.paid_at).getTime())
+        .filter((timestamp: number) => Number.isFinite(timestamp))
+    );
+    return timestamps.length ? new Date(Math.max(...timestamps)) : null;
+  }, [currentSelectedClient]);
+
   // Simulação da Baixa em Cascata em tempo real
   const cascadeSimulation = useMemo(() => {
     if (!currentSelectedClient) return { items: [], totalDeducted: 0, fullyPaidCount: 0, partialPaidCount: 0, newRemaining: 0 };
@@ -1164,10 +1174,17 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                   </Card>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-xs">
-                  <span className="font-medium text-muted-foreground">Situação do acervo</span>
-                  <Badge variant="secondary" className="gap-1 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">📦 {currentSelectedClient.arrivedCount} na loja</Badge>
-                  <Badge variant="secondary" className="gap-1 text-muted-foreground">⏳ {currentSelectedClient.preorderCount} em pré-venda</Badge>
+                <div className="flex flex-col gap-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5 text-xs sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-muted-foreground">Situação do acervo</span>
+                    <Badge variant="secondary" className="gap-1 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">📦 {currentSelectedClient.arrivedCount} na loja</Badge>
+                    <Badge variant="secondary" className="gap-1 text-muted-foreground">⏳ {currentSelectedClient.preorderCount} em pré-venda</Badge>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-muted-foreground sm:shrink-0">
+                    <CalendarClock className="size-3.5" aria-hidden="true" />
+                    <span>Última parcela recebida:</span>
+                    <span className="font-medium text-foreground">{lastRecordedPaymentAt ? lastRecordedPaymentAt.toLocaleDateString("pt-BR") : "sem registro"}</span>
+                  </div>
                 </div>
               </>
             )}
