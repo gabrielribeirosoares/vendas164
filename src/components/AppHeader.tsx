@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Car, ChevronDown, Clock, LogOut, Menu, Package, Palette, ShieldCheck, Store as StoreIcon, User, Zap, RefreshCw } from "lucide-react";
+import { Car, ChevronDown, Clock, CreditCard, LogOut, Menu, Package, Palette, ShieldCheck, Store as StoreIcon, User, Zap, RefreshCw } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -228,7 +228,10 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                             </Button>
                             {currentStore ? (
                               <div className="py-2 border-y border-border/50 my-2">
-                                <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 px-2">Minha Loja</h4>
+                                <div className="mb-2 px-2">
+                                  <h4 className="text-xs font-semibold text-muted-foreground uppercase">Minha Loja</h4>
+                                  <p className="mt-0.5 truncate text-xs text-foreground">{currentStore.name}</p>
+                                </div>
                                 <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "produtos")} onClick={() => setMobileMenuOpen(false)}>
                                   <Link to="/vendedor" search={{ tab: "produtos" }} aria-current={activeSellerTab === "produtos" ? "page" : undefined}>
                                     <Package className="size-4 text-muted-foreground" /> Pré-vendas
@@ -257,6 +260,11 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                                 <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "rastreamento")} onClick={() => setMobileMenuOpen(false)}>
                                   <Link to="/vendedor" search={{ tab: "rastreamento" }} aria-current={activeSellerTab === "rastreamento" ? "page" : undefined}>
                                     <RefreshCw className="size-4 text-muted-foreground" /> Rastreamento
+                                  </Link>
+                                </Button>
+                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "pagamentos")} onClick={() => setMobileMenuOpen(false)}>
+                                  <Link to="/vendedor" search={{ tab: "pagamentos" }} aria-current={activeSellerTab === "pagamentos" ? "page" : undefined}>
+                                    <CreditCard className="size-4 text-muted-foreground" /> Pagamentos
                                   </Link>
                                 </Button>
                                 <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "loja")} onClick={() => setMobileMenuOpen(false)}>

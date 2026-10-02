@@ -98,7 +98,7 @@ export function SellerSectionHeader({
 
   return (
     <section className="mt-5 rounded-2xl border border-border/60 bg-gradient-to-br from-card via-card to-muted/30 p-4 shadow-sm sm:p-5">
-      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <div className="mb-3 hidden flex-wrap items-center gap-2 text-xs text-muted-foreground md:flex">
         <span className="truncate font-medium text-foreground/80">{storeName}</span>
         <span aria-hidden="true">/</span>
         <span>{section.group}</span>
