@@ -1133,30 +1133,30 @@ export function OrdersTab({
             <p className="text-sm font-semibold">Atendimento por etapa</p>
             <p className="text-xs text-muted-foreground">Acesse rapidamente o que precisa de cobrança ou envio.</p>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
-            <Button type="button" size="sm" variant={workflowView === "todas" ? "default" : "outline"} onClick={() => setWorkflowView("todas")} className="h-9 shrink-0 gap-1.5 text-xs">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <Button type="button" size="sm" variant={workflowView === "todas" ? "default" : "outline"} onClick={() => setWorkflowView("todas")} className="h-auto min-h-9 w-full min-w-0 whitespace-normal px-2 text-center text-[11px] leading-tight sm:h-9 sm:w-auto sm:whitespace-nowrap sm:px-3 sm:text-xs">
               Todas as reservas
             </Button>
-            <Button type="button" size="sm" variant={workflowView === "cobrar-sinal" ? "default" : "outline"} onClick={() => setWorkflowView("cobrar-sinal")} className="h-9 shrink-0 gap-1.5 text-xs">
-              <Clock className="size-3.5" /> Aguardando sinal
+            <Button type="button" size="sm" variant={workflowView === "cobrar-sinal" ? "default" : "outline"} onClick={() => setWorkflowView("cobrar-sinal")} className="h-auto min-h-9 w-full min-w-0 gap-1.5 whitespace-normal px-2 text-center text-[11px] leading-tight sm:h-9 sm:w-auto sm:whitespace-nowrap sm:px-3 sm:text-xs">
+              <Clock className="size-3.5 shrink-0" /> Aguardando sinal
             </Button>
-            <Button type="button" size="sm" variant={workflowView === "saldo-pendente" ? "default" : "outline"} onClick={() => setWorkflowView("saldo-pendente")} className="h-9 shrink-0 gap-1.5 text-xs">
-              <CreditCard className="size-3.5" /> Saldo a receber
+            <Button type="button" size="sm" variant={workflowView === "saldo-pendente" ? "default" : "outline"} onClick={() => setWorkflowView("saldo-pendente")} className="h-auto min-h-9 w-full min-w-0 gap-1.5 whitespace-normal px-2 text-center text-[11px] leading-tight sm:h-9 sm:w-auto sm:whitespace-nowrap sm:px-3 sm:text-xs">
+              <CreditCard className="size-3.5 shrink-0" /> Saldo a receber
             </Button>
-            <Button type="button" size="sm" variant={workflowView === "preparar-envio" ? "default" : "outline"} onClick={() => setWorkflowView("preparar-envio")} className="h-9 shrink-0 gap-1.5 text-xs">
-              <Truck className="size-3.5" /> Preparar envio
+            <Button type="button" size="sm" variant={workflowView === "preparar-envio" ? "default" : "outline"} onClick={() => setWorkflowView("preparar-envio")} className="h-auto min-h-9 w-full min-w-0 gap-1.5 whitespace-normal px-2 text-center text-[11px] leading-tight sm:h-9 sm:w-auto sm:whitespace-nowrap sm:px-3 sm:text-xs">
+              <Truck className="size-3.5 shrink-0" /> Preparar envio
             </Button>
           </div>
         </div>
 
         {/* FILTRO POR TIPO DE PEDIDO (PRÉ-VENDA VS PRONTA ENTREGA) */}
-        <div className="flex items-center gap-2 overflow-x-auto px-3 pb-1 pt-3 sm:flex-wrap sm:overflow-visible sm:p-4 sm:pb-0 [&>button]:shrink-0">
+        <div className="grid grid-cols-2 gap-2 px-3 pb-1 pt-3 sm:flex sm:flex-wrap sm:p-4 sm:pb-0">
           <Button
             type="button"
             size="sm"
             variant={categoryFilter === "todos" ? "default" : "outline"}
             onClick={() => { setCategoryFilter("todos"); setPage(0); }}
-            className="h-8 text-xs rounded-lg font-medium"
+            className="h-8 w-full min-w-0 text-[11px] rounded-lg font-medium sm:w-auto sm:text-xs"
           >
             Todos ({activeOrdersCount})
           </Button>
@@ -1165,7 +1165,7 @@ export function OrdersTab({
             size="sm"
             variant={categoryFilter === "pre_venda" ? "default" : "outline"}
             onClick={() => { setCategoryFilter("pre_venda"); setPage(0); }}
-            className="h-8 text-xs rounded-lg font-medium gap-1.5"
+            className="h-8 w-full min-w-0 gap-1.5 text-[11px] rounded-lg font-medium sm:w-auto sm:text-xs"
           >
             <Package className="size-3.5 text-amber-500" /> Pré-vendas ({preVendaOrdersCount})
           </Button>
@@ -1174,7 +1174,7 @@ export function OrdersTab({
             size="sm"
             variant={categoryFilter === "pronta_entrega" ? "default" : "outline"}
             onClick={() => { setCategoryFilter("pronta_entrega"); setPage(0); }}
-            className={`h-8 text-xs rounded-lg font-medium gap-1.5 ${
+            className={`h-8 w-full min-w-0 gap-1.5 text-[11px] rounded-lg font-medium sm:w-auto sm:text-xs ${
               categoryFilter === "pronta_entrega"
                 ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                 : "text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
