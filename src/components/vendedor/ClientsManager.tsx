@@ -1,6 +1,6 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PaymentBadge } from "@/components/StatusBadge";
-import { Package, Copy, MessageCircle, Search, Trophy, Star, Crown, Users, Sparkles, Zap, CheckCircle2, FileSpreadsheet, ChevronLeft, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
+import { Package, Copy, MessageCircle, Search, Trophy, Star, Crown, Users, Sparkles, Zap, CheckCircle2, FileSpreadsheet, ChevronLeft, ChevronRight, Loader2, RefreshCw, Wallet, CalendarClock, ChevronDown } from 'lucide-react';
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -1125,45 +1125,51 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
           <div className="space-y-3 sm:space-y-4 overflow-y-auto flex-1 min-h-0 pr-0.5">
             {/* CARDS DE RESUMO DO ACERVO GERAL */}
             {currentSelectedClient && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <Card className="border-border/60 bg-muted/20">
-                  <CardContent className="p-2.5 sm:p-3">
-                    <span className="text-xs text-muted-foreground block">Total de Miniaturas</span>
-                    <span className="text-base sm:text-lg font-bold text-foreground">{currentSelectedClient.totalItems} peças</span>
-                    <span className="text-xs text-muted-foreground block mt-0.5">{brl(currentSelectedClient.totalSpent)}</span>
-                  </CardContent>
-                </Card>
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <Card className="border-border/60 bg-card shadow-sm">
+                    <CardContent className="p-3 sm:p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">Total em pedidos</span>
+                        <Package className="size-4 text-muted-foreground" aria-hidden="true" />
+                      </div>
+                      <span className="mt-1 block text-lg font-bold tabular-nums text-foreground">{brl(currentSelectedClient.totalSpent)}</span>
+                      <span className="text-xs text-muted-foreground">{currentSelectedClient.totalItems} miniaturas no acervo</span>
+                    </CardContent>
+                  </Card>
 
-                <Card className="border-emerald-500/30 bg-emerald-500/10">
-                  <CardContent className="p-2.5 sm:p-3">
-                    <span className="text-xs text-emerald-600 dark:text-emerald-400 block">Total Já Pago</span>
-                    <span className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400">{brl(currentSelectedClient.totalPaid)}</span>
-                    <span className="text-xs text-emerald-600 dark:text-emerald-400 block mt-0.5">{currentSelectedClient.progressPercent}% quitado</span>
-                  </CardContent>
-                </Card>
+                  <Card className="border-emerald-500/25 bg-emerald-500/[0.06] shadow-sm">
+                    <CardContent className="p-3 sm:p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">Total recebido</span>
+                        <Wallet className="size-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                      </div>
+                      <span className="mt-1 block text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-400">{brl(currentSelectedClient.totalPaid)}</span>
+                      <div className="mt-2 flex items-center gap-2">
+                        <Progress value={currentSelectedClient.progressPercent} className="h-1.5 flex-1" aria-label={`${currentSelectedClient.progressPercent}% do total recebido`} />
+                        <span className="text-[11px] font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">{currentSelectedClient.progressPercent}%</span>
+                      </div>
+                    </CardContent>
+                  </Card>
 
-                <Card className={`border ${currentSelectedClient.remainingBalance > 0 ? "border-amber-500/30 bg-amber-500/10" : "border-emerald-500/30 bg-emerald-500/10"}`}>
-                  <CardContent className="p-2.5 sm:p-3">
-                    <span className="text-xs block">{currentSelectedClient.remainingBalance > 0 ? "Saldo Restante" : "Status Financeiro"}</span>
-                    <span className="text-base sm:text-lg font-bold break-words block">
-                      {currentSelectedClient.remainingBalance > 0 ? brl(currentSelectedClient.remainingBalance) : "100% Quitado"}
-                    </span>
-                    <span className="text-xs text-muted-foreground block mt-0.5">
-                      {currentSelectedClient.remainingBalance > 0 ? "a receber no total" : "todas as peças pagas"}
-                    </span>
-                  </CardContent>
-                </Card>
+                  <Card className={`shadow-sm ${currentSelectedClient.remainingBalance > 0 ? "border-amber-500/30 bg-amber-500/[0.06]" : "border-emerald-500/25 bg-emerald-500/[0.06]"}`}>
+                    <CardContent className="p-3 sm:p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">Saldo a receber</span>
+                        <CalendarClock className={`size-4 ${currentSelectedClient.remainingBalance > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`} aria-hidden="true" />
+                      </div>
+                      <span className="mt-1 block text-lg font-bold tabular-nums text-foreground">{brl(currentSelectedClient.remainingBalance)}</span>
+                      <span className="text-xs text-muted-foreground">{currentSelectedClient.remainingBalance > 0 ? "pendente nos pedidos" : "todos os pedidos quitados"}</span>
+                    </CardContent>
+                  </Card>
+                </div>
 
-                <Card className="border-border/60 bg-muted/20">
-                  <CardContent className="p-2.5 sm:p-3">
-                    <span className="text-xs text-muted-foreground block">Logística</span>
-                    <div className="flex flex-col text-xs font-semibold mt-1 gap-0.5">
-                      <span className="text-emerald-600 dark:text-emerald-400">📦 {currentSelectedClient.arrivedCount} na loja</span>
-                      <span className="text-muted-foreground">⏳ {currentSelectedClient.preorderCount} pré-venda</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-xs">
+                  <span className="font-medium text-muted-foreground">Situação do acervo</span>
+                  <Badge variant="secondary" className="gap-1 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">📦 {currentSelectedClient.arrivedCount} na loja</Badge>
+                  <Badge variant="secondary" className="gap-1 text-muted-foreground">⏳ {currentSelectedClient.preorderCount} em pré-venda</Badge>
+                </div>
+              </>
             )}
 
             {/* SEÇÃO DE ANOTAÇÕES */}
@@ -1190,8 +1196,15 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
               />
             </div>
 
-            {/* FILTROS E BUSCA DE RESERVAS */}
+            {/* HISTÓRICO, FILTROS E BUSCA DE RESERVAS */}
             <div className="space-y-2.5 pt-1">
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Histórico de pedidos</h3>
+                  <p className="text-xs text-muted-foreground">Valores pagos, saldos e parcelas por miniatura.</p>
+                </div>
+                <span className="text-xs text-muted-foreground">{filteredClientOrders.length} {filteredClientOrders.length === 1 ? "pedido" : "pedidos"}</span>
+              </div>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <Button
@@ -1266,9 +1279,9 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                     const isArrived = releaseDate ? new Date(releaseDate + "T00:00:00") <= now : true;
 
                     return (
-                      <div
+                      <article
                         key={order.id}
-                        className="border border-border/60 rounded-xl p-2.5 sm:p-3 flex flex-col gap-2.5 bg-card shadow-sm hover:border-primary/40 transition-colors w-full overflow-hidden"
+                        className="border border-border/60 rounded-xl p-3 sm:p-4 flex flex-col gap-3 bg-card shadow-sm hover:border-primary/40 transition-colors w-full overflow-hidden"
                       >
                         <div className="flex items-start gap-2.5 min-w-0 w-full">
                           {order.products?.image_url ? (
@@ -1293,25 +1306,33 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                               )}
                             </div>
 
-                            <div className="text-[11px] sm:text-xs text-muted-foreground flex flex-wrap gap-x-2 gap-y-0.5 items-center mt-1">
-                              <span>Reserva: {new Date(order.created_at).toLocaleDateString("pt-BR")}</span>
-                              <span>• Valor: <strong className="text-foreground">{brl(price)}</strong></span>
-                              {itemPaid > 0 && <span className="text-emerald-600 dark:text-emerald-400">• Pago: {brl(itemPaid)}</span>}
-                              {itemRemaining > 0 ? (
-                                <span className="text-amber-600 dark:text-amber-400 font-semibold">• Saldo: {brl(itemRemaining)}</span>
-                              ) : (
-                                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">• Quitado</span>
-                              )}
-                            </div>
+                            <p className="mt-1 text-[11px] text-muted-foreground">Pedido de {new Date(order.created_at).toLocaleDateString("pt-BR")}</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 rounded-lg bg-muted/30 p-2.5 sm:px-3">
+                          <div className="min-w-0">
+                            <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Total</span>
+                            <span className="block truncate text-xs sm:text-sm font-semibold tabular-nums text-foreground">{brl(price)}</span>
+                          </div>
+                          <div className="min-w-0 border-x border-border/50 px-2">
+                            <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Pago</span>
+                            <span className="block truncate text-xs sm:text-sm font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">{brl(itemPaid)}</span>
+                          </div>
+                          <div className="min-w-0 text-right">
+                            <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Saldo</span>
+                            <span className={`block truncate text-xs sm:text-sm font-semibold tabular-nums ${itemRemaining > 0 ? "text-amber-700 dark:text-amber-400" : "text-emerald-700 dark:text-emerald-400"}`}>
+                              {itemRemaining > 0 ? brl(itemRemaining) : "Quitado"}
+                            </span>
                           </div>
                         </div>
 
                         {/* Linha de Ação e Status do Item */}
-                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/30 w-full">
-                          <div className="shrink-0">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-2 w-full">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <PaymentBadge status={order.payment_status} />
                           </div>
-                          <div className="shrink-0">
+                          <div className="flex flex-wrap items-center gap-2">
                             <OrderInstallmentsDialog
                               orderId={order.id}
                               totalPrice={price}
@@ -1321,7 +1342,45 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                             />
                           </div>
                         </div>
-                      </div>
+                        <details className="group rounded-lg border border-border/50 bg-background/40 px-3 py-2">
+                          <summary className="cursor-pointer list-none text-xs font-medium text-muted-foreground marker:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
+                            <span className="flex items-center justify-between gap-3">
+                              <span>Ver movimentações de pagamento</span>
+                              <span className="flex items-center gap-2 text-[11px] font-normal">
+                                {(order.order_installments || []).length + (signalPaid > 0 ? 1 : 0)} {(order.order_installments || []).length + (signalPaid > 0 ? 1 : 0) === 1 ? "registro" : "registros"}
+                                <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" aria-hidden="true" />
+                              </span>
+                            </span>
+                          </summary>
+                          <div className="mt-2 space-y-1.5 border-t border-border/40 pt-2">
+                            {signalPaid > 0 && (
+                              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
+                                <span className="text-muted-foreground">Sinal registrado</span>
+                                <span className="flex items-center gap-2 font-medium tabular-nums text-foreground">
+                                  {brl(signalPaid)}
+                                  <Badge variant="secondary" className="h-5 px-1.5 text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">Pago</Badge>
+                                </span>
+                              </div>
+                            )}
+                            {(order.order_installments || []).length === 0 && signalPaid <= 0 ? (
+                              <p className="text-xs text-muted-foreground">Nenhuma parcela registrada para este pedido.</p>
+                            ) : (order.order_installments || []).map((installment: any) => (
+                              <div key={installment.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
+                                <span className="text-muted-foreground">
+                                  {installment.installment_number ? `Parcela ${installment.installment_number}` : "Pagamento"}
+                                  {installment.paid_at ? ` · pago em ${new Date(installment.paid_at).toLocaleDateString("pt-BR")}` : installment.due_date ? ` · vence em ${new Date(installment.due_date).toLocaleDateString("pt-BR")}` : ""}
+                                </span>
+                                <span className="flex items-center gap-2 font-medium tabular-nums text-foreground">
+                                  {brl(Number(installment.amount || 0))}
+                                  <Badge variant={installment.status === "paid" ? "secondary" : "outline"} className={`h-5 px-1.5 text-[10px] ${installment.status === "paid" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : installment.status === "overdue" ? "border-destructive/30 bg-destructive/10 text-destructive" : ""}`}>
+                                    {installment.status === "paid" ? "Pago" : installment.status === "overdue" ? "Atrasado" : installment.status === "cancelled" ? "Cancelado" : "Pendente"}
+                                  </Badge>
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      </article>
                     );
                   })}
                 </div>
