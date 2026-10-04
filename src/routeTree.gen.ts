@@ -31,6 +31,7 @@ import { Route as ApiMercadopagoPaymentStatusRouteImport } from './routes/api/me
 import { Route as ApiMercadopagoPublicConfigRouteImport } from './routes/api/mercadopago/public-config'
 import { Route as ApiMercadopagoWebhookRouteImport } from './routes/api/mercadopago/webhook'
 import { Route as ApiPaymentProviderSettingsRouteImport } from './routes/api/payment-provider/settings'
+import { Route as ApiRemindersSignalsRouteImport } from './routes/api/reminders/signals'
 import { Route as LojaSlugItemSlugRouteImport } from './routes/loja.$slug.$itemSlug'
 import { Route as ApiBlingOauthCallbackRouteImport } from './routes/api/bling/oauth/callback'
 import { Route as ApiMercadopagoOauthCallbackRouteImport } from './routes/api/mercadopago/oauth/callback'
@@ -153,6 +154,11 @@ const ApiPaymentProviderSettingsRoute =
     path: '/api/payment-provider/settings',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiRemindersSignalsRoute = ApiRemindersSignalsRouteImport.update({
+  id: '/api/reminders/signals',
+  path: '/api/reminders/signals',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LojaSlugItemSlugRoute = LojaSlugItemSlugRouteImport.update({
   id: '/$itemSlug',
   path: '/$itemSlug',
@@ -210,6 +216,7 @@ export interface FileRoutesByFullPath {
   '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
   '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
   '/api/payment-provider/settings': typeof ApiPaymentProviderSettingsRoute
+  '/api/reminders/signals': typeof ApiRemindersSignalsRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
   '/api/bling/oauth/callback': typeof ApiBlingOauthCallbackRoute
   '/api/mercadopago/oauth/callback': typeof ApiMercadopagoOauthCallbackRoute
@@ -239,6 +246,7 @@ export interface FileRoutesByTo {
   '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
   '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
   '/api/payment-provider/settings': typeof ApiPaymentProviderSettingsRoute
+  '/api/reminders/signals': typeof ApiRemindersSignalsRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
   '/api/bling/oauth/callback': typeof ApiBlingOauthCallbackRoute
   '/api/mercadopago/oauth/callback': typeof ApiMercadopagoOauthCallbackRoute
@@ -270,6 +278,7 @@ export interface FileRoutesById {
   '/api/mercadopago/public-config': typeof ApiMercadopagoPublicConfigRoute
   '/api/mercadopago/webhook': typeof ApiMercadopagoWebhookRoute
   '/api/payment-provider/settings': typeof ApiPaymentProviderSettingsRoute
+  '/api/reminders/signals': typeof ApiRemindersSignalsRoute
   '/loja/$slug/$itemSlug': typeof LojaSlugItemSlugRoute
   '/api/bling/oauth/callback': typeof ApiBlingOauthCallbackRoute
   '/api/mercadopago/oauth/callback': typeof ApiMercadopagoOauthCallbackRoute
@@ -301,6 +310,7 @@ export interface FileRouteTypes {
     | '/api/mercadopago/public-config'
     | '/api/mercadopago/webhook'
     | '/api/payment-provider/settings'
+    | '/api/reminders/signals'
     | '/loja/$slug/$itemSlug'
     | '/api/bling/oauth/callback'
     | '/api/mercadopago/oauth/callback'
@@ -330,6 +340,7 @@ export interface FileRouteTypes {
     | '/api/mercadopago/public-config'
     | '/api/mercadopago/webhook'
     | '/api/payment-provider/settings'
+    | '/api/reminders/signals'
     | '/loja/$slug/$itemSlug'
     | '/api/bling/oauth/callback'
     | '/api/mercadopago/oauth/callback'
@@ -360,6 +371,7 @@ export interface FileRouteTypes {
     | '/api/mercadopago/public-config'
     | '/api/mercadopago/webhook'
     | '/api/payment-provider/settings'
+    | '/api/reminders/signals'
     | '/loja/$slug/$itemSlug'
     | '/api/bling/oauth/callback'
     | '/api/mercadopago/oauth/callback'
@@ -389,6 +401,7 @@ export interface RootRouteChildren {
   ApiMercadopagoPublicConfigRoute: typeof ApiMercadopagoPublicConfigRoute
   ApiMercadopagoWebhookRoute: typeof ApiMercadopagoWebhookRoute
   ApiPaymentProviderSettingsRoute: typeof ApiPaymentProviderSettingsRoute
+  ApiRemindersSignalsRoute: typeof ApiRemindersSignalsRoute
   ApiBlingOauthCallbackRoute: typeof ApiBlingOauthCallbackRoute
   ApiMercadopagoOauthCallbackRoute: typeof ApiMercadopagoOauthCallbackRoute
   ApiMercadopagoOauthDisconnectRoute: typeof ApiMercadopagoOauthDisconnectRoute
@@ -552,6 +565,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPaymentProviderSettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/reminders/signals': {
+      id: '/api/reminders/signals'
+      path: '/api/reminders/signals'
+      fullPath: '/api/reminders/signals'
+      preLoaderRoute: typeof ApiRemindersSignalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/loja/$slug/$itemSlug': {
       id: '/loja/$slug/$itemSlug'
       path: '/$itemSlug'
@@ -643,6 +663,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMercadopagoPublicConfigRoute: ApiMercadopagoPublicConfigRoute,
   ApiMercadopagoWebhookRoute: ApiMercadopagoWebhookRoute,
   ApiPaymentProviderSettingsRoute: ApiPaymentProviderSettingsRoute,
+  ApiRemindersSignalsRoute: ApiRemindersSignalsRoute,
   ApiBlingOauthCallbackRoute: ApiBlingOauthCallbackRoute,
   ApiMercadopagoOauthCallbackRoute: ApiMercadopagoOauthCallbackRoute,
   ApiMercadopagoOauthDisconnectRoute: ApiMercadopagoOauthDisconnectRoute,

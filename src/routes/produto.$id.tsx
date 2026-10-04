@@ -42,7 +42,7 @@ export const Route = createFileRoute("/produto/$id")({
     const desc = product
       ? `Pré-venda de ${product.brand} ${product.model} por ${brl(product.price)}. Garanta sua unidade na loja ${store?.name || "Vendas 1:64"}!`
       : "Detalhes da pré-venda: preço, unidades disponíveis, prazo do sinal e reserva.";
-    const img = product?.image_url || store?.logo_url || store?.favicon_url || "https://vendas164.com.br/og-image.png";
+    const img = product?.image_url || store?.logo_url || store?.favicon_url || "https://vendas164.com.br/og-image.jpg";
     const favicon = store?.favicon_url || store?.logo_url || undefined;
 
     return {

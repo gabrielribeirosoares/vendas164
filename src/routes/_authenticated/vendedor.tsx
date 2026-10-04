@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Copy,
@@ -45,16 +45,29 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, slugify } from "@/lib/format";
 import { useSession } from "@/lib/session";
-import { OrdersTab } from "@/components/vendedor/OrderManager";
 import { BrandingTab } from "@/components/vendedor/StoreSettings";
-import { PaymentSettingsTab } from "@/components/vendedor/PaymentSettingsTab";
-import { ClientsTab } from "@/components/vendedor/ClientsManager";
 import { SmartNotifications } from "@/components/vendedor/SmartNotifications";
-import { ProductsTab } from "@/components/vendedor/ProductManager";
 import { SellerSectionHeader } from "@/components/vendedor/SellerSectionHeader";
-import { TrackingIntegration } from "@/components/vendedor/TrackingIntegration";
-import { WaitlistManager, type WaitlistRow } from "@/components/vendedor/WaitlistManager";
-import { ManualReservationDialog } from "@/components/vendedor/ManualReservationDialog";
+import type { WaitlistRow } from "@/components/vendedor/WaitlistManager";
+
+// Abas pesadas carregadas sob demanda (code splitting)
+const OrdersTab = lazy(() => import("@/components/vendedor/OrderManager").then((m) => ({ default: m.OrdersTab })));
+const ProductsTab = lazy(() => import("@/components/vendedor/ProductManager").then((m) => ({ default: m.ProductsTab })));
+const ClientsTab = lazy(() => import("@/components/vendedor/ClientsManager").then((m) => ({ default: m.ClientsTab })));
+const PaymentSettingsTab = lazy(() => import("@/components/vendedor/PaymentSettingsTab").then((m) => ({ default: m.PaymentSettingsTab })));
+const TrackingIntegration = lazy(() => import("@/components/vendedor/TrackingIntegration").then((m) => ({ default: m.TrackingIntegration })));
+const WaitlistManager = lazy(() => import("@/components/vendedor/WaitlistManager").then((m) => ({ default: m.WaitlistManager })));
+const ManualReservationDialog = lazy(() => import("@/components/vendedor/ManualReservationDialog").then((m) => ({ default: m.ManualReservationDialog })));
+
+function TabFallback() {
+  return (
+    <div className="space-y-3 mt-5" aria-busy="true" aria-label="Carregando">
+      <div className="h-10 rounded-lg bg-muted animate-pulse" />
+      <div className="h-32 rounded-lg bg-muted animate-pulse" />
+      <div className="h-32 rounded-lg bg-muted animate-pulse" />
+    </div>
+  );
+}
 
 export function parseStoreSubscription(store: any) {
   const status = store?.status;
@@ -174,7 +187,7 @@ function SellerDashboard() {
   const activeTab = search.tab || "produtos";
   const setActiveTab = (tab: string) => navigate({ search: { tab }, replace: true });
   const [onlyOutOfStock, setOnlyOutOfStock] = useState(false);
-  const [orderFocus, setOrderFocus] = useState<"atrasado" | "envios" | undefined>();
+  const [orderFocus, setOrderFocus] = useState<"atrasado" | "envios" | "vencendo" | undefined>();
   const [trialDismissed, setTrialDismissed] = useState(false);
   const [manualReservationWaitlist, setManualReservationWaitlist] = useState<{
     product: any;
@@ -266,23 +279,25 @@ function SellerDashboard() {
   const needsFullWaitlist = activeTab === "fila_espera";
   const needsWaitlistProductIds = ["produtos", "pronta_entrega"].includes(activeTab);
 
-  const { data: alertCounts = { outOfStock: 0, lateOrders: 0, pendingShipping: 0, waitlist: 0 } } = useQuery({
+  const { data: alertCounts = { outOfStock: 0, dueSoon: 0, lateOrders: 0, pendingShipping: 0, waitlist: 0 } } = useQuery({
     queryKey: ["store-alert-counts", store?.id],
     enabled: !!store,
     refetchInterval: 60_000,
     queryFn: async () => {
       const now = new Date().toISOString();
-      const [outOfStock, lateOrders, pendingShipping, waitlistCount] = await Promise.all([
+      const [outOfStock, lateOrders, pendingShipping, waitlistCount, dueSoon] = await Promise.all([
         supabase.from("products").select("id", { count: "exact", head: true }).eq("store_id", store!.id).eq("is_open", true).eq("stock", 0),
         supabase.from("orders").select("id", { count: "exact", head: true }).eq("store_id", store!.id).eq("payment_status", "aguardando_sinal").lt("reservation_expires_at", now),
         supabase.from("orders").select("id", { count: "exact", head: true }).eq("store_id", store!.id).eq("payment_status", "quitado").not("delivery_status", "in", "(enviado,em_transito,cancelado,entregue)"),
         supabase.from("waitlist").select("id", { count: "exact", head: true }).eq("store_id", store!.id),
+        supabase.from("orders").select("id", { count: "exact", head: true }).eq("store_id", store!.id).eq("payment_status", "aguardando_sinal").neq("delivery_status", "cancelado").gt("reservation_expires_at", now).lte("reservation_expires_at", new Date(Date.now() + 86400000).toISOString()),
       ]);
 
-      const error = outOfStock.error || lateOrders.error || pendingShipping.error || waitlistCount.error;
+      const error = outOfStock.error || lateOrders.error || pendingShipping.error || waitlistCount.error || dueSoon.error;
       if (error) throw error;
       return {
         outOfStock: outOfStock.count ?? 0,
+        dueSoon: dueSoon.count ?? 0,
         lateOrders: lateOrders.count ?? 0,
         pendingShipping: pendingShipping.count ?? 0,
         waitlist: waitlistCount.count ?? 0,
@@ -546,6 +561,7 @@ function SellerDashboard() {
         </div>
 
         <SmartNotifications
+          dueSoonCount={alertCounts.dueSoon}
           outOfStockCount={alertCounts.outOfStock}
           lateOrderCount={alertCounts.lateOrders}
           pendingShippingCount={alertCounts.pendingShipping}
@@ -604,6 +620,7 @@ function SellerDashboard() {
           <div className="min-w-0">
             <SellerSectionHeader activeSection={activeTab} storeName={store.name} />
 
+          <Suspense fallback={<TabFallback />}>
           <TabsContent value="produtos" className="mt-5">
             {productsError ? <SellerDataError onRetry={() => void retryProducts()} /> : <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pre_venda" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} waitlistCounts={waitlistCounts} />}
           </TabsContent>
@@ -656,10 +673,12 @@ function SellerDashboard() {
               <AdminModerationPanel />
             </TabsContent>
           )}
+          </Suspense>
           </div>
         </Tabs>
 
         {manualReservationWaitlist && (
+          <Suspense fallback={null}>
           <ManualReservationDialog
             open={!!manualReservationWaitlist}
             onClose={() => setManualReservationWaitlist(null)}
@@ -680,6 +699,7 @@ function SellerDashboard() {
             preSelectedProduct={manualReservationWaitlist.product}
             preSelectedUser={manualReservationWaitlist.user}
           />
+          </Suspense>
         )}
       </main>
     </div>

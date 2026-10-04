@@ -23,7 +23,10 @@ export function Countdown({ expiresAt }: { expiresAt: string }) {
   const s = String(total % 60).padStart(2, "0");
 
   return (
-    <span className="font-mono text-sm tabular-nums text-warning">
+    <span
+      className={`font-mono text-sm tabular-nums ${ms <= 86400000 ? "text-primary font-semibold" : "text-muted-foreground"}`}
+    >
+      {ms <= 86400000 ? "Vence em " : ""}
       {h}:{m}:{s}
     </span>
   );

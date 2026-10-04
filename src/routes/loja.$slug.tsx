@@ -551,8 +551,10 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
               <img
                 src={getStoreBrandImageUrl(store.logo_url, 128)}
                 alt={`Logo ${store.name}`}
+                width="64"
+                height="64"
+                decoding="async"
                 className="size-16 rounded-2xl object-cover border border-border/30 shadow-sm"
-                loading="lazy"
               />
             ) : (
               <span
@@ -865,6 +867,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                                       src={getProductCardImageUrl(p.image_url)}
                                       alt={p.model}
                                       loading="lazy"
+                                      decoding="async"
                                       className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
                                     />
                                   ) : (

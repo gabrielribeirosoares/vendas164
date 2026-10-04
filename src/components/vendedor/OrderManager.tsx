@@ -16,6 +16,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DeliveryBadge, PaymentBadge } from '@/components/StatusBadge';
+import { isSignalDueSoon } from "@/lib/signalReminder";
 import { Countdown } from '@/components/Countdown';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { prepararDadosExportacaoFinanceira } from '@/lib/exportFinanceiro';
@@ -289,7 +290,7 @@ export function OrdersTab({
   storeColor?: string;
   storeName?: string;
   products?: Product[];
-  focusFilter?: "atrasado" | "envios";
+  focusFilter?: "atrasado" | "envios" | "vencendo";
   onClearFocus?: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -344,6 +345,7 @@ export function OrdersTab({
       pageSize,
     ],
     enabled: !!storeId,
+    refetchInterval: focusFilter === "vencendo" ? 60_000 : false,
     placeholderData: (previous) => previous,
     queryFn: async (): Promise<SellerOrdersPage> => {
       const { data, error } = await supabase.rpc("seller_orders_page", {
@@ -534,6 +536,7 @@ export function OrdersTab({
 
   const filteredOrders = useMemo(() => {
     return sourceOrders.filter((o) => {
+      if (focusFilter === "vencendo" && !isSignalDueSoon(o)) return false;
       if (focusFilter === "atrasado" && (o.payment_status !== "aguardando_sinal" || !o.reservation_expires_at || new Date(o.reservation_expires_at) >= new Date())) return false;
       if (focusFilter === "envios" && (o.payment_status !== "quitado" || ["enviado", "em_transito", "cancelado", "entregue"].includes(o.delivery_status))) return false;
       if (startDate) {
@@ -1122,9 +1125,12 @@ export function OrdersTab({
     }
   };
 
+  const activeFilterCount = Number(categoryFilter !== "todos") + Number(Boolean(startDate || endDate)) + Number(paymentFilter !== "todos") + Number(deliveryFilter !== "todos") + Number(Boolean(focusFilter));
+
   return (
     <div className="space-y-6">
-      <SellerOverview totals={overviewTotals} brandData={overviewBrands} />
+      <details className="rounded-xl border border-border/60 p-3 md:hidden"><summary className="cursor-pointer text-sm font-medium">Resumo e indicadores</summary><div className="mt-3"><SellerOverview totals={overviewTotals} brandData={overviewBrands} /></div></details>
+      <div className="hidden md:block"><SellerOverview totals={overviewTotals} brandData={overviewBrands} /></div>
       {isOrdersError && (
         <InterfaceState
           variant="error"
@@ -1136,14 +1142,37 @@ export function OrdersTab({
       )}
       {focusFilter && (
         <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-sm">
-          <span>{focusFilter === "atrasado" ? "Sinais atrasados" : "Envios pendentes"}</span>
+          <span>{focusFilter === "atrasado" ? "Sinais atrasados" : focusFilter === "vencendo" ? "Sinais próximos do vencimento (24h)" : "Envios pendentes"}</span>
           <Button variant="ghost" size="sm" onClick={onClearFocus}>Limpar filtro do alerta</Button>
         </div>
       )}
       <Card className="border-border/60 panel relative">
         <SellerWorkflowSummary workflowView={workflowView} onChange={setWorkflowView} />
 
-        {/* FILTRO POR TIPO DE PEDIDO (PRÉ-VENDA VS PRONTA ENTREGA) */}
+        <div className="space-y-3 border-b border-border/60 p-3 sm:p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative w-full sm:flex-1 sm:min-w-[240px]">
+              <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por cliente, Nº do pedido (#id), WhatsApp, miniatura ou SKU..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(0);
+                }}
+                className="pl-9 h-9 text-sm"
+              />
+            </div>
+            {storeId && <Button className="h-10 shrink-0 gap-1.5" onClick={() => setManualDialogOpen(true)}><Plus className="size-4" />Nova Reserva</Button>}
+          </div>
+          <div className="flex flex-wrap items-start gap-2">
+            <details className="min-w-0 flex-1 group open:basis-full open:order-last">
+              <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg border px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                <Filter className="size-4" />Filtros{activeFilterCount > 0 && <Badge variant="secondary">{activeFilterCount}</Badge>}
+                <ChevronDown className="ml-auto size-4 group-open:rotate-180" />
+              </summary>
+              <div className="mt-3 space-y-3 rounded-xl border p-3">
+                <p className="text-xs font-medium text-muted-foreground">Modalidade</p>
         <div className="grid grid-cols-2 gap-2 px-3 pb-1 pt-3 sm:flex sm:flex-wrap sm:p-4 sm:pb-0">
           <Button
             type="button"
@@ -1178,21 +1207,7 @@ export function OrdersTab({
           </Button>
         </div>
 
-        {/* BARRA DE PESQUISA E FILTROS DE CLIENTE / WHATSAPP / STATUS */}
-        <div className="flex flex-col gap-3 border-b border-border/60 p-3 sm:p-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="relative w-full sm:flex-1 sm:min-w-[240px]">
-              <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por cliente, Nº do pedido (#id), WhatsApp, miniatura ou SKU..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setPage(0);
-                }}
-                className="pl-9 h-9 text-sm"
-              />
-            </div>
+                <p className="text-xs font-medium text-muted-foreground">Período</p>
             <DateRangeFilter
               startDate={startDate}
               endDate={endDate}
@@ -1200,64 +1215,7 @@ export function OrdersTab({
               onEndDateChange={(d) => { setEndDate(d); setPage(0); }}
               onClearFilter={() => { setStartDate(""); setEndDate(""); setPage(0); }}
             />
-          </div>
-          <div className="flex flex-wrap items-center gap-2 w-full justify-between">
-            <div className="hidden bg-muted/50 p-0.5 rounded-lg border border-border/60 sm:flex">
-              <Button
-                variant={viewMode === "table" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 px-2"
-                onClick={() => setViewMode("table")}
-                title="Visualização em Tabela"
-              >
-                <List className="size-4" />
-              </Button>
-              <Button
-                variant={viewMode === "kanban" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 px-2"
-                onClick={() => setViewMode("kanban")}
-                title="Visualização em Kanban"
-              >
-                <LayoutGrid className="size-4" />
-              </Button>
-            </div>
-            <div className="grid w-full grid-cols-2 items-center gap-2 sm:flex sm:w-auto sm:flex-wrap">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void handleFinancialExport()}
-                className="h-9 text-xs gap-1.5 border-border/80 no-print"
-              >
-                <Download className="size-3.5 text-primary" />
-                <span><span className="sm:hidden">Exportar</span><span className="hidden sm:inline">Exportar Relatório Financeiro</span></span>
-              </Button>
-
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setPackingSlipOpen(true)}
-                className="h-9 text-xs gap-1.5 border-border/80 no-print"
-                title="Romaneio de Separação e Despacho de Encomendas"
-              >
-                <Truck className="size-3.5 text-blue-500" />
-                <span><span className="sm:hidden">Romaneio</span><span className="hidden sm:inline">Romaneio de Envio</span></span>
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border/40">
-            {storeId && (
-              <Button
-                size="sm"
-                onClick={() => setManualDialogOpen(true)}
-                className="h-10 w-full gap-1 bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90 sm:h-9 sm:w-auto sm:text-xs"
-              >
-                <Plus className="size-4" />
-                <span>Nova Reserva</span>
-              </Button>
-            )}
-            <Filter className="ml-1 hidden size-4 text-muted-foreground sm:block" />
+                <div className="flex flex-wrap gap-2">
             <Select
               value={paymentFilter}
               onValueChange={(v) => {
@@ -1298,6 +1256,37 @@ export function OrdersTab({
                 <SelectItem value="cancelado">Cancelado</SelectItem>
               </SelectContent>
             </Select>
+                </div>
+                {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={() => { setCategoryFilter("todos"); setStartDate(""); setEndDate(""); setWorkflowView("todas"); }}>Limpar filtros</Button>}
+              </div>
+            </details>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild><Button variant="outline" className="h-10 gap-2">Mais ações<ChevronDown className="size-4" /></Button></DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => void handleFinancialExport()}><Download className="mr-2 size-4" />Exportar Relatório Financeiro</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setPackingSlipOpen(true)}><Truck className="mr-2 size-4" />Romaneio de Envio</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <div className="hidden bg-muted/50 p-0.5 rounded-lg border border-border/60 sm:flex">
+              <Button
+                variant={viewMode === "table" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => setViewMode("table")}
+                title="Visualização em Tabela"
+              >
+                <List className="size-4" />
+              </Button>
+              <Button
+                variant={viewMode === "kanban" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => setViewMode("kanban")}
+                title="Visualização em Kanban"
+              >
+                <LayoutGrid className="size-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -1459,7 +1448,7 @@ export function OrdersTab({
                           <div className="flex items-start gap-3 min-w-0 flex-1">
                             <Checkbox checked={selectedOrders.has(groupId)} onCheckedChange={() => toggleSelection(groupId)} className="mt-1 shrink-0" />
                             <div className="min-w-0 flex-1">
-                              <p className="font-semibold text-base whitespace-normal break-words leading-snug">{displayName}</p>
+                              <button type="button" onClick={() => openReservationDetails(item)} className="text-left font-semibold text-base whitespace-normal break-words leading-snug underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Ver detalhes da reserva de ${displayName}`}>{displayName}</button>
                               {o.profiles?.email && !guestMeta && (
                                 <p className="text-xs text-muted-foreground break-all">{o.profiles.email}</p>
                               )}
@@ -1475,7 +1464,6 @@ export function OrdersTab({
                           />
                         </div>
 
-                        <ReservationNextAction paymentStatus={o.payment_status} deliveryStatus={o.delivery_status} onOpenDetails={(section) => openReservationDetails(item, section)} />
 
                         {/* Produto / Miniatura */}
                         <div className="flex items-start gap-3 rounded-xl bg-muted/30 p-2.5 border border-border/40">
@@ -1550,6 +1538,13 @@ export function OrdersTab({
                               })()}
                             </p>
                           </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2"><PaymentBadge status={o.payment_status} /><DeliveryBadge status={o.delivery_status} />{o.payment_status === "aguardando_sinal" && o.reservation_expires_at && <Countdown expiresAt={o.reservation_expires_at} />}</div>
+                        <ReservationNextAction hideDetails paymentStatus={o.payment_status} deliveryStatus={o.delivery_status} onOpenDetails={(section) => openReservationDetails(item, section)} />
+                        <details className="rounded-xl border border-border/40 p-3 group">
+                          <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">Mais opções da reserva<ChevronDown className="size-4 group-open:rotate-180" /></summary>
+                          <div className="mt-3 space-y-3">
                           <div className="col-span-2 border-t border-border/40 pt-2.5">
                             <label htmlFor={`mobile-signal-${groupId}`} className="mb-1.5 block text-xs font-medium text-muted-foreground">
                               Sinal por unidade
@@ -1574,8 +1569,6 @@ export function OrdersTab({
                               </Button>
                             </div>
                           </div>
-                        </div>
-
                         {/* Situação financeira e andamento do envio */}
                         {(() => {
                           const currentPaymentStatus = o.payment_status;
@@ -1708,6 +1701,8 @@ export function OrdersTab({
                     </>
                   )}
                 </div>
+                          </div>
+                        </details>
               </div>
               </div>
             );

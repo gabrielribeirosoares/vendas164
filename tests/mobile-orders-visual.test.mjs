@@ -32,5 +32,5 @@ test("filtros, rastreio e paginação não comprimem as ações móveis", async 
   assert.match(source, /basis-\[180px\]/);
   assert.match(source, />Anterior<\/span>/);
   assert.match(source, />Próxima<\/span>/);
-  assert.match(source, /sm:hidden">Exportar/);
+  assert.match(source, /Exportar Relatório Financeiro/);
 });

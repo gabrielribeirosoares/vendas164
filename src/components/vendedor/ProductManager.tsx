@@ -37,10 +37,10 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { brl, slugify } from "@/lib/format";
 import { getStoreFullUrl } from "@/lib/subdomain";
-import { uploadImage } from "@/lib/upload";
-import { getImageUploadErrorMessage } from "@/lib/imageOptimization";
 import { getStoreBrands, saveStoreBrands } from "@/lib/brands";
 import { getProductTotalStock } from "@/lib/stock";
+import { ProductPhotosInput } from "./ProductPhotosInput";
+import { getProductImageUrls } from "@/lib/imageUrls";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Store = Tables<"stores">;
@@ -431,16 +431,6 @@ export function ProductsTab({
     }
   }
 
-  async function onFile(file: File) {
-    try {
-      const url = await uploadImage(userId, file, "product");
-      setForm((f) => ({ ...f, image_url: url }));
-      toast.success("Foto otimizada e enviada!");
-    } catch (error) {
-      toast.error(getImageUploadErrorMessage(error));
-    }
-  }
-
   return (
     <>
       {/* Sheet lateral com o formulário */}
@@ -817,15 +807,17 @@ export function ProductsTab({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="photo" className="text-xs font-medium text-muted-foreground">Foto da miniatura</Label>
-                <Input
-                  id="photo"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-                  className="bg-muted/20 border-border/30"
+                <ProductPhotosInput
+                  images={getProductImageUrls(form.image_url)}
+                  onChange={(next) => {
+                    setForm((f) => ({
+                      ...f,
+                      image_url: next.length > 1 ? JSON.stringify(next) : (next[0] || ""),
+                    }));
+                  }}
+                  userId={userId}
+                  disabled={saving}
                 />
-                {form.image_url && <p className="text-xs text-success">Foto pronta para publicar.</p>}
               </div>
               <Button type="submit" className="w-full text-white font-semibold hover:opacity-90" style={{ backgroundColor: activeColor, color: activeTextColor }} disabled={saving}>
                 {saving && <Loader2 className="size-4 animate-spin" />} {mode === "pronta_entrega" ? "Publicar a pronta entrega" : "Publicar pré-venda"}
@@ -1621,16 +1613,6 @@ function EditProductDialog({
     onClose();
   }
 
-  async function onFile(file: File) {
-    try {
-      const url = await uploadImage(userId, file, "product");
-      setForm((f) => ({ ...f, image_url: url }));
-      toast.success("Foto otimizada e enviada!");
-    } catch (error) {
-      toast.error(getImageUploadErrorMessage(error));
-    }
-  }
-
   const isProntaMode = (form as any).category === "pronta_entrega";
 
   return (
@@ -2058,23 +2040,17 @@ function EditProductDialog({
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-photo" className="text-xs font-medium text-muted-foreground">Foto da miniatura</Label>
-            <Input
-              id="edit-photo"
-              type="file"
-              accept="image/*"
-              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-              className="bg-muted/20 border-border/30"
-            />
-            {form.image_url && (
-              <img
-                src={form.image_url}
-                alt="Foto da miniatura"
-                className="mt-2 h-16 w-full rounded-lg object-cover border border-border/30"
-              />
-            )}
-          </div>
+          <ProductPhotosInput
+            images={getProductImageUrls(form.image_url)}
+            onChange={(next) => {
+              setForm((f) => ({
+                ...f,
+                image_url: next.length > 1 ? JSON.stringify(next) : (next[0] || ""),
+              }));
+            }}
+            userId={userId}
+            disabled={saving}
+          />
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={onClose}>
