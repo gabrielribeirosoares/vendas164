@@ -5,7 +5,6 @@ import {
   Copy,
   CreditCard,
   ExternalLink,
-  FileSpreadsheet,
   Loader2,
   Package,
   Palette,
@@ -22,7 +21,6 @@ import {
   Clock,
   User,
   RefreshCw,
-  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
@@ -57,9 +55,6 @@ import { SellerSectionHeader } from "@/components/vendedor/SellerSectionHeader";
 import { TrackingIntegration } from "@/components/vendedor/TrackingIntegration";
 import { WaitlistManager, type WaitlistRow } from "@/components/vendedor/WaitlistManager";
 import { ManualReservationDialog } from "@/components/vendedor/ManualReservationDialog";
-import { SpreadsheetImporterDialog } from "@/components/vendedor/SpreadsheetImporterDialog";
-import { undoSpreadsheetImport } from "@/lib/importSpreadsheet";
-import { getLastActiveImport, markImportAsUndone } from "@/lib/importHistory";
 
 export function parseStoreSubscription(store: any) {
   const status = store?.status;
@@ -607,98 +602,6 @@ function SellerDashboard() {
           </TabsList>
 
           <div className="min-w-0">
-            {/* Navegação de Abas no Mobile (Scroll Horizontal) */}
-            <div className="flex md:hidden items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none mb-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={activeTab === "produtos" ? "default" : "outline"}
-                onClick={() => setActiveTab("produtos")}
-                className="h-8 text-xs shrink-0 gap-1.5"
-              >
-                <Package className="size-3 text-muted-foreground" /> Pré-vendas
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={activeTab === "pronta_entrega" ? "default" : "outline"}
-                onClick={() => setActiveTab("pronta_entrega")}
-                className="h-8 text-xs shrink-0 gap-1.5"
-              >
-                <Zap className="size-3 text-muted-foreground" /> Pronta Entrega
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={activeTab === "reservas" ? "default" : "outline"}
-                onClick={() => setActiveTab("reservas")}
-                className="h-8 text-xs shrink-0 gap-1.5"
-              >
-                <Car className="size-3 text-muted-foreground" /> Reservas
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={activeTab === "clientes" ? "default" : "outline"}
-                onClick={() => setActiveTab("clientes")}
-                className="h-8 text-xs shrink-0 gap-1.5"
-              >
-                <User className="size-3 text-muted-foreground" /> Clientes
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={activeTab === "fila_espera" ? "default" : "outline"}
-                onClick={() => setActiveTab("fila_espera")}
-                className="h-8 text-xs shrink-0 gap-1.5"
-              >
-                <Clock className="size-3 text-muted-foreground" /> Fila
-                {alertCounts.waitlist > 0 && (
-                  <span className="rounded-full bg-muted text-muted-foreground border border-border/50 px-1 py-0.2 text-[9px] font-semibold">
-                    {alertCounts.waitlist}
-                  </span>
-                )}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={activeTab === "rastreamento" ? "default" : "outline"}
-                onClick={() => setActiveTab("rastreamento")}
-                className="h-8 text-xs shrink-0 gap-1.5"
-              >
-                <RefreshCw className="size-3 text-muted-foreground" /> Rastreamento
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={activeTab === "loja" ? "default" : "outline"}
-                onClick={() => setActiveTab("loja")}
-                className="h-8 text-xs shrink-0 gap-1.5"
-              >
-                <Palette className="size-3 text-muted-foreground" /> Personalização
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={activeTab === "pagamentos" ? "default" : "outline"}
-                onClick={() => setActiveTab("pagamentos")}
-                className="h-8 text-xs shrink-0 gap-1.5"
-              >
-                <CreditCard className="size-3 text-muted-foreground" /> Pagamentos
-              </Button>
-              {isAdmin && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={activeTab === "admin_moderation" ? "default" : "outline"}
-                  onClick={() => setActiveTab("admin_moderation")}
-                  className="h-8 text-xs shrink-0 gap-1.5"
-                >
-                  <ShieldCheck className="size-3 text-muted-foreground" /> Moderação
-                </Button>
-              )}
-            </div>
-
             <SellerSectionHeader activeSection={activeTab} storeName={store.name} />
 
           <TabsContent value="produtos" className="mt-5">
@@ -931,49 +834,12 @@ function CreateStore({ userId, userEmail, onCreated }: { userId: string; userEma
 function AdminModerationPanel() {
   const queryClient = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
-  const [importStoreId, setImportStoreId] = useState<string | null>(null);
-
   // Estado do Modal de Gerenciamento de Assinatura e Dias de Teste
   const [managingStore, setManagingStore] = useState<any>(null);
   const [selectedPlanType, setSelectedPlanType] = useState<"subscriber" | "trial" | "rejected">("subscriber");
   const [customDays, setCustomDays] = useState<number>(14);
   const [customExpiryDate, setCustomExpiryDate] = useState<string>("");
   const [adminNote, setAdminNote] = useState<string>("");
-  const [undoingStoreId, setUndoingStoreId] = useState<string | null>(null);
-  const [, setHistoryTick] = useState(0);
-
-  useEffect(() => {
-    const handleHistoryChange = () => setHistoryTick((prev) => prev + 1);
-    window.addEventListener("import_history_updated", handleHistoryChange);
-    return () => window.removeEventListener("import_history_updated", handleHistoryChange);
-  }, []);
-
-  async function handleUndoStoreImport(st: any) {
-    const batch = getLastActiveImport(st.id);
-    if (!batch || batch.orderIds.length === 0) return;
-
-    const confirmed = window.confirm(
-      `Tem certeza que deseja desfazer a última importação da loja "${st.name}" (${batch.orderCount} reservas criadas em ${new Date(batch.importedAt).toLocaleString("pt-BR")})? Esta ação excluirá as reservas permanentemente.`
-    );
-    if (!confirmed) return;
-
-    setUndoingStoreId(st.id);
-    try {
-      await undoSpreadsheetImport({
-        orderIds: batch.orderIds,
-        productIds: batch.productIds,
-      });
-      markImportAsUndone(batch.id);
-      setHistoryTick((prev) => prev + 1);
-      toast.success(`Última importação da loja "${st.name}" desfeita com sucesso! ${batch.orderCount} reservas foram excluídas.`);
-      queryClient.invalidateQueries();
-    } catch (err: any) {
-      toast.error(`Erro ao desfazer importação: ${err?.message || "Erro desconhecido"}`);
-    } finally {
-      setUndoingStoreId(null);
-    }
-  }
-
   const { data: allStores, isLoading } = useQuery({
     queryKey: ["admin-all-stores"],
     queryFn: async () => {
@@ -1109,15 +975,6 @@ function AdminModerationPanel() {
 
   return (
     <div className="space-y-6">
-      {/* Modal de Importação de Planilha para qualquer loja */}
-      {importStoreId && (
-        <SpreadsheetImporterDialog
-          open={!!importStoreId}
-          onOpenChange={(open) => { if (!open) setImportStoreId(null); }}
-          storeId={importStoreId}
-          isModerator={true}
-        />
-      )}
       {/* METRICAS GLOBAIS DA PLATAFORMA */}
       <div className="grid gap-3 sm:grid-cols-4">
         <Card className="panel border-primary/30 bg-primary/5 p-4">
@@ -1247,35 +1104,6 @@ function AdminModerationPanel() {
                       >
                         <Settings className="size-3.5" /> Gerenciar Assinatura / Dias
                       </Button>
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/5"
-                        onClick={() => setImportStoreId(st.id)}
-                      >
-                        <FileSpreadsheet className="size-3.5" /> Importar Planilha
-                      </Button>
-
-                      {getLastActiveImport(st.id) && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-xs gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10"
-                          onClick={() => handleUndoStoreImport(st)}
-                          disabled={undoingStoreId === st.id}
-                        >
-                          {undoingStoreId === st.id ? (
-                            <>
-                              <Loader2 className="size-3.5 animate-spin" /> Desfazendo...
-                            </>
-                          ) : (
-                            <>
-                              <Trash2 className="size-3.5" /> Desfazer Importação ({getLastActiveImport(st.id)?.orderCount})
-                            </>
-                          )}
-                        </Button>
-                      )}
 
                       {cleanPhone && (
                         <Button

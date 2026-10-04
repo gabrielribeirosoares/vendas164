@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Car, CheckCircle2, CheckSquare, Copy, CreditCard, ExternalLink, Layers, Loader2, MessageCircle, Package, QrCode, Search, Sparkles, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
+import { BookmarkCheck, Car, CheckCircle2, CheckSquare, Copy, CreditCard, ExternalLink, Layers, Loader2, MessageCircle, Package, Search, Sparkles, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { getStoreBrandImageUrl } from "@/lib/imageUrls";
@@ -416,15 +416,14 @@ function CustomerDashboardContent() {
     const isGuestPayload = (key?: string | null) =>
       !key || key.startsWith("GUEST:") || key.startsWith("{");
     const rawOrderPix = !isGuestPayload(o.pix_key) ? o.pix_key : null;
-    const pixKey = rawOrderPix || o.stores?.pix_key || o.stores?.whatsapp_number || "";
+    const pixKey = rawOrderPix || o.stores?.pix_key || "";
 
     const productName = `${o.products?.brand || ""} ${o.products?.model || ""}`.trim() || "Miniatura";
     const isPayable =
       o.payment_status !== "quitado" &&
       o.payment_status !== "cancelado" &&
       o.delivery_status !== "cancelado" &&
-      amount > 0 &&
-      !!pixKey;
+      amount > 0;
 
     return {
       amount,
@@ -715,7 +714,7 @@ function CustomerDashboardContent() {
 
         <Tabs defaultValue="reservas" className="mt-10">
           <TabsList className="w-full flex overflow-x-auto justify-start sm:justify-center whitespace-nowrap p-1 max-w-full bg-muted/30">
-            <TabsTrigger value="reservas" className="text-xs sm:text-sm">Minhas reservas</TabsTrigger>
+            <TabsTrigger value="reservas" className="text-xs sm:text-sm">Reservas e pagamentos</TabsTrigger>
             <TabsTrigger value="garagem" className="gap-1.5 text-xs sm:text-sm font-semibold">
               <Car className="size-3.5 text-primary" />
               <span>Minha Garagem ({deliveredOrders.length})</span>
@@ -732,9 +731,9 @@ function CustomerDashboardContent() {
                     <Layers className="size-4" />
                   </div>
                   <div>
-                    <span className="font-semibold block">Pagamento Consolidado via PIX</span>
+                    <span className="font-semibold block">Pagamento consolidado</span>
                     <span className="text-muted-foreground text-[11px]">
-                      Você tem reservas acumuladas na mesma loja. Marque as caixinhas ou selecione todas para pagar um único PIX.
+                      Selecione reservas da mesma loja para conferir um único total. Na próxima etapa, escolha uma das formas de pagamento disponíveis.
                     </span>
                   </div>
                 </div>
@@ -747,7 +746,7 @@ function CustomerDashboardContent() {
                       className="h-7 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10 font-medium"
                       onClick={() => handleSelectAllFromStore(st.storeId)}
                     >
-                      <CheckSquare className="size-3.5" /> Pagar todas de {st.storeName} ({st.count})
+                      <CheckSquare className="size-3.5" /> Selecionar {st.storeName} ({st.count})
                     </Button>
                   ))}
                 </div>
@@ -762,7 +761,7 @@ function CustomerDashboardContent() {
                 <Card
                   key={o.id}
                   className={`border-border/30 bg-card/60 overflow-hidden transition-all duration-200 ${
-                    isSelected ? "ring-2 ring-emerald-500/50 bg-emerald-500/5 border-emerald-500/40" : ""
+                    isSelected ? "ring-2 ring-primary/30 bg-primary/5 border-primary/40" : ""
                   }`}
                 >
                   <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
@@ -776,14 +775,14 @@ function CustomerDashboardContent() {
                             id={`select-order-${o.id}`}
                             checked={isSelected}
                             onCheckedChange={() => handleToggleOrderSelection(o, qty)}
-                            className="data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
+                            className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                           />
-                          <span className={isSelected ? "font-semibold text-emerald-600 dark:text-emerald-400" : ""}>
+                          <span className={isSelected ? "font-semibold text-primary" : ""}>
                             {isSelected ? "Selecionada para pagamento conjunto" : "Selecionar para pagar junto com outras"}
                           </span>
                         </label>
                         {isSelected && (
-                          <Badge className="bg-emerald-600 text-white text-[11px] font-bold">
+                          <Badge className="bg-primary text-primary-foreground text-[11px] font-bold">
                             {payInfo.type === "sinal" ? "Sinal: " : "Saldo: "}
                             {brl(payInfo.amount)}
                           </Badge>
@@ -964,29 +963,32 @@ function CustomerDashboardContent() {
                     })()}
                   </div>
 
-                  {/* BLOCO DA CHAVE PIX DA LOJA */}
+                  {/* PAGAMENTO ONLINE E CHAVE PIX MANUAL DA LOJA */}
                   {o.payment_status !== "quitado" && o.payment_status !== "cancelado" && (() => {
                     const isGuestPayload = (key?: string | null) =>
                       !key || key.startsWith("GUEST:") || key.startsWith("{");
                     const rawOrderPix = !isGuestPayload(o.pix_key) ? o.pix_key : null;
-                    const pixKey = rawOrderPix || o.stores?.pix_key || o.stores?.whatsapp_number;
-                    if (!pixKey) return null;
-                    const isAguardando = o.payment_status === "aguardando_sinal";
-                    const signalInfo = getProductSignalAmount(o.products, qty);
-                    const expectedSignal = signalInfo.amount;
-                    const pixAmount = isAguardando ? expectedSignal : (Number(o.remaining_balance) * qty);
+                    const pixKey = rawOrderPix || o.stores?.pix_key;
+                    const isAguardando = payInfo.type === "sinal";
+                    const pixAmount = payInfo.amount;
 
                     return (
                       <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl bg-primary/5 p-3.5 text-xs border border-primary/10">
                         <div className="flex flex-wrap items-center gap-2 min-w-0">
                           <Wallet className="size-4 text-primary shrink-0" />
-                          <span className="font-semibold text-foreground">Chave PIX da loja:</span>
-                          <code className="bg-background/80 px-2.5 py-1 rounded-lg font-mono text-primary font-bold border border-border/30 select-all">
-                            {pixKey}
-                          </code>
+                          {pixKey ? (
+                            <>
+                              <span className="font-semibold text-foreground">PIX manual da loja:</span>
+                              <code className="bg-background/80 px-2.5 py-1 rounded-lg font-mono text-primary font-bold border border-border/30 select-all">
+                                {pixKey}
+                              </code>
+                            </>
+                          ) : (
+                            <span className="font-semibold text-foreground">Pague online pela forma habilitada pela loja.</span>
+                          )}
                           {pixAmount > 0 && (
                             <span className="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
-                              {isAguardando ? `Valor do sinal: ${brl(pixAmount)}` : `Valor a transferir: ${brl(pixAmount)}`}
+                              {isAguardando ? `Sinal pendente: ${brl(pixAmount)}` : `Saldo pendente: ${brl(pixAmount)}`}
                             </span>
                           )}
                         </div>
@@ -994,7 +996,7 @@ function CustomerDashboardContent() {
                           <Button
                             variant="default"
                             size="sm"
-                            className="h-7 px-3 text-[11px] font-semibold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                            className="h-8 px-3 text-[11px] font-semibold gap-1.5"
                             onClick={() => {
                               setCheckoutModalData({
                                 open: true,
@@ -1006,19 +1008,21 @@ function CustomerDashboardContent() {
                               });
                             }}
                           >
-                            <CreditCard className="size-3.5" /> Pagar com PIX ou Cartão
+                            <CreditCard className="size-3.5" /> Escolher forma de pagamento
                           </Button>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            className="h-7 px-2.5 text-[11px] font-semibold gap-1"
-                            onClick={() => {
-                              navigator.clipboard.writeText(pixKey);
-                              toast.success("Chave PIX copiada para a área de transferência!");
-                            }}
-                          >
-                            <Copy className="size-3" /> Copiar Chave
-                          </Button>
+                          {pixKey && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="h-8 px-2.5 text-[11px] font-semibold gap-1"
+                              onClick={() => {
+                                navigator.clipboard.writeText(pixKey);
+                                toast.success("Chave PIX copiada para a área de transferência!");
+                              }}
+                            >
+                              <Copy className="size-3" /> Copiar PIX
+                            </Button>
+                          )}
                         </div>
                       </div>
                     );
@@ -1291,11 +1295,11 @@ function CustomerDashboardContent() {
           </TabsContent>
         </Tabs>
 
-        {/* Barra Flutuante de Pagamento em Lote via PIX */}
+        {/* Ação fixa de pagamento consolidado */}
         {selectedOrdersData && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-2xl p-4 bg-background/95 backdrop-blur-md border border-emerald-500/40 rounded-2xl shadow-2xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-5 duration-200">
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-2xl p-4 bg-background/95 backdrop-blur-md border border-primary/30 rounded-2xl shadow-2xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-5 duration-200">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+              <div className="p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
                 <Wallet className="size-5" />
               </div>
               <div className="min-w-0">
@@ -1308,7 +1312,7 @@ function CustomerDashboardContent() {
                   </Badge>
                 </div>
                 <p className="text-sm font-bold text-foreground">
-                  Total PIX: <span className="text-emerald-600 dark:text-emerald-400 font-extrabold text-base">{brl(selectedOrdersData.totalAmount)}</span>
+                  Total a pagar: <span className="text-primary font-extrabold text-base">{brl(selectedOrdersData.totalAmount)}</span>
                 </p>
               </div>
             </div>
@@ -1324,10 +1328,10 @@ function CustomerDashboardContent() {
               </Button>
               <Button
                 size="sm"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5 shadow-md h-8 px-4 text-xs"
+                className="font-semibold gap-1.5 shadow-md h-8 px-4 text-xs"
                 onClick={handlePaySelectedOrders}
               >
-                <QrCode className="size-4" /> Pagar {selectedOrdersData.count} {selectedOrdersData.count === 1 ? "reserva" : "reservas"} via PIX
+                <CreditCard className="size-4" /> Continuar para pagamento
               </Button>
             </div>
           </div>
