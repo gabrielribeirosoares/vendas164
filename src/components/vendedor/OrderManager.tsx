@@ -25,6 +25,7 @@ import { OrderInstallmentsDialog } from '@/components/vendedor/OrderInstallments
 import { PackingSlipDialog, type PackingSlipItem } from './PackingSlipDialog';
 import { ProductThumbnail } from '@/components/ProductThumbnail';
 import { SellerWorkflowSummary } from './SellerWorkflowSummary';
+import { ReservationNextAction, type ReservationDetailSection } from './ReservationNextAction';
 import { SellerOrderDetailsDialog } from './SellerOrderDetailsDialog';
 import { SellerOverview } from '@/components/vendedor/SellerOverview';
 import { InterfaceState } from '@/components/InterfaceState';
@@ -316,6 +317,11 @@ export function OrdersTab({
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [packingSlipOpen, setPackingSlipOpen] = useState(false);
   const [detailsGroup, setDetailsGroup] = useState<GroupedOrderRow | null>(null);
+  const [detailsSection, setDetailsSection] = useState<ReservationDetailSection | undefined>();
+  const openReservationDetails = (item: GroupedOrderRow, section?: ReservationDetailSection) => {
+    setDetailsSection(section);
+    setDetailsGroup(item);
+  };
   const [pendingStatusChange, setPendingStatusChange] = useState<PendingStatusChange | null>(null);
 
   const {
@@ -1376,7 +1382,7 @@ export function OrdersTab({
                               )}
                             </div>
                           </div>
-                          <Button type="button" variant="outline" size="sm" className="mt-2 w-full" onClick={() => setDetailsGroup(item)}>Ver detalhes</Button>
+                          <ReservationNextAction paymentStatus={o.payment_status} deliveryStatus={o.delivery_status} onOpenDetails={(section) => openReservationDetails(item, section)} />
                           <div className="flex justify-between items-center mt-2 border-t border-border/40 pt-2">
                             <span className="text-xs font-semibold">{brl(Number(o.total_price) * quantity)}</span>
                             <div className="flex items-center gap-1">
@@ -1469,7 +1475,7 @@ export function OrdersTab({
                           />
                         </div>
 
-                        <Button type="button" variant="outline" className="h-11 w-full" onClick={() => setDetailsGroup(item)}>Ver detalhes da reserva</Button>
+                        <ReservationNextAction paymentStatus={o.payment_status} deliveryStatus={o.delivery_status} onOpenDetails={(section) => openReservationDetails(item, section)} />
 
                         {/* Produto / Miniatura */}
                         <div className="flex items-start gap-3 rounded-xl bg-muted/30 p-2.5 border border-border/40">
@@ -1779,7 +1785,7 @@ export function OrdersTab({
                           variant="badge"
                         />
                       </div>
-                      <Button type="button" variant="outline" size="sm" className="mt-2 no-print" onClick={() => setDetailsGroup(item)}>Ver detalhes</Button>
+                      <ReservationNextAction paymentStatus={o.payment_status} deliveryStatus={o.delivery_status} onOpenDetails={(section) => openReservationDetails(item, section)} />
                       <p className="text-[9px] text-muted-foreground/50 font-mono mt-0.5">#{groupId.slice(0, 8)}</p>
                     </TableCell>
                     <TableCell className="min-w-[170px] max-w-[250px] align-top py-2.5 px-2">
@@ -2142,7 +2148,7 @@ export function OrdersTab({
       </CardContent>
 
       {detailsGroup && (
-        <SellerOrderDetailsDialog group={detailsGroup} storeColor={storeColor} onClose={() => setDetailsGroup(null)} onPaymentChange={handlePaymentStatusChange} onDeliveryChange={handleDeliveryStatusChange} />
+        <SellerOrderDetailsDialog initialSection={detailsSection} group={detailsGroup} storeColor={storeColor} onClose={() => setDetailsGroup(null)} onPaymentChange={handlePaymentStatusChange} onDeliveryChange={handleDeliveryStatusChange} />
       )}
 
       {storeId && (

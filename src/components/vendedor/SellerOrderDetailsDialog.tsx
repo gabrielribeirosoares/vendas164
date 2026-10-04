@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+import type { ReservationDetailSection } from "./ReservationNextAction";
 import { useQuery } from "@tanstack/react-query";
 import { Clock, ExternalLink, Package, RefreshCw } from "lucide-react";
 import type { CSSProperties } from "react";
@@ -46,12 +48,14 @@ const dateLabel = (value: string) => new Date(value).toLocaleString("pt-BR");
 
 export function SellerOrderDetailsDialog({
   group,
+  initialSection,
   storeColor,
   onClose,
   onPaymentChange,
   onDeliveryChange,
 }: {
   group: ReservationGroup;
+  initialSection?: ReservationDetailSection;
   storeColor?: string;
   onClose: () => void;
   onPaymentChange: (group: ReservationGroup, status: string) => void;
@@ -72,6 +76,19 @@ export function SellerOrderDetailsDialog({
       return rows as unknown as OrderRow[];
     },
   });
+  const paymentSectionRef = useRef<HTMLHeadingElement>(null);
+  const deliverySectionRef = useRef<HTMLHeadingElement>(null);
+  const didFocusSection = useRef(false);
+  useEffect(() => {
+    if (!data || !initialSection || didFocusSection.current) return;
+    const target =
+      initialSection === "payment" ? paymentSectionRef.current : deliverySectionRef.current;
+    if (target) {
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: "start" });
+      didFocusSection.current = true;
+    }
+  }, [data, initialSection]);
   const rows = data || [];
   const order = rows.find((row) => row.id === group.order.id) || rows[0];
   let guest: { name?: string; phone?: string } | null = null;
@@ -210,7 +227,13 @@ export function SellerOrderDetailsDialog({
               </p>
               <section className="space-y-3 rounded-xl border p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="font-semibold">Pagamento e parcelas</h3>
+                  <h3
+                    ref={paymentSectionRef}
+                    tabIndex={-1}
+                    className="font-semibold focus:outline-none"
+                  >
+                    Pagamento e parcelas
+                  </h3>
                   <PaymentBadge status={order.payment_status} />
                 </div>
                 <label className="block text-sm">
@@ -275,7 +298,13 @@ export function SellerOrderDetailsDialog({
               </section>
               <section className="space-y-3 rounded-xl border p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="font-semibold">Envio e rastreamento</h3>
+                  <h3
+                    ref={deliverySectionRef}
+                    tabIndex={-1}
+                    className="font-semibold focus:outline-none"
+                  >
+                    Envio e rastreamento
+                  </h3>
                   <DeliveryBadge status={order.delivery_status} />
                 </div>
                 <label className="block text-sm">
