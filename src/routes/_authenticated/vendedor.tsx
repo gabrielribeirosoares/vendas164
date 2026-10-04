@@ -174,7 +174,7 @@ function SellerDashboard() {
   const activeTab = search.tab || "produtos";
   const setActiveTab = (tab: string) => navigate({ search: { tab }, replace: true });
   const [onlyOutOfStock, setOnlyOutOfStock] = useState(false);
-  const [orderFocus, setOrderFocus] = useState<"atrasado" | "envios" | undefined>();
+  const [orderFocus, setOrderFocus] = useState<"atrasado" | "envios" | "vencendo" | undefined>();
   const [trialDismissed, setTrialDismissed] = useState(false);
   const [manualReservationWaitlist, setManualReservationWaitlist] = useState<{
     product: any;
@@ -266,23 +266,25 @@ function SellerDashboard() {
   const needsFullWaitlist = activeTab === "fila_espera";
   const needsWaitlistProductIds = ["produtos", "pronta_entrega"].includes(activeTab);
 
-  const { data: alertCounts = { outOfStock: 0, lateOrders: 0, pendingShipping: 0, waitlist: 0 } } = useQuery({
+  const { data: alertCounts = { outOfStock: 0, dueSoon: 0, lateOrders: 0, pendingShipping: 0, waitlist: 0 } } = useQuery({
     queryKey: ["store-alert-counts", store?.id],
     enabled: !!store,
     refetchInterval: 60_000,
     queryFn: async () => {
       const now = new Date().toISOString();
-      const [outOfStock, lateOrders, pendingShipping, waitlistCount] = await Promise.all([
+      const [outOfStock, lateOrders, pendingShipping, waitlistCount, dueSoon] = await Promise.all([
         supabase.from("products").select("id", { count: "exact", head: true }).eq("store_id", store!.id).eq("is_open", true).eq("stock", 0),
         supabase.from("orders").select("id", { count: "exact", head: true }).eq("store_id", store!.id).eq("payment_status", "aguardando_sinal").lt("reservation_expires_at", now),
         supabase.from("orders").select("id", { count: "exact", head: true }).eq("store_id", store!.id).eq("payment_status", "quitado").not("delivery_status", "in", "(enviado,em_transito,cancelado,entregue)"),
         supabase.from("waitlist").select("id", { count: "exact", head: true }).eq("store_id", store!.id),
+        supabase.from("orders").select("id", { count: "exact", head: true }).eq("store_id", store!.id).eq("payment_status", "aguardando_sinal").neq("delivery_status", "cancelado").gt("reservation_expires_at", now).lte("reservation_expires_at", new Date(Date.now() + 86400000).toISOString()),
       ]);
 
-      const error = outOfStock.error || lateOrders.error || pendingShipping.error || waitlistCount.error;
+      const error = outOfStock.error || lateOrders.error || pendingShipping.error || waitlistCount.error || dueSoon.error;
       if (error) throw error;
       return {
         outOfStock: outOfStock.count ?? 0,
+        dueSoon: dueSoon.count ?? 0,
         lateOrders: lateOrders.count ?? 0,
         pendingShipping: pendingShipping.count ?? 0,
         waitlist: waitlistCount.count ?? 0,
@@ -546,6 +548,7 @@ function SellerDashboard() {
         </div>
 
         <SmartNotifications
+          dueSoonCount={alertCounts.dueSoon}
           outOfStockCount={alertCounts.outOfStock}
           lateOrderCount={alertCounts.lateOrders}
           pendingShippingCount={alertCounts.pendingShipping}

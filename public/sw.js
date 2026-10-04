@@ -86,6 +86,7 @@ self.addEventListener("push", (event) => {
       icon: "/icons/pwa-icon-192.png",
       badge: "/icons/pwa-icon.svg",
       vibrate: [100, 50, 100],
+      ...(data.tag ? { tag: data.tag, renotify: false } : {}),
       data: {
         url: data.url || "/",
       },

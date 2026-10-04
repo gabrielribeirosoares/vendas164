@@ -16,6 +16,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DeliveryBadge, PaymentBadge } from '@/components/StatusBadge';
+import { isSignalDueSoon } from "@/lib/signalReminder";
 import { Countdown } from '@/components/Countdown';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { prepararDadosExportacaoFinanceira } from '@/lib/exportFinanceiro';
@@ -289,7 +290,7 @@ export function OrdersTab({
   storeColor?: string;
   storeName?: string;
   products?: Product[];
-  focusFilter?: "atrasado" | "envios";
+  focusFilter?: "atrasado" | "envios" | "vencendo";
   onClearFocus?: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -344,6 +345,7 @@ export function OrdersTab({
       pageSize,
     ],
     enabled: !!storeId,
+    refetchInterval: focusFilter === "vencendo" ? 60_000 : false,
     placeholderData: (previous) => previous,
     queryFn: async (): Promise<SellerOrdersPage> => {
       const { data, error } = await supabase.rpc("seller_orders_page", {
@@ -534,6 +536,7 @@ export function OrdersTab({
 
   const filteredOrders = useMemo(() => {
     return sourceOrders.filter((o) => {
+      if (focusFilter === "vencendo" && !isSignalDueSoon(o)) return false;
       if (focusFilter === "atrasado" && (o.payment_status !== "aguardando_sinal" || !o.reservation_expires_at || new Date(o.reservation_expires_at) >= new Date())) return false;
       if (focusFilter === "envios" && (o.payment_status !== "quitado" || ["enviado", "em_transito", "cancelado", "entregue"].includes(o.delivery_status))) return false;
       if (startDate) {
@@ -1139,7 +1142,7 @@ export function OrdersTab({
       )}
       {focusFilter && (
         <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-sm">
-          <span>{focusFilter === "atrasado" ? "Sinais atrasados" : "Envios pendentes"}</span>
+          <span>{focusFilter === "atrasado" ? "Sinais atrasados" : focusFilter === "vencendo" ? "Sinais próximos do vencimento (24h)" : "Envios pendentes"}</span>
           <Button variant="ghost" size="sm" onClick={onClearFocus}>Limpar filtro do alerta</Button>
         </div>
       )}
