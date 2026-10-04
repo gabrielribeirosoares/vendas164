@@ -5,7 +5,7 @@ import { brl, isOrderProntaEntrega, whatsappLink } from '@/lib/format';
 import { trackOrder } from '@/lib/trackingService';
 import { toast } from 'sonner';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw, FileSpreadsheet, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { notifyCustomerOrderUpdateServer } from '@/lib/push';
 import { Card, CardContent } from '@/components/ui/card';
@@ -22,7 +22,6 @@ import { prepararDadosExportacaoFinanceira } from '@/lib/exportFinanceiro';
 import { getCustomerFromCache } from '@/lib/customerCache';
 import { ManualReservationDialog } from './ManualReservationDialog';
 import { OrderInstallmentsDialog } from '@/components/vendedor/OrderInstallmentsDialog';
-import { SpreadsheetImporterDialog } from '@/components/vendedor/SpreadsheetImporterDialog';
 import { PackingSlipDialog, type PackingSlipItem } from './PackingSlipDialog';
 import { ProductThumbnail } from '@/components/ProductThumbnail';
 import { SellerWorkflowSummary } from './SellerWorkflowSummary';
@@ -315,7 +314,6 @@ export function OrdersTab({
   const [trackingDrafts, setTrackingDrafts] = useState<Record<string, string>>({});
   const [trackingUpdating, setTrackingUpdating] = useState<Set<string>>(new Set());
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [packingSlipOpen, setPackingSlipOpen] = useState(false);
   const [detailsGroup, setDetailsGroup] = useState<GroupedOrderRow | null>(null);
   const [pendingStatusChange, setPendingStatusChange] = useState<PendingStatusChange | null>(null);
@@ -1219,18 +1217,6 @@ export function OrdersTab({
               </Button>
             </div>
             <div className="grid w-full grid-cols-2 items-center gap-2 sm:flex sm:w-auto sm:flex-wrap">
-              {storeId && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setImportDialogOpen(true)}
-                  className="h-9 text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/5"
-                >
-                  <FileSpreadsheet className="size-3.5" />
-                  <span><span className="sm:hidden">Importar</span><span className="hidden sm:inline">Importar Planilha (CSV)</span></span>
-                </Button>
-              )}
-
               <Button
                 size="sm"
                 variant="outline"
@@ -2216,14 +2202,6 @@ export function OrdersTab({
             </Button>
           </div>
         </div>
-      )}
-
-      {storeId && (
-        <SpreadsheetImporterDialog
-          open={importDialogOpen}
-          onOpenChange={setImportDialogOpen}
-          storeId={storeId}
-        />
       )}
 
       <PackingSlipDialog
