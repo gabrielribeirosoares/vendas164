@@ -40,10 +40,13 @@ test('Seller status changes require explicit confirmation, including batch actio
 test('Seller reservations expose quick workflow filters for payment and shipping', async () => {
   const orderManager = await read('src/components/vendedor/OrderManager.tsx');
 
-  assert.match(orderManager, /Atendimento por etapa/);
-  assert.match(orderManager, /Aguardando sinal/);
-  assert.match(orderManager, /Saldo a receber/);
-  assert.match(orderManager, /Preparar envio/);
+  const summary = await read('src/components/vendedor/SellerWorkflowSummary.tsx');
+  assert.match(orderManager, /SellerWorkflowSummary/);
+  assert.match(summary, /Atendimento por etapa/);
+  assert.match(summary, /Aguardando sinal/);
+  assert.match(summary, /Saldo após sinal/);
+  assert.match(summary, /Preparar envio/);
+  assert.match(summary, /Em trânsito/);
 });
 
 test('OrderManager integrates PackingSlipDialog for batch sorting and dispatch', async () => {

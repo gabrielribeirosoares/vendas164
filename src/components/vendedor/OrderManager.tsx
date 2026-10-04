@@ -5,7 +5,7 @@ import { brl, isOrderProntaEntrega, whatsappLink } from '@/lib/format';
 import { trackOrder } from '@/lib/trackingService';
 import { toast } from 'sonner';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { MessageCircle, Clock, Package, Truck, CreditCard, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw, FileSpreadsheet, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { MessageCircle, Clock, Package, Truck, ChevronDown, Trash2, XCircle, Search, Filter, LayoutGrid, List, Download, Plus, ExternalLink, Zap, Loader2, RefreshCw, FileSpreadsheet, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { notifyCustomerOrderUpdateServer } from '@/lib/push';
 import { Card, CardContent } from '@/components/ui/card';
@@ -25,6 +25,8 @@ import { OrderInstallmentsDialog } from '@/components/vendedor/OrderInstallments
 import { SpreadsheetImporterDialog } from '@/components/vendedor/SpreadsheetImporterDialog';
 import { PackingSlipDialog, type PackingSlipItem } from './PackingSlipDialog';
 import { ProductThumbnail } from '@/components/ProductThumbnail';
+import { SellerWorkflowSummary } from './SellerWorkflowSummary';
+import { SellerOrderDetailsDialog } from './SellerOrderDetailsDialog';
 import { SellerOverview } from '@/components/vendedor/SellerOverview';
 import { InterfaceState } from '@/components/InterfaceState';
 import {
@@ -315,6 +317,7 @@ export function OrdersTab({
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [packingSlipOpen, setPackingSlipOpen] = useState(false);
+  const [detailsGroup, setDetailsGroup] = useState<GroupedOrderRow | null>(null);
   const [pendingStatusChange, setPendingStatusChange] = useState<PendingStatusChange | null>(null);
 
   const {
@@ -1086,15 +1089,21 @@ export function OrdersTab({
     ? "cobrar-sinal"
     : paymentFilter === "sinal_pago"
       ? "saldo-pendente"
+      : paymentFilter === "todos" && deliveryFilter === "em_transito"
+        ? "em-transito"
       : paymentFilter === "quitado" && deliveryFilter === "pendente"
         ? "preparar-envio"
         : paymentFilter === "todos" && deliveryFilter === "todos"
           ? "todas"
           : "personalizado";
 
-  const setWorkflowView = (view: "todas" | "cobrar-sinal" | "saldo-pendente" | "preparar-envio") => {
+  const setWorkflowView = (view: "todas" | "cobrar-sinal" | "saldo-pendente" | "preparar-envio" | "em-transito") => {
     setPage(0);
-    if (view === "cobrar-sinal") {
+    onClearFocus?.();
+    if (view === "em-transito") {
+      setPaymentFilter("todos");
+      setDeliveryFilter("em_transito");
+    } else if (view === "cobrar-sinal") {
       setPaymentFilter("aguardando_sinal");
       setDeliveryFilter("todos");
     } else if (view === "saldo-pendente") {
@@ -1128,26 +1137,7 @@ export function OrdersTab({
         </div>
       )}
       <Card className="border-border/60 panel relative">
-        <div className="border-b border-border/50 bg-muted/15 px-3 py-3 sm:px-4">
-          <div className="mb-2">
-            <p className="text-sm font-semibold">Atendimento por etapa</p>
-            <p className="text-xs text-muted-foreground">Acesse rapidamente o que precisa de cobrança ou envio.</p>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            <Button type="button" size="sm" variant={workflowView === "todas" ? "default" : "outline"} onClick={() => setWorkflowView("todas")} className="h-auto min-h-9 w-full min-w-0 whitespace-normal px-2 text-center text-[11px] leading-tight sm:h-9 sm:w-auto sm:whitespace-nowrap sm:px-3 sm:text-xs">
-              Todas as reservas
-            </Button>
-            <Button type="button" size="sm" variant={workflowView === "cobrar-sinal" ? "default" : "outline"} onClick={() => setWorkflowView("cobrar-sinal")} className="h-auto min-h-9 w-full min-w-0 gap-1.5 whitespace-normal px-2 text-center text-[11px] leading-tight sm:h-9 sm:w-auto sm:whitespace-nowrap sm:px-3 sm:text-xs">
-              <Clock className="size-3.5 shrink-0" /> Aguardando sinal
-            </Button>
-            <Button type="button" size="sm" variant={workflowView === "saldo-pendente" ? "default" : "outline"} onClick={() => setWorkflowView("saldo-pendente")} className="h-auto min-h-9 w-full min-w-0 gap-1.5 whitespace-normal px-2 text-center text-[11px] leading-tight sm:h-9 sm:w-auto sm:whitespace-nowrap sm:px-3 sm:text-xs">
-              <CreditCard className="size-3.5 shrink-0" /> Saldo a receber
-            </Button>
-            <Button type="button" size="sm" variant={workflowView === "preparar-envio" ? "default" : "outline"} onClick={() => setWorkflowView("preparar-envio")} className="h-auto min-h-9 w-full min-w-0 gap-1.5 whitespace-normal px-2 text-center text-[11px] leading-tight sm:h-9 sm:w-auto sm:whitespace-nowrap sm:px-3 sm:text-xs">
-              <Truck className="size-3.5 shrink-0" /> Preparar envio
-            </Button>
-          </div>
-        </div>
+        <SellerWorkflowSummary workflowView={workflowView} onChange={setWorkflowView} />
 
         {/* FILTRO POR TIPO DE PEDIDO (PRÉ-VENDA VS PRONTA ENTREGA) */}
         <div className="grid grid-cols-2 gap-2 px-3 pb-1 pt-3 sm:flex sm:flex-wrap sm:p-4 sm:pb-0">
@@ -1400,6 +1390,7 @@ export function OrdersTab({
                               )}
                             </div>
                           </div>
+                          <Button type="button" variant="outline" size="sm" className="mt-2 w-full" onClick={() => setDetailsGroup(item)}>Ver detalhes</Button>
                           <div className="flex justify-between items-center mt-2 border-t border-border/40 pt-2">
                             <span className="text-xs font-semibold">{brl(Number(o.total_price) * quantity)}</span>
                             <div className="flex items-center gap-1">
@@ -1491,6 +1482,8 @@ export function OrdersTab({
                             variant="badge"
                           />
                         </div>
+
+                        <Button type="button" variant="outline" className="h-11 w-full" onClick={() => setDetailsGroup(item)}>Ver detalhes da reserva</Button>
 
                         {/* Produto / Miniatura */}
                         <div className="flex items-start gap-3 rounded-xl bg-muted/30 p-2.5 border border-border/40">
@@ -1800,6 +1793,7 @@ export function OrdersTab({
                           variant="badge"
                         />
                       </div>
+                      <Button type="button" variant="outline" size="sm" className="mt-2 no-print" onClick={() => setDetailsGroup(item)}>Ver detalhes</Button>
                       <p className="text-[9px] text-muted-foreground/50 font-mono mt-0.5">#{groupId.slice(0, 8)}</p>
                     </TableCell>
                     <TableCell className="min-w-[170px] max-w-[250px] align-top py-2.5 px-2">
@@ -2160,6 +2154,10 @@ export function OrdersTab({
           )}
         </div>
       </CardContent>
+
+      {detailsGroup && (
+        <SellerOrderDetailsDialog group={detailsGroup} storeColor={storeColor} onClose={() => setDetailsGroup(null)} onPaymentChange={handlePaymentStatusChange} onDeliveryChange={handleDeliveryStatusChange} />
+      )}
 
       {storeId && (
         <ManualReservationDialog
