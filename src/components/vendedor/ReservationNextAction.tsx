@@ -3,10 +3,12 @@ import { Button } from "@/components/ui/button";
 export type ReservationDetailSection = "payment" | "delivery";
 
 export function ReservationNextAction({
+  hideDetails = false,
   paymentStatus,
   deliveryStatus,
   onOpenDetails,
 }: {
+  hideDetails?: boolean;
   paymentStatus: string;
   deliveryStatus: string;
   onOpenDetails: (section?: ReservationDetailSection) => void;
@@ -39,15 +41,17 @@ export function ReservationNextAction({
           {action.label}
         </Button>
       )}
-      <Button
-        type="button"
-        size="sm"
-        variant={action ? "ghost" : "outline"}
-        className="h-auto min-h-9 whitespace-normal px-2 text-xs"
-        onClick={() => onOpenDetails()}
-      >
-        Ver detalhes
-      </Button>
+      {(!hideDetails || !action) && (
+        <Button
+          type="button"
+          size="sm"
+          variant={action ? "ghost" : "outline"}
+          className="h-auto min-h-9 whitespace-normal px-2 text-xs"
+          onClick={() => onOpenDetails()}
+        >
+          Ver detalhes
+        </Button>
+      )}
     </div>
   );
 }
