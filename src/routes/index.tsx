@@ -63,7 +63,7 @@ export const Route = createFileRoute("/")({
           "@type": "Organization",
           "name": "Vendas 164",
           "url": "https://vendas164.com.br/",
-          "logo": "https://vendas164.com.br/og-image.png",
+          "logo": "https://vendas164.com.br/og-image.jpg",
           "sameAs": [
             "https://www.instagram.com/vendas164.com.br"
           ]

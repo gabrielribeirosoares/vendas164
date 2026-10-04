@@ -84,7 +84,7 @@ export const Route = createFileRoute("/auth")({
 
     const optimizedLogo = optimizeImageUrl(store?.logo_url);
     const optimizedFavicon = optimizeImageUrl(store?.favicon_url);
-    const img = optimizedLogo || optimizedFavicon || "https://vendas164.com.br/og-image.png";
+    const img = optimizedLogo || optimizedFavicon || "https://vendas164.com.br/og-image.jpg";
     const favicon = optimizedFavicon || optimizedLogo || undefined;
 
     return {

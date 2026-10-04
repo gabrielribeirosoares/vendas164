@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Copy,
@@ -45,16 +45,29 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { brl, slugify } from "@/lib/format";
 import { useSession } from "@/lib/session";
-import { OrdersTab } from "@/components/vendedor/OrderManager";
 import { BrandingTab } from "@/components/vendedor/StoreSettings";
-import { PaymentSettingsTab } from "@/components/vendedor/PaymentSettingsTab";
-import { ClientsTab } from "@/components/vendedor/ClientsManager";
 import { SmartNotifications } from "@/components/vendedor/SmartNotifications";
-import { ProductsTab } from "@/components/vendedor/ProductManager";
 import { SellerSectionHeader } from "@/components/vendedor/SellerSectionHeader";
-import { TrackingIntegration } from "@/components/vendedor/TrackingIntegration";
-import { WaitlistManager, type WaitlistRow } from "@/components/vendedor/WaitlistManager";
-import { ManualReservationDialog } from "@/components/vendedor/ManualReservationDialog";
+import type { WaitlistRow } from "@/components/vendedor/WaitlistManager";
+
+// Abas pesadas carregadas sob demanda (code splitting)
+const OrdersTab = lazy(() => import("@/components/vendedor/OrderManager").then((m) => ({ default: m.OrdersTab })));
+const ProductsTab = lazy(() => import("@/components/vendedor/ProductManager").then((m) => ({ default: m.ProductsTab })));
+const ClientsTab = lazy(() => import("@/components/vendedor/ClientsManager").then((m) => ({ default: m.ClientsTab })));
+const PaymentSettingsTab = lazy(() => import("@/components/vendedor/PaymentSettingsTab").then((m) => ({ default: m.PaymentSettingsTab })));
+const TrackingIntegration = lazy(() => import("@/components/vendedor/TrackingIntegration").then((m) => ({ default: m.TrackingIntegration })));
+const WaitlistManager = lazy(() => import("@/components/vendedor/WaitlistManager").then((m) => ({ default: m.WaitlistManager })));
+const ManualReservationDialog = lazy(() => import("@/components/vendedor/ManualReservationDialog").then((m) => ({ default: m.ManualReservationDialog })));
+
+function TabFallback() {
+  return (
+    <div className="space-y-3 mt-5" aria-busy="true" aria-label="Carregando">
+      <div className="h-10 rounded-lg bg-muted animate-pulse" />
+      <div className="h-32 rounded-lg bg-muted animate-pulse" />
+      <div className="h-32 rounded-lg bg-muted animate-pulse" />
+    </div>
+  );
+}
 
 export function parseStoreSubscription(store: any) {
   const status = store?.status;
@@ -607,6 +620,7 @@ function SellerDashboard() {
           <div className="min-w-0">
             <SellerSectionHeader activeSection={activeTab} storeName={store.name} />
 
+          <Suspense fallback={<TabFallback />}>
           <TabsContent value="produtos" className="mt-5">
             {productsError ? <SellerDataError onRetry={() => void retryProducts()} /> : <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pre_venda" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} waitlistCounts={waitlistCounts} />}
           </TabsContent>
@@ -659,10 +673,12 @@ function SellerDashboard() {
               <AdminModerationPanel />
             </TabsContent>
           )}
+          </Suspense>
           </div>
         </Tabs>
 
         {manualReservationWaitlist && (
+          <Suspense fallback={null}>
           <ManualReservationDialog
             open={!!manualReservationWaitlist}
             onClose={() => setManualReservationWaitlist(null)}
@@ -683,6 +699,7 @@ function SellerDashboard() {
             preSelectedProduct={manualReservationWaitlist.product}
             preSelectedUser={manualReservationWaitlist.user}
           />
+          </Suspense>
         )}
       </main>
     </div>

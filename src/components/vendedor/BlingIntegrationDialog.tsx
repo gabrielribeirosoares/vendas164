@@ -433,7 +433,7 @@ export function BlingIntegrationDialog({
                   <div className="flex items-start gap-3">
                     <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
                       {issue.thumbnailUrl ? (
-                        <img src={issue.thumbnailUrl} alt="" className="size-full object-cover" />
+                        <img src={issue.thumbnailUrl} alt="" loading="lazy" decoding="async" className="size-full object-cover" />
                       ) : (
                         <ImageOff className="size-5 text-muted-foreground" />
                       )}

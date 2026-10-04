@@ -16,7 +16,7 @@ test('PIX generator produces compliant BACEN BR Code format with CRC16', async (
 test('Customer panel unifies reservation payments and opens the configured checkout', async () => {
   const painel = await read('src/routes/_authenticated/painel.tsx');
 
-  assert.match(painel, /import \{ CheckoutPaymentDialog \} from "@/);
+  assert.match(painel, /import \{ CheckoutPaymentDialog \} from "@\/|import\("@\/components\/CheckoutPaymentDialog"\)/);
   assert.match(painel, /Reservas e pagamentos/);
   assert.match(painel, /Pagamento consolidado/);
   assert.match(painel, /Escolher forma de pagamento/);

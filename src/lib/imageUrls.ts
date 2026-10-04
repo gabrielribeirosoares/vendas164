@@ -2,11 +2,42 @@ const STORAGE_SIGNED_MARKER = "/storage/v1/object/sign/store-assets/";
 const STORAGE_PUBLIC_MARKER = "/storage/v1/object/public/store-assets/";
 const OPTIMIZED_PRODUCT_FOLDER = "/optimized-products/";
 
+/**
+ * Extracts an array of valid image URLs from a stored product image_url field.
+ * Supports legacy single URL strings, newline-separated URLs, and JSON array strings.
+ */
+export function getProductImageUrls(value: string | null | undefined): string[] {
+  if (!value) return [];
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => (typeof item === "string" ? item.trim() : ""))
+          .filter(Boolean);
+      }
+    } catch {}
+  }
+
+  if (trimmed.includes("\n")) {
+    return trimmed
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  return [trimmed];
+}
+
 export function getPublicStorageImageUrl(value: string | null | undefined): string {
   if (!value) return "";
+  const rawFirst = getProductImageUrls(value)[0] || value;
 
   try {
-    const url = new URL(value);
+    const url = new URL(rawFirst);
     if (url.pathname.includes(STORAGE_SIGNED_MARKER)) {
       url.pathname = url.pathname.replace(STORAGE_SIGNED_MARKER, STORAGE_PUBLIC_MARKER);
       url.search = "";
@@ -14,7 +45,7 @@ export function getPublicStorageImageUrl(value: string | null | undefined): stri
     }
     return url.toString();
   } catch {
-    return value;
+    return rawFirst;
   }
 }
 

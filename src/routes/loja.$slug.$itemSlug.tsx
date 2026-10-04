@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Clock, Package, Share2, ArrowLeft, Store as StoreIcon, CreditCard, ShoppingBag, Zap, Minus, Plus, Info } from "lucide-react";
+import { CalendarDays, Clock, Package, Share2, ArrowLeft, Store as StoreIcon, CreditCard, ShoppingBag, Zap, Minus, Plus, Info, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { createServerFn } from "@tanstack/react-start";
 import { AppHeader } from "@/components/AppHeader";
@@ -20,6 +20,7 @@ import { useCartStore } from "@/lib/cart";
 import { getSubdomain, getStoreFullUrl } from "@/lib/subdomain";
 import { getReadableTextColor } from "@/lib/storeCustomizations";
 import { BrandMiniaturesMarquee } from "@/components/store/BrandMiniaturesMarquee";
+import { getProductImageUrls } from "@/lib/imageUrls";
 
 const fetchProductBySlugs = createServerFn({ method: "GET" })
   .validator((d: { slug: string; itemSlug: string }) => d)
@@ -57,8 +58,9 @@ export const Route = createFileRoute("/loja/$slug/$itemSlug")({
     const desc = product
       ? `Pré-venda de ${product.brand} ${product.model} por ${brl(product.price)}. Garanta sua unidade na loja ${store?.name || params.slug}!`
       : "Detalhes da pré-venda: preço, unidades disponíveis, prazo do sinal e reserva.";
-    const img = product?.image_url || store?.logo_url || store?.favicon_url || "https://vendas164.com.br/og-image.png";
+    const img = product?.image_url || store?.logo_url || store?.favicon_url || "https://vendas164.com.br/og-image.jpg";
     const favicon = store?.favicon_url || store?.logo_url || undefined;
+    const pageUrl = `https://vendas164.com.br/loja/${params.slug}/${params.itemSlug}`;
 
     return {
       meta: [
@@ -67,13 +69,74 @@ export const Route = createFileRoute("/loja/$slug/$itemSlug")({
         { property: "og:title", content: title },
         { property: "og:description", content: desc },
         { property: "og:image", content: img },
-        { property: "og:type", content: "website" },
+        { property: "og:type", content: "product" },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: title },
         { name: "twitter:description", content: desc },
         { name: "twitter:image", content: img },
       ],
-      links: favicon ? [{ rel: "icon", href: favicon }] : [],
+      links: [
+        ...(favicon ? [{ rel: "icon", href: favicon }] : []),
+        { rel: "canonical", href: pageUrl },
+      ],
+      scripts: [
+        ...(product
+          ? [
+              {
+                type: "application/ld+json",
+                children: JSON.stringify({
+                  "@context": "https://schema.org",
+                  "@type": "Product",
+                  "name": `${product.brand ? `${product.brand} ` : ""}${product.model}`,
+                  "description": desc,
+                  ...(img ? { "image": [img] } : {}),
+                  ...(product.brand ? { "brand": { "@type": "Brand", "name": product.brand } } : {}),
+                  ...((product as any).sku ? { "sku": (product as any).sku } : {}),
+                  "offers": {
+                    "@type": "Offer",
+                    "url": pageUrl,
+                    "priceCurrency": "BRL",
+                    "price": Number(product.price).toFixed(2),
+                    "availability": product.is_open && product.stock > 0
+                      ? "https://schema.org/InStock"
+                      : "https://schema.org/OutOfStock",
+                    "seller": {
+                      "@type": "Organization",
+                      "name": store?.name || params.slug,
+                    },
+                  },
+                }),
+              },
+              {
+                type: "application/ld+json",
+                children: JSON.stringify({
+                  "@context": "https://schema.org",
+                  "@type": "BreadcrumbList",
+                  "itemListElement": [
+                    {
+                      "@type": "ListItem",
+                      "position": 1,
+                      "name": "Início",
+                      "item": "https://vendas164.com.br/",
+                    },
+                    {
+                      "@type": "ListItem",
+                      "position": 2,
+                      "name": store?.name || params.slug,
+                      "item": `https://vendas164.com.br/loja/${params.slug}`,
+                    },
+                    {
+                      "@type": "ListItem",
+                      "position": 3,
+                      "name": product.model,
+                      "item": pageUrl,
+                    },
+                  ],
+                }),
+              },
+            ]
+          : []),
+      ],
     };
   },
   component: ProductPage,
@@ -103,6 +166,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
   const [quantity, setQuantity] = useState<number>(1);
   const [selectedInstallment, setSelectedInstallment] = useState<number>(1);
   const [reserving, setReserving] = useState<boolean>(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const cart = useCartStore();
 
   const { data: product, isLoading } = useQuery({
@@ -167,6 +231,8 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
   const signalInfo = getProductSignalAmount(product, quantity);
   const themeColor = product?.stores?.primary_color || "#e11d48";
   const themeTextColor = getReadableTextColor(themeColor);
+  const images = useMemo(() => getProductImageUrls(product?.image_url), [product?.image_url]);
+  const activeImage = images[selectedImageIndex] || images[0] || product?.image_url;
 
   // Cálculo de parcelamento e total com base no produto e quantidade selecionada
   const installmentOptions = getInstallmentOptions(product, quantity);
@@ -279,21 +345,76 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
           </Button>
         </div>
         <div className="grid gap-6 md:grid-cols-2 lg:gap-10">
-          <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm sm:rounded-3xl">
-            <div className="relative aspect-square w-full bg-gradient-to-br from-muted/80 to-muted/30">
-              {product.image_url ? (
-                <img
-                  src={product.image_url}
-                  alt={`${product.brand} ${product.model}`}
-                  className="h-full w-full object-contain p-3 sm:p-5"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center text-muted-foreground">
-                  <Package className="size-12" />
-                </div>
-              )}
+          <div className="space-y-3">
+            <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm sm:rounded-3xl">
+              <div className="relative aspect-square w-full bg-gradient-to-br from-muted/80 to-muted/30">
+                {activeImage ? (
+                  <img
+                    src={activeImage}
+                    alt={`${product.brand} ${product.model}${images.length > 1 ? ` - Foto ${selectedImageIndex + 1} de ${images.length}` : ""}`}
+                    className="h-full w-full object-contain p-3 sm:p-5"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-muted-foreground">
+                    <Package className="size-12" />
+                  </div>
+                )}
+
+                {images.length > 1 && (
+                  <>
+                    <div className="absolute top-3 right-3 rounded-full bg-background/85 backdrop-blur-sm px-2.5 py-1 text-xs font-semibold text-foreground shadow-sm border border-border/40">
+                      {selectedImageIndex + 1} / {images.length}
+                    </div>
+                    {selectedImageIndex > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedImageIndex((i) => Math.max(0, i - 1))}
+                        className="absolute left-2.5 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-full bg-background/85 backdrop-blur-sm text-foreground shadow-md hover:bg-background border border-border/40 transition-transform active:scale-95 cursor-pointer"
+                        aria-label="Foto anterior"
+                      >
+                        <ChevronLeft className="size-4" />
+                      </button>
+                    )}
+                    {selectedImageIndex < images.length - 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedImageIndex((i) => Math.min(images.length - 1, i + 1))}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-full bg-background/85 backdrop-blur-sm text-foreground shadow-md hover:bg-background border border-border/40 transition-transform active:scale-95 cursor-pointer"
+                        aria-label="Próxima foto"
+                      >
+                        <ChevronRight className="size-4" />
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
+
+            {images.length > 1 && (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-thin">
+                {images.map((imgUrl, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setSelectedImageIndex(idx)}
+                    className={`relative size-16 sm:size-20 shrink-0 overflow-hidden rounded-xl border-2 bg-muted/40 transition-all cursor-pointer ${
+                      selectedImageIndex === idx
+                        ? "border-primary shadow-sm ring-2 ring-primary/25 scale-105"
+                        : "border-border/40 opacity-70 hover:opacity-100 hover:border-border"
+                    }`}
+                    aria-label={`Ver foto ${idx + 1}`}
+                  >
+                    <img
+                      src={imgUrl}
+                      alt={`Miniatura ${idx + 1}`}
+                      className="size-full object-contain p-1"
+                      loading="lazy"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="min-w-0 md:sticky md:top-24 md:self-start">

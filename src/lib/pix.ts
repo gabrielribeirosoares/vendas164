@@ -1,4 +1,3 @@
-import QRCode from 'qrcode';
 
 export interface PixPayloadOptions {
   key: string;
@@ -121,6 +120,7 @@ export async function generatePixQrCode(
   options?: { width?: number; margin?: number },
 ): Promise<string> {
   if (!payload) return '';
+  const { default: QRCode } = await import('qrcode');
   return QRCode.toDataURL(payload, {
     width: options?.width || 256,
     margin: options?.margin ?? 2,

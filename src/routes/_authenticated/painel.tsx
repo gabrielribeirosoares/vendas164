@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookmarkCheck, Car, CheckCircle2, CheckSquare, Copy, CreditCard, ExternalLink, Layers, Loader2, MessageCircle, Package, Search, Sparkles, Store as StoreIcon, Truck, User, Wallet } from "lucide-react";
@@ -11,8 +11,11 @@ import { InterfaceState } from "@/components/InterfaceState";
 import { ProductThumbnail } from "@/components/ProductThumbnail";
 import { PhoneInput } from "@/components/PhoneInput";
 import { Countdown } from "@/components/Countdown";
-import { PixPaymentDialog, type PixItemDetail } from "@/components/PixPaymentDialog";
-import { CheckoutPaymentDialog } from "@/components/CheckoutPaymentDialog";
+import type { PixItemDetail } from "@/components/PixPaymentDialog";
+
+// Diálogos de pagamento carregados apenas quando abertos
+const PixPaymentDialog = lazy(() => import("@/components/PixPaymentDialog").then((m) => ({ default: m.PixPaymentDialog })));
+const CheckoutPaymentDialog = lazy(() => import("@/components/CheckoutPaymentDialog").then((m) => ({ default: m.CheckoutPaymentDialog })));
 import { DeliveryBadge, PaymentBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1339,6 +1342,7 @@ function CustomerDashboardContent() {
       </main>
 
       {pixModalData && (
+        <Suspense fallback={null}>
         <PixPaymentDialog
           open={pixModalData.open}
           onOpenChange={(open) => {
@@ -1353,9 +1357,11 @@ function CustomerDashboardContent() {
           description={pixModalData.description}
           items={pixModalData.items}
         />
+        </Suspense>
       )}
 
       {checkoutModalData && (
+        <Suspense fallback={null}>
         <CheckoutPaymentDialog
           open={checkoutModalData.open}
           onOpenChange={(open) => {
@@ -1372,6 +1378,7 @@ function CustomerDashboardContent() {
             queryClient.invalidateQueries({ queryKey: ["my-orders"] });
           }}
         />
+        </Suspense>
       )}
 
       <AppFooter />

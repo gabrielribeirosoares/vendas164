@@ -298,7 +298,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                                   <Button key={s.id} asChild variant="ghost" className="w-full justify-start gap-3 h-11 mb-1">
                                     <a href={getStoreFullUrl(s.slug)}>
                                       {s.logo_url ? (
-                                        <img src={getStoreBrandImageUrl(s.logo_url, 64)} alt={s.name} className="size-5 rounded object-cover border border-border" />
+                                        <img src={getStoreBrandImageUrl(s.logo_url, 64)} alt={s.name} loading="lazy" decoding="async" className="size-5 rounded object-cover border border-border" />
                                       ) : (
                                         <StoreIcon className="size-5 text-muted-foreground" />
                                       )}
