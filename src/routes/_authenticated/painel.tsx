@@ -378,7 +378,7 @@ function CustomerDashboardContent() {
   const groupedDeliveredOrders = useMemo(() => {
     const map = new Map<string, { order: (typeof pendingOrders)[0]; quantity: number; ids: string[] }>();
     for (const o of filteredDeliveredOrders) {
-      const key = `${o.product_id}_${o.payment_status}_${o.delivery_status}_${o.store_id}`;
+      const key = `${o.product_id}_${o.variant_id || ""}_${o.payment_status}_${o.delivery_status}_${o.store_id}`;
       if (map.has(key)) {
         const item = map.get(key)!;
         item.quantity += 1;
@@ -794,10 +794,10 @@ function CustomerDashboardContent() {
                     )}
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
                     <div className="size-10 shrink-0 overflow-hidden rounded-xl bg-muted sm:size-12">
-                      {o.products?.image_url ? (
+                      {(o.variant_image_url || o.products?.image_url) ? (
                         <ProductThumbnail
-                          src={o.products.image_url}
-                          alt={o.products.model}
+                          src={o.variant_image_url || o.products?.image_url || ""}
+                          alt={o.products?.model}
                           className="h-full w-full object-cover"
                         />
                       ) : (
@@ -816,7 +816,7 @@ function CustomerDashboardContent() {
                         )}
                       </div>
                       <h3 className="font-semibold text-base flex flex-wrap items-center gap-2">
-                        {o.products?.model}
+                        {o.products?.model}{o.variant_name ? ` — ${o.variant_name}` : ""}
                         {qty > 1 && (
                           <span className="text-xs font-normal text-muted-foreground font-mono">({qty} unidades)</span>
                         )}
@@ -1135,9 +1135,9 @@ function CustomerDashboardContent() {
                   return (
                     <Card key={ids[0]} className="border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
                       <div className="aspect-video w-full overflow-hidden bg-muted relative">
-                        {(o.products?.image_url || (o as any).product_image_url) ? (
+                        {(o.variant_image_url || o.products?.image_url || (o as any).product_image_url) ? (
                           <ProductThumbnail
-                            src={o.products?.image_url || (o as any).product_image_url}
+                            src={o.variant_image_url || o.products?.image_url || (o as any).product_image_url}
                             alt={o.products?.model || (o as any).product_model}
                             className="h-full w-full object-cover"
                           />
@@ -1161,7 +1161,7 @@ function CustomerDashboardContent() {
                             </span>
                           )}
                         </div>
-                        <h4 className="font-bold text-base text-foreground leading-snug">{o.products?.model || (o as any).product_model}</h4>
+                        <h4 className="font-bold text-base text-foreground leading-snug">{o.products?.model || (o as any).product_model}{o.variant_name ? ` — ${o.variant_name}` : ""}</h4>
                         <div className="flex items-center justify-between text-xs text-muted-foreground pt-2.5 border-t border-border/20">
                           <span>Valor pago: <strong className="text-foreground font-semibold">{brl(Number(o.total_price) * qty)}</strong></span>
                           <span className="font-mono text-[10px] text-muted-foreground">#{ids[0].slice(0, 6)}</span>

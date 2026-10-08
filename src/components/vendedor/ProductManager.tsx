@@ -1,3 +1,5 @@
+import { ProductVariantsInput } from "./ProductVariantsInput";
+import { getColorVariants, variantsToJson, validateVariants, type ColorVariant } from "@/lib/productVariants";
 import { ManualReservationDialog } from "./ManualReservationDialog";
 import { BookmarkCheck, CopyPlus, Zap, Sparkles, Clock } from "lucide-react";
 import { formatDeadlineHours, getProductInstallmentInfo, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
@@ -92,6 +94,7 @@ export function ProductsTab({
 }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ ...emptyProduct, category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda" });
+  const [variants, setVariants] = useState<ColorVariant[]>([]);
   const [saving, setSaving] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
@@ -214,6 +217,8 @@ export function ProductsTab({
       return toast.error("Por favor, selecione ou informe a marca da miniatura.");
     }
 
+    const variantsError = validateVariants(variants);
+    if (variantsError) return toast.error(variantsError);
     setSaving(true);
     const isPronta = (form as any).category === "pronta_entrega" || mode === "pronta_entrega";
     const isSemSinal = isPronta || (form as any).signal_rule === "sem_sinal";
@@ -231,6 +236,7 @@ export function ProductsTab({
 
     const payload: any = {
       store_id: store.id,
+      ...(variants.length ? { color_variants: variantsToJson(variants) } : {}),
       brand: form.brand.trim(),
       model: form.model.trim(),
       sku: form.sku?.trim() || null,
@@ -246,9 +252,9 @@ export function ProductsTab({
       payment_deadline_date: isSemSinal ? null : (form.payment_deadline_date || null),
       payment_deadline_hours: isSemSinal ? 0 : computedHours,
       down_payment_amount: isSemSinal || form.down_payment_amount === "" ? null : Number(form.down_payment_amount || 0),
-      stock: Number(form.stock || 0),
-      initial_stock: Number(form.stock || 0),
-      image_url: form.image_url || null,
+      stock: variants.length ? variants.reduce((sum, v) => sum + v.stock, 0) : Number(form.stock || 0),
+      initial_stock: variants.length ? variants.reduce((sum, v) => sum + v.stock, 0) : Number(form.stock || 0),
+      image_url: form.image_url || variants.find(v => v.image_url)?.image_url || null,
       slug: slugify(`${form.brand.trim()}-${form.model.trim()}`),
       bulk_discount_threshold: (form as any).bulk_discount_threshold ? Number((form as any).bulk_discount_threshold) : null,
       bulk_discount_price: (form as any).bulk_discount_price ? Number((form as any).bulk_discount_price) : null,
@@ -329,6 +335,7 @@ export function ProductsTab({
       }
     }
 
+    setVariants([]);
     setForm({ ...emptyProduct, category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda" });
     setSheetOpen(false);
     setIsCustomBrand(false);
@@ -344,6 +351,7 @@ export function ProductsTab({
   }
 
   async function handleQuickStock(product: Product, delta: number) {
+    if (getColorVariants(product).length) { setEditingProduct(product); return toast.info("Ajuste o estoque de cada cor na edição do produto."); }
     const currentStock = product.stock ?? 0;
     const newStock = Math.max(0, currentStock + delta);
     // initial_stock acompanha o delta: se lojista adiciona/remove unidades, o total original muda junto
@@ -371,6 +379,7 @@ export function ProductsTab({
   }
 
   function handleDuplicateProduct(p: Product) {
+    setVariants(getColorVariants(p).map(v => ({ ...v, id: crypto.randomUUID(), stock: 0 })));
     setForm({
       brand: p.brand || "",
       model: `${p.model} (Nova Edição)`,
@@ -619,7 +628,8 @@ export function ProductsTab({
                     type="number"
                     min="0"
                     required
-                    value={form.stock}
+                    value={variants.length ? variants.reduce((sum, v) => sum + v.stock, 0) : form.stock}
+                    disabled={variants.length > 0}
                     onChange={(e) => setForm({ ...form, stock: e.target.value })}
                     className="bg-muted/20 border-border/30"
                   />
@@ -807,6 +817,7 @@ export function ProductsTab({
                 />
               </div>
               <div className="space-y-1.5">
+                <ProductVariantsInput value={variants} onChange={setVariants} userId={userId} disabled={saving} />
                 <ProductPhotosInput
                   images={getProductImageUrls(form.image_url)}
                   onChange={(next) => {
@@ -864,7 +875,7 @@ export function ProductsTab({
             <Button
               type="button"
               size="sm"
-              onClick={() => { setForm({ ...emptyProduct, category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda", badge: mode === "pronta_entrega" ? "Pronta Entrega" : "" }); setIsCustomBrand(false); setSheetOpen(true); }}
+              onClick={() => { setVariants([]); setForm({ ...emptyProduct, category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda", badge: mode === "pronta_entrega" ? "Pronta Entrega" : "" }); setIsCustomBrand(false); setSheetOpen(true); }}
               className="gap-1.5 text-white font-semibold shadow-xs transition-opacity hover:opacity-90"
               style={{ backgroundColor: activeColor, color: activeTextColor }}
             >
@@ -1431,6 +1442,7 @@ function EditProductDialog({
     bulk_has_installment_surcharge: "false",
     bulk_installment_price: "",
   });
+  const [variants, setVariants] = useState<ColorVariant[]>([]);
   const [saving, setSaving] = useState(false);
   const [isCustomBrand, setIsCustomBrand] = useState(false);
 
@@ -1443,6 +1455,7 @@ function EditProductDialog({
 
   useEffect(() => {
     if (product) {
+      setVariants(getColorVariants(product));
       const rawVal = (product as any).down_payment_amount;
       const rawMaxInst = (product as any).max_installments;
       const rawPrice2x = (product as any).price_2x;
@@ -1490,6 +1503,8 @@ function EditProductDialog({
       return toast.error("Por favor, informe a marca da miniatura.");
     }
 
+    const variantsError = validateVariants(variants);
+    if (variantsError) return toast.error(variantsError);
     setSaving(true);
     const isPronta = (form as any).category === "pronta_entrega";
     const isSemSinal = isPronta || (form as any).signal_rule === "sem_sinal";
@@ -1507,13 +1522,14 @@ function EditProductDialog({
     const hasSurcharge = maxInst > 1 && form.has_surcharge === "true";
     const instPrice = maxInst > 1 ? (hasSurcharge && form.installment_price ? Number(form.installment_price) : Number(form.price || 0)) : null;
 
-    const newStock = Number(form.stock || 0);
+    const newStock = variants.length ? variants.reduce((sum, v) => sum + v.stock, 0) : Number(form.stock || 0);
     const currentStock = product.stock ?? 0;
     const currentInitial = (product as any).initial_stock ?? currentStock;
     const stockDelta = newStock - currentStock;
     const newInitial = Math.max(newStock, currentInitial + stockDelta);
 
     const payload: any = {
+      ...(variants.length || getColorVariants(product).length ? { color_variants: variantsToJson(variants) } : {}),
       brand: form.brand.trim(),
       model: form.model.trim(),
       sku: form.sku?.trim() || null,
@@ -1532,7 +1548,7 @@ function EditProductDialog({
       stock: newStock,
       initial_stock: newInitial,
       is_open: form.is_open,
-      image_url: form.image_url || null,
+      image_url: form.image_url || variants.find(v => v.image_url)?.image_url || null,
       slug: slugify(`${form.brand.trim()}-${form.model.trim()}`),
       bulk_discount_threshold: (form as any).bulk_discount_threshold ? Number((form as any).bulk_discount_threshold) : null,
       bulk_discount_price: (form as any).bulk_discount_price ? Number((form as any).bulk_discount_price) : null,
@@ -1540,10 +1556,21 @@ function EditProductDialog({
       bulk_installment_price: (form as any).bulk_has_installment_surcharge === "true" && (form as any).bulk_installment_price ? Number((form as any).bulk_installment_price) : null,
     };
 
-    let { error } = await supabase
-      .from("products")
-      .update(payload)
-      .eq("id", product.id);
+    let update = supabase.from("products").update(payload).eq("id", product.id);
+    if (payload.color_variants) update = update.eq("color_variants", JSON.stringify(product.color_variants || []));
+    const result = await update.select("id").maybeSingle();
+    let error = result.error;
+    if (!error && !result.data) {
+      setSaving(false);
+      await queryClient.invalidateQueries();
+      return toast.error("O estoque mudou enquanto você editava. Reabra o produto para atualizar os valores.");
+    }
+    if (error && payload.color_variants) {
+      setSaving(false);
+      return toast.error(error.message.includes("variant_has_orders")
+        ? "Esta cor já possui pedidos. Mantenha a cor e ajuste seu estoque para zero."
+        : "Não foi possível salvar as cores. Confira os dados e se a migração de cores foi aplicada.");
+    }
 
     // Fallbacks progressivos para lidar com colunas ausentes no banco
     if (error && (error.code === "PGRST204" || error.message?.includes("sku") || error.message?.includes("observation") || (error as any).status === 400)) {
@@ -1838,7 +1865,8 @@ function EditProductDialog({
                 type="number"
                 min="0"
                 required
-                value={form.stock}
+                value={variants.length ? variants.reduce((sum, v) => sum + v.stock, 0) : form.stock}
+                    disabled={variants.length > 0}
                 onChange={(e) => setForm({ ...form, stock: e.target.value })}
                 className="bg-muted/20 border-border/30"
               />
@@ -2040,6 +2068,7 @@ function EditProductDialog({
             />
           </div>
 
+          <ProductVariantsInput value={variants} onChange={setVariants} userId={userId} disabled={saving} />
           <ProductPhotosInput
             images={getProductImageUrls(form.image_url)}
             onChange={(next) => {

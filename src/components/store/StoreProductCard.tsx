@@ -1,3 +1,4 @@
+import { getColorVariants } from "@/lib/productVariants";
 import type { MouseEvent } from "react";
 import type { Product } from "@/lib/cart";
 import { brl, getProductInstallmentInfo, getProductSignalAmount, isProntaEntrega } from "@/lib/format";
@@ -138,7 +139,7 @@ export function StoreProductCard({
               onClick={(event) => onAdd(event, product)}
             >
               <ShoppingCart className="size-4 shrink-0" />
-              <span>Adicionar</span>
+              <span>{getColorVariants(product).length ? "Escolher cor" : "Adicionar"}</span>
             </Button>
           ) : (
             <Button asChild variant="outline" className="min-h-11 w-full px-2 text-xs font-semibold sm:text-sm">

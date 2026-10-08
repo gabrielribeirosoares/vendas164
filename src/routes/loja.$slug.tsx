@@ -1,3 +1,4 @@
+import { getColorVariants } from "@/lib/productVariants";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate, Outlet, useMatchRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -370,6 +371,10 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
     e.preventDefault();
     e.stopPropagation();
     
+    if (getColorVariants(p).length) {
+      window.location.href = getProductUrl(slug, p.slug || p.id);
+      return;
+    }
     if (p.stock <= 0) {
       toast.info("Esgotado! Entre no produto para fila de espera.");
       return;

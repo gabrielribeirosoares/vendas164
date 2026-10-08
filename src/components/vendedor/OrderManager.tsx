@@ -107,7 +107,7 @@ function isMissingPaginationRpc(error: { code?: string; message?: string } | nul
 }
 
 function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: string) {
-  const modelName = `${o.products?.brand || ''} ${o.products?.model || 'Miniatura'}`.trim();
+  const modelName = `${o.products?.brand || ''} ${o.products?.model || 'Miniatura'}${o.variant_name ? ` — ${o.variant_name}` : ''}`.trim();
   const total = Number(o.total_price) * quantity;
   const customSignal = Number((o.products as any)?.down_payment_amount || 0);
   const expectedSignal = (customSignal > 0 ? customSignal : Math.round(Number(o.total_price) * 0.2 * 100) / 100) * quantity;
@@ -137,7 +137,7 @@ function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: stri
   return msg;
 }
 function getWhatsAppTemplates(o: OrderRow, quantity: number, displayName: string, storePixKey?: string) {
-  const modelName = `${o.products?.brand || ''} ${o.products?.model || 'Miniatura'}`.trim();
+  const modelName = `${o.products?.brand || ''} ${o.products?.model || 'Miniatura'}${o.variant_name ? ` — ${o.variant_name}` : ''}`.trim();
   const customSignal = Number((o.products as any)?.down_payment_amount || 0);
   const expectedSignal = (customSignal > 0 ? customSignal : Math.round(Number(o.total_price) * 0.2 * 100) / 100) * quantity;
   const signal = Number(o.down_payment) > 0 ? Number(o.down_payment) * quantity : expectedSignal;
@@ -606,7 +606,7 @@ export function OrdersTab({
     filteredOrders.forEach((o) => {
       // Agrupar pedidos do mesmo cliente, produto, status e criados na mesma leva
       const dateKey = o.created_at ? o.created_at.slice(0, 16) : "";
-      const groupKey = `${o.user_id}_${o.product_id}_${o.payment_status}_${o.delivery_status}_${o.pix_key || ""}_${dateKey}`;
+      const groupKey = `${o.user_id}_${o.product_id}_${o.variant_id || ""}_${o.payment_status}_${o.delivery_status}_${o.pix_key || ""}_${dateKey}`;
 
       const existing = map.get(groupKey);
       if (existing) {
@@ -652,7 +652,7 @@ export function OrdersTab({
         customerName: displayName,
         customerPhone,
         customerEmail: o.profiles?.email || null,
-        productName: o.products?.model || "Miniatura",
+        productName: `${o.products?.model || "Miniatura"}${o.variant_name ? ` — ${o.variant_name}` : ""}`,
         productBrand: o.products?.brand || "",
         productScale: o.products?.scale || "1:64",
         quantity,
@@ -731,11 +731,12 @@ export function OrdersTab({
     if (!productId) return;
     const { data: product } = await supabase
       .from("products")
-      .select("stock, is_open")
+      .select("stock, is_open, color_variants")
       .eq("id", productId)
       .maybeSingle();
 
     if (!product) return;
+    if (Array.isArray(product.color_variants) && product.color_variants.length) return; // Variant lifecycle is atomic in the database.
 
     if (isCancelling) {
       const newStock = (product.stock ?? 0) + quantity;
@@ -1339,8 +1340,8 @@ export function OrdersTab({
                               <Checkbox checked={selectedOrders.has(groupId)} onCheckedChange={() => toggleSelection(groupId)} />
                             </div>
                             <div className="size-10 shrink-0 rounded bg-muted border border-border overflow-hidden">
-                               {o.products?.image_url ? (
-                                  <ProductThumbnail src={o.products.image_url} alt={o.products.model || ""} className="w-full h-full object-cover" />
+                               {(o.variant_image_url || o.products?.image_url) ? (
+                                  <ProductThumbnail src={o.variant_image_url || o.products?.image_url || ""} alt={o.products?.model || ""} className="w-full h-full object-cover" />
                                ) : <Package className="size-4 m-auto mt-3 text-muted-foreground" />}
                             </div>
                             <div className="min-w-0 flex-1">
@@ -1355,7 +1356,7 @@ export function OrdersTab({
                                   </Badge>
                                 )}
                               </div>
-                              <p className="text-xs font-semibold leading-snug whitespace-normal break-words">{o.products?.model || "Miniatura"}</p>
+                              <p className="text-xs font-semibold leading-snug whitespace-normal break-words">{o.products?.model || "Miniatura"}{o.variant_name ? ` — ${o.variant_name}` : ""}</p>
                               <p className="text-[10px] text-muted-foreground mt-0.5 whitespace-normal break-words leading-tight">{displayName}</p>
                               {(o.products as any)?.sku && (
                                 <div className="mt-0.5">
@@ -1468,10 +1469,10 @@ export function OrdersTab({
                         {/* Produto / Miniatura */}
                         <div className="flex items-start gap-3 rounded-xl bg-muted/30 p-2.5 border border-border/40">
                           <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50 mt-0.5">
-                            {o.products?.image_url ? (
+                            {(o.variant_image_url || o.products?.image_url) ? (
                               <ProductThumbnail
-                                src={o.products.image_url}
-                                alt={o.products.model || "Miniatura"}
+                                src={o.variant_image_url || o.products?.image_url || ""}
+                                alt={o.products?.model || "Miniatura"}
                                 className="h-full w-full object-cover"
                               />
                             ) : (
@@ -1499,7 +1500,7 @@ export function OrdersTab({
                               )}
                             </div>
                             <p className="font-semibold text-sm whitespace-normal break-words leading-snug mt-0.5">
-                              {o.products?.model || "Miniatura"}
+                              {o.products?.model || "Miniatura"}{o.variant_name ? ` — ${o.variant_name}` : ""}
                             </p>
                             {(o.products as any)?.sku && (
                               <div className="mt-1">
@@ -1786,10 +1787,10 @@ export function OrdersTab({
                     <TableCell className="min-w-[170px] max-w-[250px] align-top py-2.5 px-2">
                       <div className="flex items-start gap-2">
                         <div className="size-9 shrink-0 overflow-hidden rounded-md bg-muted border border-border/50 mt-0.5">
-                          {o.products?.image_url ? (
+                          {(o.variant_image_url || o.products?.image_url) ? (
                             <ProductThumbnail
-                              src={o.products.image_url}
-                              alt={o.products.model || "Miniatura"}
+                              src={o.variant_image_url || o.products?.image_url || ""}
+                              alt={o.products?.model || "Miniatura"}
                               className="h-full w-full object-cover"
                             />
                           ) : (
@@ -1800,7 +1801,7 @@ export function OrdersTab({
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold text-xs whitespace-normal break-words leading-tight">
-                            {o.products?.model || "Miniatura"}
+                            {o.products?.model || "Miniatura"}{o.variant_name ? ` — ${o.variant_name}` : ""}
                           </p>
                           <div className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1 flex-wrap mt-0.5">
                             <span>{o.products?.brand}</span>

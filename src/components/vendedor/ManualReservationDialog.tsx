@@ -1,3 +1,4 @@
+import { getColorVariants } from "@/lib/productVariants";
 
 import { getInstallmentOptions, getProductSignalAmount, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -66,6 +67,7 @@ export function ManualReservationDialog({
   const themeColor = storeColor || "#e11d48";
   const { user: currentUser } = useSession();
   const queryClient = useQueryClient();
+  const [selectedVariantId, setSelectedVariantId] = useState("");
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedClientMode, setSelectedClientMode] = useState<"existing" | "new">("new");
   const [selectedUserId, setSelectedUserId] = useState<string>("");
@@ -208,6 +210,7 @@ export function ManualReservationDialog({
       }
     }
   }, [selectedProductId, products]);
+  useEffect(() => { setSelectedVariantId(""); setManualQuantity(1); }, [selectedProductId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -270,9 +273,13 @@ export function ManualReservationDialog({
 
     const product = products.find((p) => p.id === selectedProductId);
     if (!product) return toast.error("Pré-venda não encontrada.");
-    if (product.stock <= 0) return toast.error("Unidades esgotadas para esta pré-venda.");
+    const variants = getColorVariants(product);
+    const variant = variants.find(v => v.id === selectedVariantId);
+    if (variants.length && !variant) return toast.error("Selecione uma cor.");
+    const availableStock = variant?.stock ?? product.stock;
+    if (availableStock <= 0) return toast.error("Unidades esgotadas para esta pré-venda.");
 
-    const qtyToCreate = Math.min(manualQuantity, product.stock);
+    const qtyToCreate = Math.min(manualQuantity, availableStock);
     if (qtyToCreate <= 0) return toast.error("Quantidade inválida.");
 
     setSaving(true);
@@ -338,6 +345,7 @@ export function ManualReservationDialog({
         : (pixKey.trim() || null);
 
       const orderPayload = {
+        variant_id: variant?.id,
         user_id: effectiveUserId, total_price: totalPrice, down_payment: downPayment,
         payment_status: paymentStatus, reservation_expires_at: expiresAt,
         installment_count: installmentCount, pix_key: guestKeyString,
@@ -407,11 +415,21 @@ export function ManualReservationDialog({
             </Select>
           </div>
 
+          {getColorVariants(products.find(p => p.id === selectedProductId)).length > 0 && <div className="space-y-1">
+            <Label htmlFor="manual-color">Cor</Label>
+            <Select value={selectedVariantId} onValueChange={value => { setSelectedVariantId(value); setManualQuantity(1); }}>
+              <SelectTrigger id="manual-color"><SelectValue placeholder="Selecione a cor" /></SelectTrigger>
+              <SelectContent>{getColorVariants(products.find(p => p.id === selectedProductId)).map(v =>
+                <SelectItem key={v.id} value={v.id} disabled={v.stock === 0}>{v.name} · {v.stock} unidades</SelectItem>
+              )}</SelectContent>
+            </Select>
+          </div>}
           {/* Quantidade e Resumo de Valor */}
           {(() => {
             const selProd = products.find((p) => p.id === selectedProductId);
             if (!selProd) return null;
-            const maxStock = Math.min(selProd.stock, 20);
+            const variants = getColorVariants(selProd);
+            const maxStock = Math.min(variants.length ? variants.find(v => v.id === selectedVariantId)?.stock ?? 0 : selProd.stock, 20);
             const unitPrice = Number(selProd.price || 0);
             const totalPrice = unitPrice * manualQuantity;
 

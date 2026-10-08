@@ -34,5 +34,5 @@ test("persisted cart items can change quantity after reopening", () => {
   assert.match(cart, /refreshPrices\({ silent: true }\)/);
   assert.doesNotMatch(cart, /item\.quantity <= 1 \|\| !item\.pricingProduct/);
   assert.doesNotMatch(cart, /busy \|\| !item\.pricingProduct \|\| item\.quantity/);
-  assert.match(cart, /Math\.min\(100, item\.pricingProduct\?\.stock \?\? 100\)/);
+  assert.match(cart, /Math\.min\(100, getCartAvailableStock\(item\)\)/);
 });

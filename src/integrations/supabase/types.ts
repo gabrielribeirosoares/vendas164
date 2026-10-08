@@ -86,6 +86,9 @@ export type Database = {
       }
       orders: {
         Row: {
+          variant_id?: string | null
+          variant_name?: string | null
+          variant_image_url?: string | null
           created_at: string
           delivery_status: string
           down_payment: number
@@ -105,6 +108,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          variant_id?: string | null
+          variant_name?: string | null
+          variant_image_url?: string | null
           created_at?: string
           delivery_status?: string
           down_payment?: number
@@ -124,6 +130,9 @@ export type Database = {
           user_id: string
         }
         Update: {
+          variant_id?: string | null
+          variant_name?: string | null
+          variant_image_url?: string | null
           created_at?: string
           delivery_status?: string
           down_payment?: number
@@ -202,6 +211,7 @@ export type Database = {
       }
       products: {
         Row: {
+          color_variants?: Json
           brand: string
           created_at: string
           id: string
@@ -229,6 +239,7 @@ export type Database = {
           observation?: string | null
         }
         Insert: {
+          color_variants?: Json
           brand: string
           created_at?: string
           id?: string
@@ -256,6 +267,7 @@ export type Database = {
           observation?: string | null
         }
         Update: {
+          color_variants?: Json
           brand?: string
           created_at?: string
           id?: string

@@ -182,10 +182,10 @@ export function SellerOrderDetailsDialog({
               </section>
               <section className="flex items-center gap-3 rounded-xl border p-4">
                 <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
-                  {order.products?.image_url ? (
+                  {(order.variant_image_url || order.products?.image_url) ? (
                     <ProductThumbnail
-                      src={order.products.image_url}
-                      alt={order.products.model || "Miniatura"}
+                      src={order.variant_image_url || order.products?.image_url || ""}
+                      alt={order.products?.model || "Miniatura"}
                       className="size-full object-contain"
                     />
                   ) : (
@@ -198,7 +198,7 @@ export function SellerOrderDetailsDialog({
                     {isOrderProntaEntrega(order) ? "Pronta entrega" : "Pré-venda"}
                   </p>
                   <h3 className="break-words font-semibold">
-                    {order.products?.model || "Miniatura"}
+                    {order.products?.model || "Miniatura"}{order.variant_name ? ` — ${order.variant_name}` : ""}
                   </h3>
                   <p className="text-sm">
                     {rows.length} unidade(s) · {brl(Number(order.total_price))} por unidade
@@ -268,7 +268,7 @@ export function SellerOrderDetailsDialog({
                   totalPrice={summary.total}
                   installmentCount={order.installment_count}
                   customerName={name}
-                  productName={order.products?.model || "Miniatura"}
+                  productName={`${order.products?.model || "Miniatura"}${order.variant_name ? ` — ${order.variant_name}` : ""}`}
                 />
                 <div className="space-y-2">
                   {rows.flatMap((row) =>

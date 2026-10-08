@@ -1,3 +1,4 @@
+import { getColorVariants } from "@/lib/productVariants";
 import { useState, useMemo } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -163,6 +164,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  const [selectedVariantId, setSelectedVariantId] = useState("");
   const [quantity, setQuantity] = useState<number>(1);
   const [selectedInstallment, setSelectedInstallment] = useState<number>(1);
   const [reserving, setReserving] = useState<boolean>(false);
@@ -218,6 +220,11 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
     },
   });
 
+  const variants = getColorVariants(product);
+  const selectedVariant = variants.find(v => v.id === selectedVariantId);
+  const availableStock = variants.length ? selectedVariant?.stock ?? 0 : product?.stock ?? 0;
+  const needsColor = variants.length > 0 && !selectedVariant;
+
   const waitlistCount = waitlistData?.length || 0;
   const userWaitlistIndex = user && waitlistData ? waitlistData.findIndex(w => w.user_id === user.id) : -1;
   const isOnWaitlist = userWaitlistIndex !== -1;
@@ -231,7 +238,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
   const signalInfo = getProductSignalAmount(product, quantity);
   const themeColor = product?.stores?.primary_color || "#e11d48";
   const themeTextColor = getReadableTextColor(themeColor);
-  const images = useMemo(() => getProductImageUrls(product?.image_url), [product?.image_url]);
+  const images = useMemo(() => getProductImageUrls(selectedVariant?.image_url || product?.image_url), [selectedVariant?.image_url, product?.image_url]);
   const activeImage = images[selectedImageIndex] || images[0] || product?.image_url;
 
   // Cálculo de parcelamento e total com base no produto e quantidade selecionada
@@ -245,6 +252,8 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
 
   async function handleReserve() {
     if (!product) return;
+    if (needsColor && product.stock > 0) return toast.error("Escolha uma cor antes de adicionar ao carrinho.");
+    if (selectedVariant && product.stock > 0 && availableStock <= 0) return toast.error("Esta cor está esgotada. Escolha outra cor.");
     if (!user) {
       navigate({ to: "/auth", search: { produto: product?.id, loja: product.store_id } });
       return;
@@ -254,25 +263,30 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
       return;
     }
     if (product.stock > 0) {
-      cart.addItem({
-        productId: product.id,
-        storeId: product.store_id,
-        storeName: product.stores?.name,
-        quantity: quantity,
-        selectedInstallment,
-        unitPriceForChosenOption,
-        totalPrice: totalPriceCalculated,
-        downPaymentToPay: downPaymentToPay,
-        remainingBalance: remainingBalanceCalculated,
-        hasNoSignal,
-        isProntaEntrega: isProntaEntrega(product),
-        productSnapshot: {
-          model: product.model,
-          brand: product.brand,
-          image_url: product.image_url,
-          scale: product.scale,
-        }
-      });
+      try {
+        cart.addItem({
+          productId: product.id,
+          variantId: selectedVariant?.id,
+          variantName: selectedVariant?.name,
+          pricingProduct: product,
+          storeId: product.store_id,
+          storeName: product.stores?.name,
+          quantity: quantity,
+          selectedInstallment,
+          unitPriceForChosenOption,
+          totalPrice: totalPriceCalculated,
+          downPaymentToPay: downPaymentToPay,
+          remainingBalance: remainingBalanceCalculated,
+          hasNoSignal,
+          isProntaEntrega: isProntaEntrega(product),
+          productSnapshot: {
+            model: product.model,
+            brand: product.brand,
+            image_url: selectedVariant?.image_url || product.image_url,
+            scale: product.scale,
+          }
+        });
+      } catch (error) { return toast.error(reservationErrorMessage(error)); }
       toast.success(quantity > 1 ? `${quantity} unidades adicionadas ao carrinho!` : "Unidade adicionada ao carrinho!");
     } else {
       setReserving(true);
@@ -582,13 +596,24 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
               </div>
             )}
 
+            {variants.length > 0 && <fieldset className="mt-5 space-y-2">
+              <legend className="mb-2 text-sm font-semibold">Escolha a cor</legend>
+              <div className="flex flex-wrap gap-2">
+                {variants.map(variant => <Button key={variant.id} type="button" variant={selectedVariantId === variant.id ? "default" : "outline"}
+                  aria-pressed={selectedVariantId === variant.id}
+                  onClick={() => { setSelectedVariantId(variant.id); setQuantity(1); setSelectedImageIndex(0); }}>
+                  {variant.name}{variant.stock === 0 ? " · Esgotada" : ""}
+                </Button>)}
+              </div>
+              <p className="text-xs text-muted-foreground">{selectedVariant ? `${selectedVariant.name}: ${selectedVariant.stock} unidades disponíveis` : "Selecione uma cor para ver as fotos e reservar."}</p>
+            </fieldset>}
             {/* Ações de Compra e Quantidade */}
             {product.is_open && product.stock > 0 && isEligibleToBuyWaitlist ? (
               <div className="mt-6 space-y-4 pt-4 border-t border-border/30">
                 {/* Controles inline de Quantidade e Forma de Pagamento */}
                 <div className="flex flex-wrap items-center gap-3">
                   {/* Seletor de Quantidade compacto */}
-                  {product.stock > 1 && (
+                  {availableStock > 1 && (
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold text-muted-foreground">Qtd:</span>
                       <div className="flex items-center border border-border/40 rounded-xl bg-muted/20 p-0.5">
@@ -610,8 +635,8 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
                           size="icon"
                           className="h-11 w-11 rounded-lg"
                           aria-label="Aumentar quantidade"
-                          onClick={() => setQuantity(Math.min(product.stock, 10, quantity + 1))}
-                          disabled={quantity >= Math.min(product.stock, 10)}
+                          onClick={() => setQuantity(Math.min(availableStock, 10, quantity + 1))}
+                          disabled={quantity >= Math.min(availableStock, 10)}
                         >
                           <Plus className="size-3.5" />
                         </Button>
@@ -687,7 +712,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
                     className="min-h-12 flex-1 rounded-xl text-sm font-bold text-white shadow-md transition-all"
                     onClick={handleReserve}
                     style={{ backgroundColor: themeColor, color: themeTextColor }}
-                    disabled={reserving}
+                    disabled={reserving || needsColor || (variants.length > 0 && availableStock === 0)}
                   >
                     <ShoppingBag className="size-4 mr-2" />
                     {isPronta

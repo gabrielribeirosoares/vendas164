@@ -6,6 +6,7 @@ export async function linkCustomerToStore(userId: string, storeId: string) {
 
 export interface CheckoutItem {
   product_id: string;
+  variant_id?: string;
   quantity: number;
   installments: number;
   expected_total: number;
@@ -35,6 +36,9 @@ export async function joinWaitlist(userId: string, productId: string, storeId: s
 export function reservationErrorMessage(error: unknown) {
   const err = error as { message?: string; details?: string; hint?: string; code?: string };
   const message = String(err?.message || err?.details || error || "");
+  if (message.includes("variant_required")) return "Escolha uma cor para este produto.";
+  if (message.includes("variant_not_found")) return "Esta cor não está mais disponível. Revise o carrinho.";
+  if (message.includes("variant_out_of_stock")) return "A cor selecionada não possui estoque suficiente.";
   if (message.includes("out_of_stock")) return "Unidades esgotadas. Entre na fila de espera.";
   if (message.includes("presale_closed")) return "Esta pré-venda está fechada.";
   if (message.includes("not_authenticated")) return "Faça login para reservar.";
