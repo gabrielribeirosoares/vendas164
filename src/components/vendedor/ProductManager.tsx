@@ -86,14 +86,14 @@ export function ProductsTab({
   store: Store;
   products: Product[];
   userId: string;
-  mode?: "pre_venda" | "pronta_entrega" | "all";
+  mode?: "pre_venda" | "pronta_entrega" | "rodinhas" | "all";
   onSelectTab?: (tab: string) => void;
   onlyOutOfStock?: boolean;
   onClearStockFilter?: () => void;
   waitlistCounts?: Record<string, number>;
 }) {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({ ...emptyProduct, category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda" });
+  const [form, setForm] = useState({ ...emptyProduct, category: (mode === "pronta_entrega" || mode === "rodinhas") ? "pronta_entrega" : "pre_venda" });
   const [variants, setVariants] = useState<ColorVariant[]>([]);
   const [saving, setSaving] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -105,19 +105,20 @@ export function ProductsTab({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [blingOpen, setBlingOpen] = useState(false);
 
-  const isBlingEligible = true;
+  const isBlingEligible = mode !== "rodinhas";
 
   const activeColor = store.primary_color || "#e11d48";
   const activeTextColor = getReadableTextColor(activeColor);
 
   const displayedProducts = useMemo(() => {
-    let list = products;
+    const ordinaryProducts = products.filter(p => p.product_kind !== "rodinhas");
+    let list = mode === "rodinhas" ? products.filter(p => p.product_kind === "rodinhas" && (!onlyOutOfStock || p.stock === 0)) : ordinaryProducts;
     if (mode === "pronta_entrega") {
-      list = products.filter((p) => isProntaEntrega(p) && (!onlyOutOfStock || p.stock === 0));
+      list = ordinaryProducts.filter((p) => isProntaEntrega(p) && (!onlyOutOfStock || p.stock === 0));
     } else if (mode === "pre_venda") {
-      list = products.filter((p) => !isProntaEntrega(p) && (!onlyOutOfStock || p.stock === 0));
+      list = ordinaryProducts.filter((p) => !isProntaEntrega(p) && (!onlyOutOfStock || p.stock === 0));
     } else if (onlyOutOfStock) {
-      list = products.filter((p) => p.stock === 0);
+      list = list.filter((p) => p.stock === 0);
     }
 
     if (searchQuery.trim()) {
@@ -220,7 +221,7 @@ export function ProductsTab({
     const variantsError = validateVariants(variants);
     if (variantsError) return toast.error(variantsError);
     setSaving(true);
-    const isPronta = (form as any).category === "pronta_entrega" || mode === "pronta_entrega";
+    const isPronta = (form as any).category === "pronta_entrega" || mode === "pronta_entrega" || mode === "rodinhas";
     const isSemSinal = isPronta || (form as any).signal_rule === "sem_sinal";
     let computedHours = isSemSinal ? 0 : 24;
     if (!isSemSinal && form.payment_deadline_date) {
@@ -236,6 +237,7 @@ export function ProductsTab({
 
     const payload: any = {
       store_id: store.id,
+      product_kind: mode === "rodinhas" ? "rodinhas" : "miniatura",
       ...(variants.length ? { color_variants: variantsToJson(variants) } : {}),
       brand: form.brand.trim(),
       model: form.model.trim(),
@@ -336,7 +338,7 @@ export function ProductsTab({
     }
 
     setVariants([]);
-    setForm({ ...emptyProduct, category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda" });
+    setForm({ ...emptyProduct, category: (mode === "pronta_entrega" || mode === "rodinhas") ? "pronta_entrega" : "pre_venda" });
     setSheetOpen(false);
     setIsCustomBrand(false);
     queryClient.invalidateQueries({ queryKey: ["store-products"] });
@@ -453,7 +455,7 @@ export function ProductsTab({
                   <span>Cadastrar miniatura a pronta entrega</span>
                 </>
               ) : (
-                <span>Nova pré-venda</span>
+                <span>{mode === "rodinhas" ? "Cadastrar rodinhas" : "Nova pré-venda"}</span>
               )}
             </SheetTitle>
           </SheetHeader>
@@ -583,7 +585,7 @@ export function ProductsTab({
                     className="bg-muted/20 border-border/30"
                   />
                 </div>
-                {mode !== "pronta_entrega" && (
+                {mode !== "pronta_entrega" && mode !== "rodinhas" && (
                   <div className="space-y-1.5 flex flex-col justify-end">
                     <Label htmlFor="signal_rule" className="text-xs font-medium text-muted-foreground whitespace-nowrap">Exigência Sinal</Label>
                     <Select 
@@ -606,7 +608,7 @@ export function ProductsTab({
                     </Select>
                   </div>
                 )}
-                {mode !== "pronta_entrega" && ((form as any).signal_rule !== 'sem_sinal') && (
+                {mode !== "pronta_entrega" && mode !== "rodinhas" && ((form as any).signal_rule !== 'sem_sinal') && (
                   <div className="space-y-1.5 flex flex-col justify-end">
                     <Label htmlFor="down_payment" className="text-xs font-medium text-muted-foreground">Sinal (R$)</Label>
                     <Input
@@ -778,7 +780,7 @@ export function ProductsTab({
                   </div>
                 )}
               </div>
-              {mode !== "pronta_entrega" && (
+              {mode !== "pronta_entrega" && mode !== "rodinhas" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="release" className="text-xs font-medium text-muted-foreground">Data estimada</Label>
@@ -817,7 +819,7 @@ export function ProductsTab({
                 />
               </div>
               <div className="space-y-1.5">
-                <ProductVariantsInput value={variants} onChange={setVariants} userId={userId} disabled={saving} />
+                {mode === "rodinhas" && <ProductVariantsInput value={variants} onChange={setVariants} userId={userId} disabled={saving} />}
                 <ProductPhotosInput
                   images={getProductImageUrls(form.image_url)}
                   onChange={(next) => {
@@ -831,7 +833,7 @@ export function ProductsTab({
                 />
               </div>
               <Button type="submit" className="w-full text-white font-semibold hover:opacity-90" style={{ backgroundColor: activeColor, color: activeTextColor }} disabled={saving}>
-                {saving && <Loader2 className="size-4 animate-spin" />} {mode === "pronta_entrega" ? "Publicar a pronta entrega" : "Publicar pré-venda"}
+                {saving && <Loader2 className="size-4 animate-spin" />} {mode === "rodinhas" ? "Publicar rodinhas" : mode === "pronta_entrega" ? "Publicar a pronta entrega" : "Publicar pré-venda"}
               </Button>
             </form>
           </SheetContent>
@@ -846,7 +848,7 @@ export function ProductsTab({
                 <Zap className="size-5 text-emerald-500" />
                 <span>Pronta Entrega ({displayedProducts.length})</span>
               </>
-            ) : mode === "pre_venda" ? (
+            ) : mode === "rodinhas" ? (<span>Rodinhas ({displayedProducts.length})</span>) : mode === "pre_venda" ? (
               <span>Estoque e Pré-vendas ({displayedProducts.length})</span>
             ) : (
               <span>Catálogo da Loja ({displayedProducts.length})</span>
@@ -875,11 +877,11 @@ export function ProductsTab({
             <Button
               type="button"
               size="sm"
-              onClick={() => { setVariants([]); setForm({ ...emptyProduct, category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda", badge: mode === "pronta_entrega" ? "Pronta Entrega" : "" }); setIsCustomBrand(false); setSheetOpen(true); }}
+              onClick={() => { setVariants([]); setForm({ ...emptyProduct, category: (mode === "pronta_entrega" || mode === "rodinhas") ? "pronta_entrega" : "pre_venda", badge: mode === "pronta_entrega" ? "Pronta Entrega" : "" }); setIsCustomBrand(false); setSheetOpen(true); }}
               className="gap-1.5 text-white font-semibold shadow-xs transition-opacity hover:opacity-90"
               style={{ backgroundColor: activeColor, color: activeTextColor }}
             >
-              <Plus className="size-4" /> {mode === "pronta_entrega" ? "Nova pronta entrega" : "Nova pré-venda"}
+              <Plus className="size-4" /> {mode === "rodinhas" ? "Novas rodinhas" : mode === "pronta_entrega" ? "Nova pronta entrega" : "Nova pré-venda"}
             </Button>
           </div>
         </div>
@@ -1190,7 +1192,9 @@ export function ProductsTab({
                 title={
                   searchQuery || selectedBrand !== "all" || onlyOutOfStock
                     ? "Nenhuma miniatura corresponde aos filtros"
-                    : mode === "pronta_entrega"
+                    : mode === "rodinhas"
+                      ? "Nenhuma rodinha cadastrada"
+                      : mode === "pronta_entrega"
                       ? "Nenhuma miniatura a pronta entrega"
                       : mode === "pre_venda"
                         ? "Nenhuma pré-venda cadastrada"
@@ -1199,7 +1203,7 @@ export function ProductsTab({
                 description={
                   searchQuery || selectedBrand !== "all" || onlyOutOfStock
                     ? "Limpe os filtros ou tente uma busca diferente para visualizar outros itens."
-                    : "Cadastre a primeira miniatura para começar a organizar e compartilhar seu catálogo."
+                    : mode === "rodinhas" ? "Cadastre um modelo de rodinhas e suas combinações de cor, medida e freio." : "Cadastre a primeira miniatura para começar a organizar e compartilhar seu catálogo."
                 }
                 action={
                   searchQuery || selectedBrand !== "all" || onlyOutOfStock ? (
@@ -1220,7 +1224,7 @@ export function ProductsTab({
                       onClick={() => {
                         setForm({
                           ...emptyProduct,
-                          category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda",
+                          category: (mode === "pronta_entrega" || mode === "rodinhas") ? "pronta_entrega" : "pre_venda",
                           badge: mode === "pronta_entrega" ? "Pronta Entrega" : "",
                         });
                         setIsCustomBrand(false);
@@ -1230,7 +1234,7 @@ export function ProductsTab({
                       style={{ backgroundColor: activeColor, color: activeTextColor }}
                     >
                       <Plus className="size-4" />
-                      {mode === "pronta_entrega" ? "Cadastrar pronta entrega" : "Cadastrar pré-venda"}
+                      {mode === "rodinhas" ? "Cadastrar rodinhas" : mode === "pronta_entrega" ? "Cadastrar pronta entrega" : "Cadastrar pré-venda"}
                     </Button>
                   )
                 }
@@ -1373,6 +1377,7 @@ export function ProductsTab({
       <EditProductDialog
         product={editingProduct}
         storeId={store.id}
+        wheelsEnabled={!!store.wheels_enabled}
         userId={userId}
         onClose={() => setEditingProduct(null)}
       />
@@ -1408,12 +1413,14 @@ export function ProductsTab({
 }
 
 function EditProductDialog({
+  wheelsEnabled,
   product,
   storeId,
   userId,
   onClose,
 }: {
   product: Product | null;
+  wheelsEnabled: boolean;
   storeId?: string;
   userId: string;
   onClose: () => void;
@@ -1483,6 +1490,7 @@ function EditProductDialog({
         payment_deadline_hours: product.payment_deadline_hours != null ? String(product.payment_deadline_hours) : "24",
         is_open: product.is_open ?? true,
         image_url: product.image_url ?? "",
+        product_kind: product.product_kind || "miniatura",
         category: isPronta ? "pronta_entrega" : ((product as any).category || "pre_venda"),
         bulk_discount_threshold: (product as any).bulk_discount_threshold != null ? String((product as any).bulk_discount_threshold) : "",
         bulk_discount_price: (product as any).bulk_discount_price != null ? String((product as any).bulk_discount_price) : "",
@@ -1529,6 +1537,7 @@ function EditProductDialog({
     const newInitial = Math.max(newStock, currentInitial + stockDelta);
 
     const payload: any = {
+      product_kind: (form as any).product_kind || "miniatura",
       ...(variants.length || getColorVariants(product).length ? { color_variants: variantsToJson(variants) } : {}),
       brand: form.brand.trim(),
       model: form.model.trim(),
@@ -1647,7 +1656,7 @@ function EditProductDialog({
       <DialogContent className="max-w-md border-border/30 bg-card/90 max-h-[85vh] overflow-y-auto pr-3">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-            {isProntaMode ? (
+            {(form as any).product_kind === "rodinhas" ? (<span>Editar rodinhas</span>) : isProntaMode ? (
               <>
                 <Zap className="size-5 text-emerald-500" />
                 <span>Editar pronta entrega</span>
@@ -1658,6 +1667,14 @@ function EditProductDialog({
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3 pt-2">
+          {wheelsEnabled && <div className="space-y-1.5">
+            <Label htmlFor="product-section">Seção da loja</Label>
+            <Select value={(form as any).product_kind || "miniatura"} onValueChange={value => setForm({...form,product_kind:value} as any)}>
+              <SelectTrigger id="product-section"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="miniatura">Miniaturas</SelectItem><SelectItem value="rodinhas">Rodinhas</SelectItem></SelectContent>
+            </Select>
+          </div>}
+
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground">Tipo de Anúncio</Label>
             <Select
@@ -2068,7 +2085,7 @@ function EditProductDialog({
             />
           </div>
 
-          <ProductVariantsInput value={variants} onChange={setVariants} userId={userId} disabled={saving} />
+          {((form as any).product_kind === "rodinhas" || getColorVariants(product).length > 0) && <ProductVariantsInput value={variants} onChange={setVariants} userId={userId} disabled={saving} />}
           <ProductPhotosInput
             images={getProductImageUrls(form.image_url)}
             onChange={(next) => {

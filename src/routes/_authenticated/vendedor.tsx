@@ -247,6 +247,8 @@ function SellerDashboard() {
         document.title = `${store.name} — Personalização`;
       } else if (activeTab === "pronta_entrega") {
         document.title = `${store.name} — Pronta Entrega`;
+      } else if (activeTab === "rodinhas") {
+        document.title = `${store.name} — Rodinhas`;
       } else if (activeTab === "clientes") {
         document.title = `${store.name} — Clientes`;
       } else if (activeTab === "fila_espera") {
@@ -275,7 +277,13 @@ function SellerDashboard() {
     },
   });
 
-  const needsProducts = ["produtos", "pronta_entrega", "reservas", "fila_espera"].includes(activeTab) || !!manualReservationWaitlist;
+  useEffect(() => {
+    if (store && activeTab === "rodinhas" && !store.wheels_enabled) {
+      void navigate({ search: { tab: "produtos" }, replace: true });
+    }
+  }, [store, activeTab, navigate]);
+
+  const needsProducts = ["produtos", "pronta_entrega", "rodinhas", "reservas", "fila_espera"].includes(activeTab) || !!manualReservationWaitlist;
   const needsFullWaitlist = activeTab === "fila_espera";
   const needsWaitlistProductIds = ["produtos", "pronta_entrega"].includes(activeTab);
 
@@ -582,6 +590,7 @@ function SellerDashboard() {
             <TabsTrigger value="pronta_entrega" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
               <Zap className="size-3.5 text-muted-foreground" /> Pronta Entrega
             </TabsTrigger>
+            {store.wheels_enabled && <TabsTrigger value="rodinhas" className="gap-1.5 text-xs sm:text-sm"><Car className="size-3.5" /> Rodinhas</TabsTrigger>}
             <TabsTrigger value="reservas" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
               <Car className="size-3.5 text-muted-foreground" /> Reservas
             </TabsTrigger>
@@ -625,6 +634,9 @@ function SellerDashboard() {
             {productsError ? <SellerDataError onRetry={() => void retryProducts()} /> : <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pre_venda" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} waitlistCounts={waitlistCounts} />}
           </TabsContent>
 
+          {store.wheels_enabled && <TabsContent value="rodinhas" className="mt-5">
+            {productsError ? <SellerDataError onRetry={() => void retryProducts()} /> : <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="rodinhas" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} waitlistCounts={waitlistCounts} />}
+          </TabsContent>}
           <TabsContent value="pronta_entrega" className="mt-5">
             {productsError ? <SellerDataError onRetry={() => void retryProducts()} /> : <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pronta_entrega" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} waitlistCounts={waitlistCounts} />}
           </TabsContent>
@@ -855,6 +867,19 @@ function AdminModerationPanel() {
   const queryClient = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
   // Estado do Modal de Gerenciamento de Assinatura e Dias de Teste
+  const [wheelsSaving, setWheelsSaving] = useState<string | null>(null);
+  async function toggleWheels(st: {id:string; wheels_enabled?:boolean}) {
+    setWheelsSaving(st.id);
+    try {
+      const {error} = await supabase.rpc("set_store_wheels_enabled", {_store_id:st.id,_enabled:!st.wheels_enabled});
+      if(error) throw error;
+      await queryClient.invalidateQueries({queryKey:["admin-all-stores"]});
+      await queryClient.invalidateQueries({queryKey:["my-store"]});
+      await queryClient.invalidateQueries({queryKey:["my-store-header"]});
+      toast.success(st.wheels_enabled ? "Aba Rodinhas desabilitada." : "Aba Rodinhas habilitada para esta loja.");
+    } catch {toast.error("Não foi possível alterar a liberação das rodinhas.");}
+    finally {setWheelsSaving(null);}
+  }
   const [managingStore, setManagingStore] = useState<any>(null);
   const [selectedPlanType, setSelectedPlanType] = useState<"subscriber" | "trial" | "rejected">("subscriber");
   const [customDays, setCustomDays] = useState<number>(14);
@@ -1125,6 +1150,9 @@ function AdminModerationPanel() {
                         <Settings className="size-3.5" /> Gerenciar Assinatura / Dias
                       </Button>
 
+                      <Button size="sm" variant="outline" disabled={wheelsSaving !== null} aria-pressed={!!st.wheels_enabled} onClick={() => void toggleWheels(st)}>
+                        {st.wheels_enabled ? "Desabilitar rodinhas" : "Habilitar rodinhas"}
+                      </Button>
                       {cleanPhone && (
                         <Button
                           asChild

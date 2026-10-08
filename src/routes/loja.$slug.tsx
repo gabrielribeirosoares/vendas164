@@ -178,7 +178,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBrand, setSelectedBrand] = useState<string>("all");
-  const [selectedType, setSelectedType] = useState<"all" | "pre" | "pronta">("all");
+  const [selectedType, setSelectedType] = useState<"all" | "pre" | "pronta" | "rodinhas">("all");
   const [selectedScale, setSelectedScale] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"name" | "recent" | "price_asc" | "price_desc">("recent");
   const [onlyInStock, setOnlyInStock] = useState<boolean>(false);
@@ -654,6 +654,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                   <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="pre">Pré-venda</SelectItem>
                   <SelectItem value="pronta">Pronta entrega</SelectItem>
+                  {store.wheels_enabled && <SelectItem value="rodinhas">Rodinhas</SelectItem>}
                 </SelectContent>
               </Select>
 
@@ -722,6 +723,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
                 >
                   Pronta entrega
                </button>
+              {store.wheels_enabled && <button type="button" onClick={() => setSelectedType("rodinhas")} aria-pressed={selectedType === "rodinhas"} className="rounded-full px-4 py-1.5 text-xs font-semibold" style={selectedType === "rodinhas" ? {backgroundColor:themeColor,color:themeTextColor} : undefined}>Rodinhas</button>}
             </div>
 
             <div className="flex items-center gap-2 shrink-0">

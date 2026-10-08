@@ -57,6 +57,8 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/20260924165900_atomic_global_payment.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20261008173147_product_color_variants.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20261008203000_product_variant_options.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261008203820_wheels_store_access.sql', import.meta.url), 'utf8'));
+  await db.query('INSERT INTO private.platform_admins(user_id) VALUES($1)',[guest]);
 });
 after(() => db.close());
 async function coloredProduct(redStock = 1, blueStock = 2) {
@@ -174,4 +176,35 @@ test('combinations use server prices, optional attributes and independent stock'
   for(const price of [-1,1.001,'10']) {
     await assert.rejects(db.query('UPDATE products SET color_variants=$1 WHERE id=$2',[JSON.stringify([{...options[0],price}]),id]),/invalid_variants/);
   }
+});
+
+test('only admins release wheels; catalog and checkout respect store access',async()=>{
+  const id=await product();
+  await asUser(owner);
+  await assert.rejects(db.query('SELECT set_store_wheels_enabled($1,true)',[store]),/admin_required/);
+  await assert.rejects(db.query('UPDATE stores SET wheels_enabled=true WHERE id=$1',[store]),/admin_required/);
+  await assert.rejects(db.query("UPDATE products SET product_kind='rodinhas' WHERE id=$1",[id]),/wheels_not_enabled/);
+  await asUser(guest);
+  await db.query('SELECT set_store_wheels_enabled($1,true)',[store]);
+  await asUser(owner);
+  await db.query("UPDATE products SET product_kind='rodinhas' WHERE id=$1",[id]);
+  await asUser(null,'anon');
+  const catalog=async type=>(await db.query("SELECT catalog_page($1,_type=>$2) AS page",[store,type])).rows[0].page;
+  assert.equal((await catalog('rodinhas')).products[0].id,id);
+  for(const type of ['all','pre','pronta']) assert.ok(!(await catalog(type)).products.some(p=>p.id===id));
+  await asUser();
+  const orders=await checkout([item(id)]);
+  await asUser(guest);
+  await db.query('SELECT set_store_wheels_enabled($1,false)',[store]);
+  await asUser(null,'anon');
+  assert.equal((await catalog('rodinhas')).total,0);
+  assert.equal((await db.query('SELECT id FROM products WHERE id=$1',[id])).rows.length,0);
+  await asUser();
+  await assert.rejects(checkout([item(id)]),/product_not_found|wheels_not_enabled/);
+  await asUser(owner);
+  assert.equal((await db.query('SELECT id FROM products WHERE id=$1',[id])).rows.length,1);
+  const request=randomUUID();
+  await assert.rejects(db.query('SELECT create_manual_reservations($1,$2,1,$3)',[request,id,JSON.stringify({user_id:customer,total_price:100,installment_count:1,payment_status:'sem_sinal'})]),/wheels_not_enabled/);
+  await db.query("UPDATE orders SET payment_status='cancelado' WHERE id=$1",[orders[0]]);
+  assert.ok((await catalog('all')).total>0);
 });

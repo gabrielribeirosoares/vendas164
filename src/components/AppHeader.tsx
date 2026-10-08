@@ -24,6 +24,7 @@ import { getStoreFullUrl } from "@/lib/subdomain";
 interface AppHeaderProps {
   store?: {
     id?: string;
+    wheels_enabled?: boolean;
     name: string;
     logo_url?: string | null;
     favicon_url?: string | null;
@@ -57,7 +58,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
     queryFn: async () => {
       const { data } = await supabase
         .from("stores")
-        .select("id, name, logo_url, favicon_url, primary_color")
+        .select("id, name, logo_url, favicon_url, primary_color, wheels_enabled")
         .eq("owner_id", user!.id)
         .maybeSingle();
       return data;
@@ -242,6 +243,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                                     <Zap className="size-4 text-muted-foreground" /> Pronta Entrega
                                   </Link>
                                 </Button>
+                                {currentStore.wheels_enabled && <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "rodinhas")} onClick={() => setMobileMenuOpen(false)}><Link to="/vendedor" search={{tab:"rodinhas"}} aria-current={activeSellerTab === "rodinhas" ? "page" : undefined}><Car className="size-4" /> Rodinhas</Link></Button>}
                                 <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "reservas")} onClick={() => setMobileMenuOpen(false)}>
                                   <Link to="/vendedor" search={{ tab: "reservas" }} aria-current={activeSellerTab === "reservas" ? "page" : undefined}>
                                     <Car className="size-4 text-muted-foreground" /> Pedidos/Reservas
