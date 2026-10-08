@@ -20,3 +20,17 @@ export const notifyCustomerOrderUpdateServer = createServerFn({ method: "POST" }
   .handler(async ({ data }) => {
     return (await import("./push.server")).notifyCustomerOrderUpdate(data.customerId, data.status);
   });
+
+export const checkPushSubscriptionServer = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { endpoint: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { data: subscription, error } = await context.supabase
+      .from("push_subscriptions")
+      .select("id")
+      .eq("endpoint", data.endpoint)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (error) throw new Error("push_subscription_check_failed");
+    return !!subscription;
+  });

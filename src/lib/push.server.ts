@@ -1,18 +1,16 @@
 import webpush from "web-push";
 import { supabaseAdmin } from "../integrations/supabase/client.server";
 
-// Configure Web Push Keys
-const vapidPublicKey = process.env.VITE_VAPID_PUBLIC_KEY || "BDdwrBpz-nGKX2I5uZL4LpQ8oY57fdNSmqpiZyUTo9DnAxUsW2Pxp_2k7aPyXAAUksfWwYW60uIjH7BB7yUMnNs";
-const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "K72Ai7yO_rdAJ0mtwwwHV9vzytuvukF8qKOLFrtJDNE";
-const contactEmail = "mailto:contato@vendas164.com.br";
-
-try {
-  webpush.setVapidDetails(contactEmail, vapidPublicKey, vapidPrivateKey);
-} catch (error) {
-  console.error("Falha ao configurar VAPID details. Chaves não configuradas?", error);
+// Configure only from deployment secrets; never use committed fallback keys.
+function configureWebPush() {
+  const publicKey = process.env.VITE_VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  if (!publicKey || !privateKey) throw new Error("push_not_configured");
+  webpush.setVapidDetails("mailto:contato@vendas164.com.br", publicKey, privateKey);
 }
 
 export async function saveSubscriptionToDatabase(userId: string, data: { endpoint: string; p256dh: string; auth: string; user_agent?: string; store_id?: string }) {
+  configureWebPush();
   const { error } = await supabaseAdmin
     .from("push_subscriptions")
     .upsert(
@@ -48,6 +46,7 @@ export async function sendPushNotification(
     return; // User has no subscriptions, silently return
   }
 
+  configureWebPush();
   const pushPayload = JSON.stringify(payload);
 
   const promises = subscriptions.map(async (sub) => {
