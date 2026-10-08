@@ -56,6 +56,7 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/20260923004537_seller_server_pagination.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260924165900_atomic_global_payment.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20261008173147_product_color_variants.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261008203000_product_variant_options.sql', import.meta.url), 'utf8'));
 });
 after(() => db.close());
 async function coloredProduct(redStock = 1, blueStock = 2) {
@@ -152,4 +153,25 @@ test('deleting a product with colored orders allows the existing cascade to comp
   await asUser(owner);
   await db.query('DELETE FROM products WHERE id=$1',[id]);
   assert.equal((await db.query('SELECT id FROM orders WHERE product_id=$1',[id])).rows.length,0);
+});
+
+test('combinations use server prices, optional attributes and independent stock',async()=>{
+  const id=await product({bulk_discount_threshold:2,bulk_discount_price:50});
+  const first=randomUUID(),second=randomUUID();
+  await db.exec('RESET ROLE');
+  const options=[{id:first,name:'ignored',color:'Azul',size:'12 mm',brake:'Com freio',price:150.5,stock:2,image_url:null},{id:second,name:'ignored',color:'Azul',size:'14 mm',brake:'Sem freio',stock:1,image_url:null}];
+  await db.query('UPDATE products SET color_variants=$1 WHERE id=$2',[JSON.stringify(options),id]);
+  await asUser();
+  await assert.rejects(checkout([item(id,{variant_id:first,expected_total:100})]),/price_changed/);
+  const orders=await checkout([item(id,{variant_id:first,quantity:2,expected_total:301,expected_signal:60.2})]);
+  const saved=(await db.query('SELECT total_price,signal_amount,variant_name FROM orders WHERE id=$1',[orders[0]])).rows[0];
+  assert.equal(Number(saved.total_price),150.5);
+  assert.equal(Number(saved.signal_amount),30.1);
+  assert.equal(saved.variant_name,'Azul — 12 mm — Com freio');
+  assert.equal((await variants(id)).find(v=>v.id===second).stock,1);
+  await checkout([item(id,{variant_id:second})]);
+  await db.exec('RESET ROLE');
+  for(const price of [-1,1.001,'10']) {
+    await assert.rejects(db.query('UPDATE products SET color_variants=$1 WHERE id=$2',[JSON.stringify([{...options[0],price}]),id]),/invalid_variants/);
+  }
 });

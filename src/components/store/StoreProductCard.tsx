@@ -139,7 +139,7 @@ export function StoreProductCard({
               onClick={(event) => onAdd(event, product)}
             >
               <ShoppingCart className="size-4 shrink-0" />
-              <span>{getColorVariants(product).length ? "Escolher cor" : "Adicionar"}</span>
+              <span>{getColorVariants(product).length ? "Escolher opções" : "Adicionar"}</span>
             </Button>
           ) : (
             <Button asChild variant="outline" className="min-h-11 w-full px-2 text-xs font-semibold sm:text-sm">

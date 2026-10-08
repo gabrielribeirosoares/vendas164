@@ -55,3 +55,35 @@ assert.throws(
 console.log(
   "Cart: colors stay separate, snapshots and price refresh validated, stock limits enforced.",
 );
+
+cart.getState().clearCart();
+const combinations = {
+  ...product,
+  bulk_discount_threshold: 2,
+  bulk_discount_price: 50,
+  color_variants: [
+    {
+      id: "wheel",
+      name: "Azul — 12 mm — Com freio",
+      color: "Azul",
+      size: "12 mm",
+      brake: "Com freio",
+      price: 150.5,
+      stock: 3,
+      image_url: "wheel.webp",
+    },
+  ],
+};
+cart.getState().addItem({ ...base, pricingProduct: combinations, variantId: "wheel", quantity: 2 });
+assert.equal(cart.getState().items[0].totalPrice, 301);
+assert.equal(cart.getState().items[0].variantName, "Azul — 12 mm — Com freio");
+assert.equal(cart.getState().items[0].pricingProduct?.price, 100);
+cart
+  .getState()
+  .refreshPrices([
+    { ...combinations, color_variants: [{ ...combinations.color_variants[0], price: 160 }] },
+  ]);
+assert.equal(cart.getState().items[0].totalPrice, 320);
+console.log(
+  "Cart: combination price overrides bulk pricing and refreshes from the original product.",
+);

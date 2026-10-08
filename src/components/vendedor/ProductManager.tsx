@@ -351,7 +351,7 @@ export function ProductsTab({
   }
 
   async function handleQuickStock(product: Product, delta: number) {
-    if (getColorVariants(product).length) { setEditingProduct(product); return toast.info("Ajuste o estoque de cada cor na edição do produto."); }
+    if (getColorVariants(product).length) { setEditingProduct(product); return toast.info("Ajuste o estoque de cada combinação na edição do produto."); }
     const currentStock = product.stock ?? 0;
     const newStock = Math.max(0, currentStock + delta);
     // initial_stock acompanha o delta: se lojista adiciona/remove unidades, o total original muda junto
@@ -1568,8 +1568,8 @@ function EditProductDialog({
     if (error && payload.color_variants) {
       setSaving(false);
       return toast.error(error.message.includes("variant_has_orders")
-        ? "Esta cor já possui pedidos. Mantenha a cor e ajuste seu estoque para zero."
-        : "Não foi possível salvar as cores. Confira os dados e se a migração de cores foi aplicada.");
+        ? "Esta combinação já possui pedidos. Mantenha a combinação e ajuste seu estoque para zero."
+        : "Não foi possível salvar as combinações. Confira os dados e se a migração de variações foi aplicada.");
     }
 
     // Fallbacks progressivos para lidar com colunas ausentes no banco

@@ -1,4 +1,5 @@
-import { getColorVariants } from "@/lib/productVariants";
+import { ProductVariantSelector } from "@/components/store/ProductVariantSelector";
+import { getColorVariants, getVariantPricingProduct } from "@/lib/productVariants";
 import { useState, useMemo } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -222,6 +223,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
 
   const variants = getColorVariants(product);
   const selectedVariant = variants.find(v => v.id === selectedVariantId);
+  const pricingProduct = product ? getVariantPricingProduct(product, selectedVariant) : product;
   const availableStock = variants.length ? selectedVariant?.stock ?? 0 : product?.stock ?? 0;
   const needsColor = variants.length > 0 && !selectedVariant;
 
@@ -234,25 +236,25 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
     (isOnWaitlist && product && userWaitlistIndex < product.stock);
 
   const isPronta = isProntaEntrega(product);
-  const hasNoSignal = hasNoSignalRequirement(product);
-  const signalInfo = getProductSignalAmount(product, quantity);
+  const hasNoSignal = hasNoSignalRequirement(pricingProduct);
+  const signalInfo = getProductSignalAmount(pricingProduct, quantity);
   const themeColor = product?.stores?.primary_color || "#e11d48";
   const themeTextColor = getReadableTextColor(themeColor);
   const images = useMemo(() => getProductImageUrls(selectedVariant?.image_url || product?.image_url), [selectedVariant?.image_url, product?.image_url]);
   const activeImage = images[selectedImageIndex] || images[0] || product?.image_url;
 
   // Cálculo de parcelamento e total com base no produto e quantidade selecionada
-  const installmentOptions = getInstallmentOptions(product, quantity);
+  const installmentOptions = getInstallmentOptions(pricingProduct, quantity);
   const chosenInstallmentObj = installmentOptions.find((o) => o.value === selectedInstallment) ?? installmentOptions[0];
   const totalPriceCalculated = chosenInstallmentObj.totalPrice;
   const unitPriceForChosenOption = totalPriceCalculated / Math.max(1, quantity);
-  const downPaymentToPay = hasNoSignal ? 0 : signalInfo.amount;
+  const downPaymentToPay = hasNoSignal ? 0 : Math.min(totalPriceCalculated, signalInfo.amount);
   const remainingBalanceCalculated = Math.max(0, totalPriceCalculated - downPaymentToPay);
   const installmentValCalculated = selectedInstallment > 1 ? totalPriceCalculated / selectedInstallment : totalPriceCalculated;
 
   async function handleReserve() {
     if (!product) return;
-    if (needsColor && product.stock > 0) return toast.error("Escolha uma cor antes de adicionar ao carrinho.");
+    if (needsColor && product.stock > 0) return toast.error("Escolha as opções antes de adicionar ao carrinho.");
     if (selectedVariant && product.stock > 0 && availableStock <= 0) return toast.error("Esta cor está esgotada. Escolha outra cor.");
     if (!user) {
       navigate({ to: "/auth", search: { produto: product?.id, loja: product.store_id } });
@@ -514,7 +516,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
               </div>
 
               {(() => {
-                const inst = getProductInstallmentInfo(product, quantity);
+                const inst = getProductInstallmentInfo(pricingProduct, quantity);
                 if (!inst) return null;
                 return (
                   <p className="text-xs sm:text-sm text-muted-foreground">
@@ -596,17 +598,7 @@ export function ProductView({ slug: slugProp, itemSlug: itemSlugProp }: { slug?:
               </div>
             )}
 
-            {variants.length > 0 && <fieldset className="mt-5 space-y-2">
-              <legend className="mb-2 text-sm font-semibold">Escolha a cor</legend>
-              <div className="flex flex-wrap gap-2">
-                {variants.map(variant => <Button key={variant.id} type="button" variant={selectedVariantId === variant.id ? "default" : "outline"}
-                  aria-pressed={selectedVariantId === variant.id}
-                  onClick={() => { setSelectedVariantId(variant.id); setQuantity(1); setSelectedImageIndex(0); }}>
-                  {variant.name}{variant.stock === 0 ? " · Esgotada" : ""}
-                </Button>)}
-              </div>
-              <p className="text-xs text-muted-foreground">{selectedVariant ? `${selectedVariant.name}: ${selectedVariant.stock} unidades disponíveis` : "Selecione uma cor para ver as fotos e reservar."}</p>
-            </fieldset>}
+            {variants.length > 0 && <ProductVariantSelector key={product.id} variants={variants} onChange={(id) => { setSelectedVariantId(id); setQuantity(1); setSelectedImageIndex(0); }} />}
             {/* Ações de Compra e Quantidade */}
             {product.is_open && product.stock > 0 && isEligibleToBuyWaitlist ? (
               <div className="mt-6 space-y-4 pt-4 border-t border-border/30">

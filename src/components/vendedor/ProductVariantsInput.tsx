@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ProductPhotosInput } from "./ProductPhotosInput";
 import { getProductImageUrls } from "@/lib/imageUrls";
-import type { ColorVariant } from "@/lib/productVariants";
+import { getVariantLabel, type ColorVariant } from "@/lib/productVariants";
 
 export function ProductVariantsInput({
   value,
@@ -19,15 +19,20 @@ export function ProductVariantsInput({
   const latestValue = useRef(value);
   latestValue.current = value;
   const update = (id: string, patch: Partial<ColorVariant>) =>
-    onChange(latestValue.current.map((v) => (v.id === id ? { ...v, ...patch } : v)));
+    onChange(
+      latestValue.current.map((v) =>
+        v.id === id ? { ...v, ...patch, name: getVariantLabel({ ...v, ...patch }) } : v,
+      ),
+    );
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-3 rounded-xl border p-3">
-      <legend className="px-1 text-sm font-semibold">Opções de cor</legend>
+      <legend className="px-1 text-sm font-semibold">Variações do produto</legend>
       <p className="text-xs text-muted-foreground">
-        Use zero unidades para indisponibilizar uma cor que já possui pedidos.
+        Use zero unidades para indisponibilizar uma combinação que já possui pedidos.
       </p>
       <p className="text-xs text-muted-foreground">
-        Todas as cores usam o preço do anúncio. O estoque total é a soma das cores.
+        Preencha apenas os campos necessários. Sem preço próprio, a combinação usa os valores do
+        anúncio.
       </p>
       {value.map((v, index) => (
         <div key={v.id} className="min-w-0 space-y-3 rounded-lg border p-3">
@@ -38,14 +43,52 @@ export function ProductVariantsInput({
                 aria-label={`Cor ${index + 1}`}
                 maxLength={60}
                 placeholder="Ex.: Vermelho"
-                value={v.name}
-                onChange={(e) => update(v.id, { name: e.target.value })}
+                value={v.color ?? v.name}
+                onChange={(e) => update(v.id, { color: e.target.value })}
+              />
+            </label>
+            <label className="text-xs">
+              Medida (opcional)
+              <Input
+                aria-label={`Medida ${index + 1}`}
+                placeholder="Ex.: 12 mm"
+                maxLength={60}
+                value={v.size ?? ""}
+                onChange={(e) => update(v.id, { size: e.target.value })}
+              />
+            </label>
+            <label className="text-xs">
+              Freio (opcional)
+              <select
+                aria-label={`Freio ${index + 1}`}
+                className="mt-1 h-10 w-full rounded-md border bg-background px-2 text-sm"
+                value={v.brake ?? ""}
+                onChange={(e) => update(v.id, { brake: e.target.value })}
+              >
+                <option value="">Não se aplica</option>
+                <option value="Com freio">Com freio</option>
+                <option value="Sem freio">Sem freio</option>
+              </select>
+            </label>
+            <label className="text-xs">
+              Preço próprio (opcional)
+              <Input
+                aria-label={`Preço ${index + 1}`}
+                type="number"
+                min={0}
+                max={1000000}
+                step="0.01"
+                placeholder="Preço do anúncio"
+                value={v.price ?? ""}
+                onChange={(e) =>
+                  update(v.id, { price: e.target.value === "" ? null : Number(e.target.value) })
+                }
               />
             </label>
             <label className="text-xs">
               Unidades disponíveis
               <Input
-                aria-label={`Estoque da cor ${index + 1}`}
+                aria-label={`Estoque da combinação ${index + 1}`}
                 type="number"
                 min={0}
                 max={999999}
@@ -55,6 +98,9 @@ export function ProductVariantsInput({
               />
             </label>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Preço próprio vale à vista e parcelado, sem desconto por quantidade.
+          </p>
           <ProductPhotosInput
             userId={userId}
             disabled={disabled}
@@ -71,7 +117,7 @@ export function ProductVariantsInput({
             size="sm"
             onClick={() => onChange(value.filter((x) => x.id !== v.id))}
           >
-            Remover cor
+            Remover combinação
           </Button>
         </div>
       ))}
@@ -80,10 +126,22 @@ export function ProductVariantsInput({
         variant="outline"
         disabled={disabled || value.length >= 40}
         onClick={() =>
-          onChange([...value, { id: crypto.randomUUID(), name: "", stock: 0, image_url: null }])
+          onChange([
+            ...value,
+            {
+              id: crypto.randomUUID(),
+              name: "",
+              color: "",
+              size: "",
+              brake: "",
+              price: null,
+              stock: 0,
+              image_url: null,
+            },
+          ])
         }
       >
-        Adicionar cor
+        Adicionar combinação
       </Button>
       {value.length > 0 && (
         <p className="text-xs font-medium">

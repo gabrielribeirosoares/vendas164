@@ -21,3 +21,9 @@ A migração adiciona `products.color_variants` e snapshots de cor em `orders`. 
 - `npm run typecheck` e `npm run build`.
 
 Os testes de banco usam PGlite. Antes de disponibilizar a clientes, conferir cadastro, fotos e compra de duas cores no ambiente com a migração aplicada.
+
+## Cor, medida e freio
+
+No cadastro, adicione uma linha para cada combinação disponível. Cor, medida e freio são opcionais; ao menos um deles deve ser preenchido. Cada linha tem estoque, fotos e preço próprio opcional. Sem preço próprio, a combinação usa as condições do produto. Com preço próprio, o valor vale à vista e parcelado, sem desconto por quantidade. O cliente escolhe as opções no mesmo anúncio; o pedido guarda o nome completo e a foto da combinação.
+
+A migração `20261008203000_product_variant_options.sql` normaliza nomes e valida atributos/preços no servidor. O checkout lê o preço diretamente do banco. Os anúncios antigos de cor continuam compatíveis.

@@ -1,4 +1,4 @@
-import { getColorVariants, getCartAvailableStock } from "./productVariants";
+import { getColorVariants, getCartAvailableStock, getVariantPricingProduct, getVariantLabel } from "./productVariants";
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Tables } from '@/integrations/supabase/types';
@@ -38,23 +38,24 @@ export function repriceCartItem(item: CartItem, quantity: number, product = item
   if (variants.length && !variant) throw new Error('variant_required');
   if (item.variantId && !variant) throw new Error('variant_not_found');
   if (product && item.variantId && quantity > getCartAvailableStock({ ...item, pricingProduct: product })) throw new Error('variant_out_of_stock');
-  const option = product && getInstallmentOptions(product, quantity).find(o => o.value === item.selectedInstallment);
+  const effectiveProduct = product && getVariantPricingProduct(product, variant);
+  const option = effectiveProduct && getInstallmentOptions(effectiveProduct, quantity).find(o => o.value === item.selectedInstallment);
   if (product && !option) throw new Error('invalid_installments');
   const unit = money(option ? option.totalPrice / quantity : item.unitPriceForChosenOption);
   const totalPrice = money(unit * quantity);
-  const signal = product ? Math.min(unit, getProductSignalAmount(product, 1).amount) : item.downPaymentToPay / item.quantity;
+  const signal = product ? Math.min(unit, getProductSignalAmount(effectiveProduct, 1).amount) : item.downPaymentToPay / item.quantity;
   const downPaymentToPay = money(signal * quantity);
   return {
     ...item,
     quantity,
-    variantName: variant?.name ?? item.variantName,
+    variantName: variant ? getVariantLabel(variant) : item.variantName,
     productSnapshot: { ...item.productSnapshot, image_url: variant?.image_url || product?.image_url || item.productSnapshot.image_url },
     pricingProduct: product,
     unitPriceForChosenOption: unit,
     totalPrice,
     downPaymentToPay,
     remainingBalance: money(totalPrice - downPaymentToPay),
-    hasNoSignal: product ? hasNoSignalRequirement(product) : item.hasNoSignal,
+    hasNoSignal: product ? hasNoSignalRequirement(effectiveProduct) : item.hasNoSignal,
     isProntaEntrega: product ? isProntaEntrega(product) : item.isProntaEntrega,
   };
 }
