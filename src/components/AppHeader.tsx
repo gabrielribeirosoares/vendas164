@@ -201,7 +201,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                 </div>
 
                 <div className="flex items-center gap-1 sm:gap-1.5">
-                  <div className="hidden md:flex items-center gap-1"><PushNotificationManager storeId={currentStore?.id} /><ThemeToggle /></div>
+                  <div className="flex items-center gap-1"><PushNotificationManager storeId={currentStore?.id} /><ThemeToggle /></div>
                   {location.pathname !== "/vendedor" && <CartDrawer />}
                   <div className="hidden md:flex"><TourTriggerButton /></div>
                   
@@ -252,7 +252,6 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                                 </Link>
                               </Button>
                             )}
-                            <div className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-3"><PushNotificationManager storeId={currentStore?.id} showLabel /><span className="text-sm text-muted-foreground">Tema</span><ThemeToggle /></div>
                             <Button variant="ghost" className={mobileItemClass(false, true)} onClick={() => { setMobileMenuOpen(false); setProfileOpen(true); }}>
                               <User className="size-5 text-blue-500" /> Meu Perfil
                             </Button>

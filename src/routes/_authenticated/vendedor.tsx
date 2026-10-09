@@ -573,14 +573,14 @@ function SellerDashboard() {
           onOpenWaitlist={() => setActiveTab("fila_espera")}
         />
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="mt-8 md:grid md:grid-cols-[190px_minmax(0,1fr)] md:items-start md:gap-6">
-          <TabsList className="hidden md:flex md:sticky md:top-24 h-auto w-full flex-col items-stretch justify-start gap-1 rounded-xl border border-border/50 bg-card/70 p-2 shadow-sm [&>button]:min-h-11 [&>button]:justify-start">
+        <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="mt-8 md:grid md:grid-cols-[240px_minmax(0,1fr)] lg:grid-cols-[260px_minmax(0,1fr)] md:items-start md:gap-6">
+          <TabsList className="hidden md:flex md:sticky md:top-24 h-auto w-full flex-col items-stretch justify-start gap-1 rounded-xl border border-border/50 bg-card/70 p-2 shadow-sm">
             {getSellerNavigation(!!store.wheels_enabled, isAdmin).map((section, index, sections) => {
               const Icon = section.icon;
-              return <div key={section.id}>
-                {(index === 0 || section.group !== sections[index - 1].group) && <span className="block px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{section.group}</span>}
-                <TabsTrigger value={section.id} className="w-full justify-start gap-1.5 text-sm text-muted-foreground data-[state=active]:text-foreground">
-                  <Icon className="size-3.5" />{section.title}
+              return <div key={section.id} className="min-w-0">
+                {(index === 0 || section.group !== sections[index - 1].group) && <span className="block px-3 pb-2 pt-4 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{section.group}</span>}
+                <TabsTrigger value={section.id} className="h-auto min-h-11 w-full justify-start gap-2.5 whitespace-normal rounded-lg px-3 py-3 text-left text-sm leading-snug text-muted-foreground data-[state=active]:text-foreground">
+                  <Icon className="size-4 shrink-0" /><span className="min-w-0 break-words">{section.title}</span>
                 </TabsTrigger>
               </div>;
             })}

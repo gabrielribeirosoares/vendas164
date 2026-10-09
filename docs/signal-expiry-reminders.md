@@ -25,7 +25,7 @@ A interface destaca reservas aguardando sinal que vencem nas próximas 24 horas.
 
 ## Homologação mobile
 
-O menu mobile reúne tema e notificações. A desativação remove apenas a inscrição da conta autenticada neste dispositivo. Não alteramos variáveis, chaves, migrações remotas ou agendamento nesta entrega. Validar em 320, 375, 390 e 430 px, incluindo PWA iOS: menu, seção ativa, rodinhas autorizadas, card fechado e detalhes. Testar duas contas no mesmo dispositivo e sinal pago/cancelado antes do envio.
+O topo mobile mantém os ícones de tema e notificações; o hambúrguer reúne a navegação. A desativação remove apenas a inscrição da conta autenticada neste dispositivo. Não alteramos variáveis, chaves, migrações remotas ou agendamento nesta entrega. Validar em 320, 375, 390 e 430 px, incluindo PWA iOS: menu, seção ativa, rodinhas autorizadas, card fechado e detalhes. Testar duas contas no mesmo dispositivo e sinal pago/cancelado antes do envio.
 
 Aplicar também `20261009182842_signal_expiry_priority.sql`, após as migrações de variantes, para ordenar os sinais pelo prazo mais próximo antes da paginação. A migração está preparada no repositório e não foi aplicada remotamente.
 
