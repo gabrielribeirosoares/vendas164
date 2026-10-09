@@ -1,3 +1,5 @@
+import { summarizeClientOrders } from "@/lib/clientOrderSummary";
+import { summarizeReservation } from "@/lib/reservationSummary";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PaymentBadge } from "@/components/StatusBadge";
 import { Package, Copy, MessageCircle, Search, Trophy, Star, Crown, Users, Sparkles, Zap, CheckCircle2, FileSpreadsheet, ChevronLeft, ChevronRight, Loader2, RefreshCw, Wallet, CalendarClock, ChevronDown } from 'lucide-react';
@@ -430,8 +432,9 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
   const currentSelectedClient = useMemo(() => {
     if (!selectedClient) return null;
     const current = allClients.find(c => c.userId === selectedClient.userId) || selectedClient;
-    return usesServerPagination && selectedClientOrders
-      ? { ...current, orders: selectedClientOrders }
+    const clientOrders = usesServerPagination ? selectedClientOrders : current.orders;
+    return clientOrders
+      ? { ...current, orders: clientOrders, ...summarizeClientOrders(clientOrders) }
       : current;
   }, [allClients, selectedClient, selectedClientOrders, usesServerPagination]);
 
@@ -696,7 +699,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
         return (order as any).delivery_status === "entregue";
       }
       if (itemStatusFilter === "pending_payment") {
-        return order.payment_status !== "quitado" && (order as any).delivery_status !== "entregue";
+        return summarizeReservation([order]).balance > 0;
       }
       if (itemStatusFilter === "paid") {
         return order.payment_status === "quitado";
@@ -1136,8 +1139,8 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
             {/* CARDS DE RESUMO DO ACERVO GERAL */}
             {currentSelectedClient && (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <Card className="border-border/60 bg-card shadow-sm">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  <Card className="col-span-2 sm:col-span-1 border-border/60 bg-card shadow-sm">
                     <CardContent className="p-3 sm:p-4">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-medium text-muted-foreground">Total em pedidos</span>
@@ -1163,14 +1166,14 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                   </Card>
 
                   <Card className={`shadow-sm ${currentSelectedClient.remainingBalance > 0 ? "border-amber-500/30 bg-amber-500/[0.06]" : "border-emerald-500/25 bg-emerald-500/[0.06]"}`}>
-                    <CardContent className="p-3 sm:p-4">
+                    <CardContent className="p-0"><button type="button" className="w-full rounded-xl p-3 sm:p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => { setItemStatusFilter("pending_payment"); setItemSearch(""); }} aria-label="Mostrar miniaturas com saldo pendente">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-medium text-muted-foreground">Saldo a receber</span>
                         <CalendarClock className={`size-4 ${currentSelectedClient.remainingBalance > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`} aria-hidden="true" />
                       </div>
                       <span className="mt-1 block text-lg font-bold tabular-nums text-foreground">{brl(currentSelectedClient.remainingBalance)}</span>
-                      <span className="text-xs text-muted-foreground">{currentSelectedClient.remainingBalance > 0 ? "pendente nos pedidos" : "todos os pedidos quitados"}</span>
-                    </CardContent>
+                      <span className="text-xs text-muted-foreground">{currentSelectedClient.remainingBalance > 0 ? `${currentSelectedClient.pendingItems ?? ""} miniaturas com saldo · toque para ver` : "Sem saldo pendente"}</span>
+                    </button></CardContent>
                   </Card>
                 </div>
 
@@ -1190,7 +1193,8 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
             )}
 
             {/* SEÇÃO DE ANOTAÇÕES */}
-            <div className="space-y-2 rounded-xl border border-border/50 bg-background/50 p-2.5 sm:p-3">
+            <details className="space-y-2 rounded-xl border border-border/50 bg-background/50 p-2.5 sm:p-3">
+              <summary className="min-h-10 cursor-pointer text-sm font-medium leading-10">Anotações do cliente</summary>
               <div className="flex justify-between items-center">
                 <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                   Anotações do Cliente
@@ -1211,7 +1215,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                 rows={2}
                 className="text-xs"
               />
-            </div>
+            </details>
 
             {/* HISTÓRICO, FILTROS E BUSCA DE RESERVAS */}
             <div className="space-y-2.5 pt-1">
@@ -1223,49 +1227,20 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                 <span className="text-xs text-muted-foreground">{filteredClientOrders.length} {filteredClientOrders.length === 1 ? "pedido" : "pedidos"}</span>
               </div>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <Button
-                    variant={itemStatusFilter === "active" ? "default" : "outline"}
-                    size="sm"
-                    className="h-7 text-xs px-2 font-semibold"
-                    onClick={() => setItemStatusFilter("active")}
-                  >
-                    Em Aberto ({((currentSelectedClient?.orders || []).filter((o: any) => o.delivery_status !== 'entregue')).length})
-                  </Button>
-                  <Button
-                    variant={itemStatusFilter === "arrived" ? "default" : "outline"}
-                    size="sm"
-                    className="h-7 text-xs px-2 text-emerald-600"
-                    onClick={() => setItemStatusFilter("arrived")}
-                  >
-                    Na Loja ({currentSelectedClient?.arrivedCount || 0})
-                  </Button>
-                  <Button
-                    variant={itemStatusFilter === "preorder" ? "default" : "outline"}
-                    size="sm"
-                    className="h-7 text-xs px-2"
-                    onClick={() => setItemStatusFilter("preorder")}
-                  >
-                    Pré-venda ({currentSelectedClient?.preorderCount || 0})
-                  </Button>
-                  {currentSelectedClient?.deliveredCount > 0 && (
-                    <Button
-                      variant={itemStatusFilter === "delivered" ? "default" : "outline"}
-                      size="sm"
-                      className="h-7 text-xs px-2 text-blue-600 dark:text-blue-400"
-                      onClick={() => setItemStatusFilter("delivered")}
-                    >
-                      Entregues ({currentSelectedClient?.deliveredCount || 0})
-                    </Button>
-                  )}
-                  <Button
-                    variant={itemStatusFilter === "all" ? "default" : "outline"}
-                    size="sm"
-                    className="h-7 text-xs px-2"
-                    onClick={() => setItemStatusFilter("all")}
-                  >
-                    Todas ({currentSelectedClient?.orders?.length || 0})
-                  </Button>
+                <div className="w-full sm:w-64 min-w-0">
+                  <Label htmlFor="client-history-filter" className="sr-only">Filtrar pedidos do cliente</Label>
+                  <Select value={itemStatusFilter} onValueChange={setItemStatusFilter}>
+                    <SelectTrigger id="client-history-filter" className="h-10 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Em andamento</SelectItem>
+                      <SelectItem value="pending_payment">Com saldo pendente</SelectItem>
+                      <SelectItem value="paid">Quitados</SelectItem>
+                      <SelectItem value="arrived">Na loja</SelectItem>
+                      <SelectItem value="preorder">Pré-venda</SelectItem>
+                      <SelectItem value="delivered">Entregues</SelectItem>
+                      <SelectItem value="all">Todos os pedidos</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="relative w-full sm:w-56">
@@ -1289,9 +1264,9 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                   {filteredClientOrders.map((order: OrderRow) => {
                     const price = Number(order.total_price || 0);
                     const signalPaid = (order.payment_status === "sinal_pago" || order.payment_status === "quitado") ? Number(order.down_payment || 0) : 0;
-                    const paidInsts = (order.order_installments || []).filter((i: any) => i.status === "paid").reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-                    const itemPaid = Math.min(price, signalPaid + paidInsts);
-                    const itemRemaining = Math.max(0, price - itemPaid);
+                    const itemFinancial = summarizeReservation([order]);
+                    const itemPaid = itemFinancial.received;
+                    const itemRemaining = itemFinancial.balance;
                     const releaseDate = (order.products as any)?.release_date;
                     const isArrived = releaseDate ? new Date(releaseDate + "T00:00:00") <= now : true;
 
