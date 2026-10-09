@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 export type ReservationDetailSection = "payment" | "delivery";
 
 export function ReservationNextAction({
-  hideDetails = false,
+  hideDetails = true,
   paymentStatus,
   deliveryStatus,
   onOpenDetails,
