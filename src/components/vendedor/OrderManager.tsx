@@ -1,3 +1,5 @@
+import { useSession } from "@/lib/session";
+import { reservationListKey, readReservationList, saveReservationList } from "@/lib/reservationListMemory";
 import React, { useState, useRef, useMemo, useEffect, useDeferredValue } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -43,7 +45,6 @@ import {
 import type { Tables } from '@/integrations/supabase/types';
 
 export type Product = Tables<'products'>;
-const DEFAULT_PAGE_SIZE = 25;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 export type OrderRow = Tables<"orders"> & {
@@ -276,7 +277,14 @@ function OrderWhatsAppDropdown({
   );
 }
 
-export function OrdersTab({
+export function OrdersTab(props: Omit<React.ComponentProps<typeof OrdersTabContent>, "persistenceKey">) {
+  const { user } = useSession();
+  const key = reservationListKey(user?.id || "anonymous", props.storeId || "legacy", props.focusFilter);
+  return <OrdersTabContent {...props} persistenceKey={key} key={key} />;
+}
+
+function OrdersTabContent({
+  persistenceKey,
   orders,
   storeId,
   storeColor,
@@ -285,6 +293,7 @@ export function OrdersTab({
   focusFilter,
   onClearFocus,
 }: {
+  persistenceKey: string;
   orders: OrderRow[];
   storeId?: string;
   storeColor?: string;
@@ -294,23 +303,47 @@ export function OrdersTab({
   onClearFocus?: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [paymentFilter, setPaymentFilter] = useState<string>("todos");
-  const [deliveryFilter, setDeliveryFilter] = useState<string>("todos");
-  const [categoryFilter, setCategoryFilter] = useState<"todos" | "pre_venda" | "pronta_entrega">("todos");
-  const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
+  const [saved] = useState(() => readReservationList(persistenceKey));
+  const [page, setPage] = useState(saved.page);
+  const [pageSize, setPageSize] = useState<number>(saved.pageSize);
+  const [searchQuery, setSearchQuery] = useState(saved.searchQuery);
+  const [startDate, setStartDate] = useState(saved.startDate);
+  const [endDate, setEndDate] = useState(saved.endDate);
+  const [paymentFilter, setPaymentFilter] = useState<string>(saved.paymentFilter);
+  const [deliveryFilter, setDeliveryFilter] = useState<string>(saved.deliveryFilter);
+  const [categoryFilter, setCategoryFilter] = useState<"todos" | "pre_venda" | "pronta_entrega">(saved.categoryFilter);
+  const [viewMode, setViewMode] = useState<"table" | "kanban">(saved.viewMode);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
   const deferredSearchQuery = useDeferredValue(searchQuery.trim());
 
-  useEffect(() => {
-    setPage(0);
-  }, [pageSize, searchQuery, paymentFilter, deliveryFilter, categoryFilter, startDate, endDate, focusFilter]);
-
   const parentRef = useRef<HTMLDivElement>(null);
+  const scrollPosition = useRef({ listScroll: saved.listScroll, windowScroll: saved.windowScroll });
+  const previousFilters = useRef(JSON.stringify([pageSize, searchQuery, paymentFilter, deliveryFilter, categoryFilter, startDate, endDate]));
+  const restoredScroll = useRef(false);
+  const preferences = useRef(saved);
+  useEffect(() => {
+    const filters = JSON.stringify([pageSize, searchQuery, paymentFilter, deliveryFilter, categoryFilter, startDate, endDate]);
+    if (filters !== previousFilters.current) {
+      previousFilters.current = filters;
+      setPage(0);
+      scrollPosition.current.listScroll = 0;
+      if (parentRef.current) parentRef.current.scrollTop = 0;
+    }
+  }, [pageSize, searchQuery, paymentFilter, deliveryFilter, categoryFilter, startDate, endDate]);
+  useEffect(() => {
+    preferences.current = { page, pageSize, searchQuery, startDate, endDate, paymentFilter, deliveryFilter, categoryFilter, viewMode, ...scrollPosition.current };
+    saveReservationList(persistenceKey, preferences.current);
+  }, [persistenceKey, page, pageSize, searchQuery, startDate, endDate, paymentFilter, deliveryFilter, categoryFilter, viewMode]);
+  useEffect(() => {
+    const saveScroll = (event: Event) => {
+      if (!restoredScroll.current) return;
+      if (event.target === parentRef.current) scrollPosition.current.listScroll = parentRef.current?.scrollTop || 0;
+      if (event.target === document) scrollPosition.current.windowScroll = window.scrollY;
+      saveReservationList(persistenceKey, { ...preferences.current, ...scrollPosition.current });
+    };
+    document.addEventListener("scroll", saveScroll, { capture: true, passive: true });
+    return () => document.removeEventListener("scroll", saveScroll, true);
+  }, [persistenceKey]);
 
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [trackingDrafts, setTrackingDrafts] = useState<Record<string, string>>({});
@@ -328,6 +361,7 @@ export function OrdersTab({
   const {
     data: orderPage,
     isFetching: isOrdersFetching,
+    isPlaceholderData: isOrdersPlaceholder,
     isError: isOrdersError,
     refetch: refetchOrders,
   } = useQuery({
@@ -674,6 +708,10 @@ export function OrdersTab({
   const endRow = isAllPages ? totalReservations : Math.min(totalReservations, (safePage + 1) * pageSize);
   const rows = isServerPage ? groupedOrders : (isAllPages ? groupedOrders : groupedOrders.slice(safePage * pageSize, (safePage + 1) * pageSize));
 
+  useEffect(() => {
+    if (!isOrdersFetching && !isOrdersPlaceholder && !isOrdersError && (!storeId || orderPage) && page !== safePage) setPage(safePage);
+  }, [page, safePage, isOrdersFetching, isOrdersPlaceholder, isOrdersError, storeId, orderPage]);
+
   async function loadOrdersForExport(): Promise<OrderRow[]> {
     if (!isServerPage || !storeId) return filteredOrders;
 
@@ -934,6 +972,16 @@ export function OrdersTab({
     estimateSize: () => 470,
     overscan: 5,
   });
+
+  useEffect(() => {
+    if (restoredScroll.current || isOrdersFetching || isOrdersPlaceholder || isOrdersError || page !== safePage || (storeId && !orderPage)) return;
+    const frame = requestAnimationFrame(() => {
+      if (parentRef.current) parentRef.current.scrollTop = scrollPosition.current.listScroll;
+      if (scrollPosition.current.windowScroll > 0) window.scrollTo({ top: scrollPosition.current.windowScroll, behavior: "instant" });
+      restoredScroll.current = true;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isOrdersFetching, isOrdersPlaceholder, isOrdersError, orderPage, storeId, rows.length, page, safePage]);
 
   const handleDragStart = (e: React.DragEvent, item: GroupedOrderRow) => {
     e.dataTransfer.setData("application/json", JSON.stringify(item.ids));
