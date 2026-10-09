@@ -2,6 +2,7 @@ import webpush from "web-push";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isSignalDueSoon, isAllowedPushEndpoint } from "./signalReminder";
+import { reminderTestUser, hasActiveSignalDelivery } from "./signalDelivery";
 
 type Reminder = {
   order_id: string;
@@ -20,11 +21,15 @@ type Reminder = {
 const db = supabaseAdmin as unknown as SupabaseClient;
 
 export async function sendSignalExpiryReminders() {
+  const testUser = reminderTestUser(process.env);
   const publicKey = process.env.VITE_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   if (!publicKey || !privateKey) throw new Error("push_configuration_missing");
   webpush.setVapidDetails("mailto:contato@vendas164.com.br", publicKey, privateKey);
-  const { data, error } = await db.rpc("claim_signal_reminders", { _limit: 20 });
+  const { data, error } = await db.rpc("claim_signal_reminders", {
+    _limit: 20,
+    _user_id: testUser,
+  });
   if (error) throw new Error("reminder_claim_failed");
   const reminders = (data || []) as Reminder[];
   const results = { claimed: reminders.length, sent: 0, skipped: 0, failed: 0 };
@@ -52,7 +57,21 @@ export async function sendSignalExpiryReminders() {
             .eq("id", item.order_id)
             .maybeSingle();
           if (error) throw new Error("reminder_recheck_failed");
+          const { data: emailPreference, error: preferenceError } = await db
+            .from("signal_email_preferences")
+            .select("enabled")
+            .eq("user_id", item.user_id)
+            .maybeSingle();
+          const { data: emailDeliveries, error: emailError } = await db
+            .from("signal_email_deliveries")
+            .select("status,updated_at")
+            .eq("order_id", item.order_id)
+            .eq("expires_at", item.expires_at)
+            .in("status", ["sending", "sent"]);
+          if (preferenceError || emailError) throw new Error("reminder_channel_recheck_failed");
           if (
+            emailPreference?.enabled ||
+            hasActiveSignalDelivery(emailDeliveries || []) ||
             !order ||
             order.user_id !== item.user_id ||
             !isSignalDueSoon(order) ||

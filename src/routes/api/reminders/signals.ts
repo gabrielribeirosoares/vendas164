@@ -20,9 +20,13 @@ export const Route = createFileRoute("/api/reminders/signals")({
         }
         try {
           const { sendSignalExpiryReminders } = await import("@/lib/signalReminders.server");
-          return Response.json(await sendSignalExpiryReminders(), {
-            headers: { "Cache-Control": "no-store" },
-          });
+          const { sendSignalEmailReminders } = await import("@/lib/signalEmailReminders.server");
+          return Response.json(
+            { push: await sendSignalExpiryReminders(), email: await sendSignalEmailReminders() },
+            {
+              headers: { "Cache-Control": "no-store" },
+            },
+          );
         } catch {
           // Never log subscriptions, keys or customer payloads.
           console.error("Signal reminder job failed; verify migration and push configuration.");
