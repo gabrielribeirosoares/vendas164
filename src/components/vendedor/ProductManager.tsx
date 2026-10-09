@@ -459,8 +459,22 @@ export function ProductsTab({
               )}
             </SheetTitle>
           </SheetHeader>
-            <form onSubmit={submit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <form onSubmit={submit} onInvalidCapture={(event) => { if (event.target instanceof HTMLElement) { const section = event.target.closest("details"); if (section) section.open = true; } }} className="space-y-4">
+              <div className="space-y-1.5">
+                {mode === "rodinhas" && <ProductVariantsInput value={variants} onChange={setVariants} userId={userId} disabled={saving} />}
+                <ProductPhotosInput
+                  images={getProductImageUrls(form.image_url)}
+                  onChange={(next) => {
+                    setForm((f) => ({
+                      ...f,
+                      image_url: next.length > 1 ? JSON.stringify(next) : (next[0] || ""),
+                    }));
+                  }}
+                  userId={userId}
+                  disabled={saving}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="brand" className="text-xs font-medium text-muted-foreground">Marca</Label>
                   <Select
@@ -502,18 +516,9 @@ export function ProductsTab({
                     />
                   )}
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="scale" className="text-xs font-medium text-muted-foreground">Escala</Label>
-                  <Input
-                    id="scale"
-                    maxLength={12}
-                    value={form.scale}
-                    onChange={(e) => setForm({ ...form, scale: e.target.value })}
-                    className="bg-muted/20 border-border/30"
-                  />
-                </div>
+
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="sm:col-span-2 space-y-1.5">
                   <Label htmlFor="model" className="text-xs font-medium text-muted-foreground">Modelo</Label>
                   <Input
@@ -525,52 +530,11 @@ export function ProductsTab({
                     className="bg-muted/20 border-border/30"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="sku" className="text-xs font-medium text-muted-foreground">
-                    SKU <span className="text-[10px] font-normal opacity-70">(Código)</span>
-                  </Label>
-                  <Input
-                    id="sku"
-                    placeholder="Ex: HW-001"
-                    maxLength={40}
-                    value={form.sku}
-                    onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                    className="bg-muted/20 border-border/30 font-mono text-xs"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="badge" className="text-xs font-medium text-muted-foreground">Selo (Badge)</Label>
-                  <Select
-                    value={(form as any).badge || "__none"}
-                    onValueChange={(val) => setForm({ ...form, badge: val === "__none" ? "" : val } as any)}
-                  >
-                    <SelectTrigger id="badge" className="bg-muted/20 border-border/30">
-                      <SelectValue placeholder="Selo..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PRESET_BADGES.map((b) => (
-                        <SelectItem key={b.value || "__none"} value={b.value || "__none"}>
-                          {b.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+
+
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="cost_price" className="text-xs font-medium text-muted-foreground">Custo (R$) <span className="text-[10px] font-normal opacity-70">(Opcional)</span></Label>
-                  <Input
-                    id="cost_price"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="150"
-                    value={form.cost_price}
-                    onChange={(e) => setForm({ ...form, cost_price: e.target.value })}
-                    className="bg-muted/20 border-border/30"
-                  />
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
                 <div className="space-y-1.5">
                   <Label htmlFor="price" className="text-xs font-medium text-muted-foreground">Venda À vista (R$)</Label>
                   <Input
@@ -638,8 +602,9 @@ export function ProductsTab({
                 </div>
               </div>
 
-              <div className="space-y-3 rounded-lg border border-amber-500/15 bg-amber-500/5 p-4">
-                <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Desconto por Quantidade (Atacado)</p>
+              <details className="space-y-3 rounded-lg border border-border/30 bg-muted/15 p-4">
+                <summary className="min-h-11 cursor-pointer text-sm font-semibold leading-6">Desconto por quantidade<span className="block text-xs font-normal text-muted-foreground">{Number((form as any).bulk_discount_threshold) > 0 ? `A partir de ${(form as any).bulk_discount_threshold} unidades` : "Opcional · configurar atacado"}</span></summary>
+                <div className="space-y-3 pt-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="bulk_threshold" className="text-xs font-medium text-muted-foreground">A partir de (unidades)</Label>
@@ -705,8 +670,10 @@ export function ProductsTab({
                   </>
                 )}
               </div>
+              </details>
 
-              <div className="space-y-3 rounded-lg border border-border/30 bg-muted/15 p-4">
+              <details className="space-y-3 rounded-lg border border-border/30 bg-muted/15 p-4"><summary className="min-h-11 cursor-pointer text-sm font-semibold leading-6">Parcelamento<span className="block text-xs font-normal text-muted-foreground">{Number(form.max_installments) > 1 ? `Até ${form.max_installments}x · ${(form as any).has_surcharge === "true" ? "com acréscimo" : "sem acréscimo"}` : "Somente à vista"}</span></summary>
+                <div className="space-y-3 pt-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium text-muted-foreground">Máximo de parcelas</Label>
@@ -780,6 +747,7 @@ export function ProductsTab({
                   </div>
                 )}
               </div>
+              </details>
               {mode !== "pronta_entrega" && mode !== "rodinhas" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
@@ -804,7 +772,58 @@ export function ProductsTab({
                   </div>
                 </div>
               )}
-              <div className="space-y-1.5">
+
+              <details className="rounded-lg border border-border/30 bg-muted/15 p-4"><summary className="min-h-11 cursor-pointer text-sm font-semibold leading-6">Mais opções<span className="block text-xs font-normal text-muted-foreground">Escala, código SKU, selo, custo e observações</span></summary><div className="grid grid-cols-1 gap-3 pt-3 sm:grid-cols-2"><div className="space-y-1.5">
+                  <Label htmlFor="scale" className="text-xs font-medium text-muted-foreground">Escala</Label>
+                  <Input
+                    id="scale"
+                    maxLength={12}
+                    value={form.scale}
+                    onChange={(e) => setForm({ ...form, scale: e.target.value })}
+                    className="bg-muted/20 border-border/30"
+                  />
+                </div><div className="space-y-1.5">
+                  <Label htmlFor="sku" className="text-xs font-medium text-muted-foreground">
+                    SKU <span className="text-[10px] font-normal opacity-70">(Código)</span>
+                  </Label>
+                  <Input
+                    id="sku"
+                    placeholder="Ex: HW-001"
+                    maxLength={40}
+                    value={form.sku}
+                    onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                    className="bg-muted/20 border-border/30 font-mono text-xs"
+                  />
+                </div><div className="space-y-1.5">
+                  <Label htmlFor="badge" className="text-xs font-medium text-muted-foreground">Selo (Badge)</Label>
+                  <Select
+                    value={(form as any).badge || "__none"}
+                    onValueChange={(val) => setForm({ ...form, badge: val === "__none" ? "" : val } as any)}
+                  >
+                    <SelectTrigger id="badge" className="bg-muted/20 border-border/30">
+                      <SelectValue placeholder="Selo..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PRESET_BADGES.map((b) => (
+                        <SelectItem key={b.value || "__none"} value={b.value || "__none"}>
+                          {b.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div><div className="space-y-1.5">
+                  <Label htmlFor="cost_price" className="text-xs font-medium text-muted-foreground">Custo (R$) <span className="text-[10px] font-normal opacity-70">(Opcional)</span></Label>
+                  <Input
+                    id="cost_price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="150"
+                    value={form.cost_price}
+                    onChange={(e) => setForm({ ...form, cost_price: e.target.value })}
+                    className="bg-muted/20 border-border/30"
+                  />
+                </div><div className="space-y-1.5">
                 <Label htmlFor="observation" className="text-xs font-medium text-muted-foreground">
                   Observações / Detalhes <span className="text-[10px] font-normal opacity-70">(Aparece na vitrine)</span>
                 </Label>
@@ -817,21 +836,9 @@ export function ProductsTab({
                   onChange={(e) => setForm({ ...form, observation: e.target.value })}
                   className="bg-muted/20 border-border/30 text-xs resize-none"
                 />
-              </div>
-              <div className="space-y-1.5">
-                {mode === "rodinhas" && <ProductVariantsInput value={variants} onChange={setVariants} userId={userId} disabled={saving} />}
-                <ProductPhotosInput
-                  images={getProductImageUrls(form.image_url)}
-                  onChange={(next) => {
-                    setForm((f) => ({
-                      ...f,
-                      image_url: next.length > 1 ? JSON.stringify(next) : (next[0] || ""),
-                    }));
-                  }}
-                  userId={userId}
-                  disabled={saving}
-                />
-              </div>
+              </div></div>
+              </details>
+
               <Button type="submit" className="w-full text-white font-semibold hover:opacity-90" style={{ backgroundColor: activeColor, color: activeTextColor }} disabled={saving}>
                 {saving && <Loader2 className="size-4 animate-spin" />} {mode === "rodinhas" ? "Publicar rodinhas" : mode === "pronta_entrega" ? "Publicar a pronta entrega" : "Publicar pré-venda"}
               </Button>
@@ -1666,7 +1673,7 @@ function EditProductDialog({
             )}
           </DialogTitle>
         </DialogHeader>
-        <form onSubmit={submit} className="space-y-3 pt-2">
+        <form onSubmit={submit} onInvalidCapture={(event) => { if (event.target instanceof HTMLElement) { const section = event.target.closest("details"); if (section) section.open = true; } }} className="space-y-3 pt-2">
           {wheelsEnabled && <div className="space-y-1.5">
             <Label htmlFor="product-section">Seção da loja</Label>
             <Select value={(form as any).product_kind || "miniatura"} onValueChange={value => setForm({...form,product_kind:value} as any)}>
@@ -1711,7 +1718,18 @@ function EditProductDialog({
             </Select>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <ProductPhotosInput
+            images={getProductImageUrls(form.image_url)}
+            onChange={(next) => {
+              setForm((f) => ({
+                ...f,
+                image_url: next.length > 1 ? JSON.stringify(next) : (next[0] || ""),
+              }));
+            }}
+            userId={userId}
+            disabled={saving}
+          />
+          <div className="grid grid-cols-1 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="edit-brand" className="text-xs font-medium text-muted-foreground">Marca</Label>
               <Select
@@ -1753,19 +1771,10 @@ function EditProductDialog({
                 />
               )}
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-scale" className="text-xs font-medium text-muted-foreground">Escala</Label>
-              <Input
-                id="edit-scale"
-                maxLength={12}
-                value={form.scale}
-                onChange={(e) => setForm({ ...form, scale: e.target.value })}
-                className="bg-muted/20 border-border/30"
-              />
-            </div>
+
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2 space-y-1.5">
               <Label htmlFor="edit-model" className="text-xs font-medium text-muted-foreground">Modelo</Label>
               <Input
@@ -1777,53 +1786,12 @@ function EditProductDialog({
                 className="bg-muted/20 border-border/30"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-sku" className="text-xs font-medium text-muted-foreground">
-                SKU <span className="text-[10px] font-normal opacity-70">(Código)</span>
-              </Label>
-              <Input
-                id="edit-sku"
-                placeholder="Ex: HW-001"
-                maxLength={40}
-                value={form.sku}
-                onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                className="bg-muted/20 border-border/30 font-mono text-xs"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-badge" className="text-xs font-medium text-muted-foreground">Selo (Badge)</Label>
-              <Select
-                value={(form as any).badge || "__none"}
-                onValueChange={(val) => setForm({ ...form, badge: val === "__none" ? "" : val } as any)}
-              >
-                <SelectTrigger id="edit-badge" className="bg-muted/20 border-border/30">
-                  <SelectValue placeholder="Selo..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRESET_BADGES.map((b) => (
-                    <SelectItem key={b.value || "__none"} value={b.value || "__none"}>
-                      {b.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+
+
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-cost-price" className="text-xs font-medium text-muted-foreground">Custo (R$)</Label>
-              <Input
-                id="edit-cost-price"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Ex: 150"
-                value={form.cost_price}
-                onChange={(e) => setForm({ ...form, cost_price: e.target.value })}
-                className="bg-muted/20 border-border/30"
-              />
-            </div>
+          <div className="grid grid-cols-2 sm:grid-cols-2 gap-2">
+
             <div className="space-y-1.5">
               <Label htmlFor="edit-price" className="text-xs font-medium text-muted-foreground">Venda (R$)</Label>
               <Input
@@ -1890,8 +1858,9 @@ function EditProductDialog({
             </div>
           </div>
 
-          <div className="space-y-3 rounded-lg border border-amber-500/15 bg-amber-500/5 p-4">
-            <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Desconto por Quantidade (Atacado)</p>
+          <details className="space-y-3 rounded-lg border border-border/30 bg-muted/15 p-4">
+            <summary className="min-h-11 cursor-pointer text-sm font-semibold leading-6">Desconto por quantidade<span className="block text-xs font-normal text-muted-foreground">{Number((form as any).bulk_discount_threshold) > 0 ? `A partir de ${(form as any).bulk_discount_threshold} unidades` : "Opcional · configurar atacado"}</span></summary>
+                <div className="space-y-3 pt-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="edit_bulk_threshold" className="text-xs font-medium text-muted-foreground">A partir de (unidades)</Label>
@@ -1957,8 +1926,10 @@ function EditProductDialog({
               </>
             )}
           </div>
+              </details>
 
-          <div className="space-y-3 rounded-lg border border-border/30 bg-muted/15 p-4">
+          <details className="space-y-3 rounded-lg border border-border/30 bg-muted/15 p-4"><summary className="min-h-11 cursor-pointer text-sm font-semibold leading-6">Parcelamento<span className="block text-xs font-normal text-muted-foreground">{Number(form.max_installments) > 1 ? `Até ${form.max_installments}x · ${(form as any).has_surcharge === "true" ? "com acréscimo" : "sem acréscimo"}` : "Somente à vista"}</span></summary>
+                <div className="space-y-3 pt-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground">Máximo de parcelas</Label>
@@ -2032,6 +2003,7 @@ function EditProductDialog({
               </div>
             )}
           </div>
+              </details>
 
           {!isProntaMode && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2070,7 +2042,60 @@ function EditProductDialog({
             </div>
           </div>
 
-          <div className="space-y-1.5">
+
+
+          {((form as any).product_kind === "rodinhas" || getColorVariants(product).length > 0) && <ProductVariantsInput value={variants} onChange={setVariants} userId={userId} disabled={saving} />}
+              <details className="rounded-lg border border-border/30 bg-muted/15 p-4"><summary className="min-h-11 cursor-pointer text-sm font-semibold leading-6">Mais opções<span className="block text-xs font-normal text-muted-foreground">Escala, código SKU, selo, custo e observações</span></summary><div className="grid grid-cols-1 gap-3 pt-3 sm:grid-cols-2"><div className="space-y-1.5">
+              <Label htmlFor="edit-scale" className="text-xs font-medium text-muted-foreground">Escala</Label>
+              <Input
+                id="edit-scale"
+                maxLength={12}
+                value={form.scale}
+                onChange={(e) => setForm({ ...form, scale: e.target.value })}
+                className="bg-muted/20 border-border/30"
+              />
+            </div><div className="space-y-1.5">
+              <Label htmlFor="edit-sku" className="text-xs font-medium text-muted-foreground">
+                SKU <span className="text-[10px] font-normal opacity-70">(Código)</span>
+              </Label>
+              <Input
+                id="edit-sku"
+                placeholder="Ex: HW-001"
+                maxLength={40}
+                value={form.sku}
+                onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                className="bg-muted/20 border-border/30 font-mono text-xs"
+              />
+            </div><div className="space-y-1.5">
+              <Label htmlFor="edit-badge" className="text-xs font-medium text-muted-foreground">Selo (Badge)</Label>
+              <Select
+                value={(form as any).badge || "__none"}
+                onValueChange={(val) => setForm({ ...form, badge: val === "__none" ? "" : val } as any)}
+              >
+                <SelectTrigger id="edit-badge" className="bg-muted/20 border-border/30">
+                  <SelectValue placeholder="Selo..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRESET_BADGES.map((b) => (
+                    <SelectItem key={b.value || "__none"} value={b.value || "__none"}>
+                      {b.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div><div className="space-y-1.5">
+              <Label htmlFor="edit-cost-price" className="text-xs font-medium text-muted-foreground">Custo (R$)</Label>
+              <Input
+                id="edit-cost-price"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Ex: 150"
+                value={form.cost_price}
+                onChange={(e) => setForm({ ...form, cost_price: e.target.value })}
+                className="bg-muted/20 border-border/30"
+              />
+            </div><div className="space-y-1.5">
             <Label htmlFor="edit-observation" className="text-xs font-medium text-muted-foreground">
               Observações / Detalhes <span className="text-[10px] font-normal opacity-70">(Aparece na vitrine)</span>
             </Label>
@@ -2083,20 +2108,9 @@ function EditProductDialog({
               onChange={(e) => setForm({ ...form, observation: e.target.value })}
               className="bg-muted/20 border-border/30 text-xs resize-none"
             />
-          </div>
+          </div></div>
+              </details>
 
-          {((form as any).product_kind === "rodinhas" || getColorVariants(product).length > 0) && <ProductVariantsInput value={variants} onChange={setVariants} userId={userId} disabled={saving} />}
-          <ProductPhotosInput
-            images={getProductImageUrls(form.image_url)}
-            onChange={(next) => {
-              setForm((f) => ({
-                ...f,
-                image_url: next.length > 1 ? JSON.stringify(next) : (next[0] || ""),
-              }));
-            }}
-            userId={userId}
-            disabled={saving}
-          />
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={onClose}>
