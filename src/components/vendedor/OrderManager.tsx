@@ -616,8 +616,9 @@ export function OrdersTab({
         map.set(groupKey, { order: o, quantity: 1, ids: [o.id] });
       }
     });
-    return Array.from(map.values());
-  }, [filteredOrders, isServerPage, orderPage]);
+    const groups = Array.from(map.values());
+    return focusFilter === "vencendo" ? groups.sort((a, b) => Date.parse(a.order.reservation_expires_at || "") - Date.parse(b.order.reservation_expires_at || "")) : groups;
+  }, [filteredOrders, isServerPage, orderPage, focusFilter]);
 
   const packingSlipOrders: PackingSlipItem[] = useMemo(() => {
     return groupedOrders.map((item) => {
@@ -1456,13 +1457,7 @@ export function OrdersTab({
                               <p className="text-[10px] text-muted-foreground/50 font-mono mt-0.5">#{groupId.slice(0, 8)}</p>
                             </div>
                           </div>
-                          <OrderWhatsAppDropdown
-                            order={o}
-                            quantity={quantity}
-                            displayName={displayName}
-                            phone={clientPhone}
-                            variant="badge"
-                          />
+
                         </div>
 
 
@@ -1546,6 +1541,13 @@ export function OrdersTab({
                         <details className="rounded-xl border border-border/40 p-3 group">
                           <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">Mais opções da reserva<ChevronDown className="size-4 group-open:rotate-180" /></summary>
                           <div className="mt-3 space-y-3">
+                          <OrderWhatsAppDropdown
+                            order={o}
+                            quantity={quantity}
+                            displayName={displayName}
+                            phone={clientPhone}
+                            variant="badge"
+                          />
                           <div className="col-span-2 border-t border-border/40 pt-2.5">
                             <label htmlFor={`mobile-signal-${groupId}`} className="mb-1.5 block text-xs font-medium text-muted-foreground">
                               Sinal por unidade

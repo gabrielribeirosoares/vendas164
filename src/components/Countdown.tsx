@@ -13,10 +13,16 @@ export function Countdown({ expiresAt }: { expiresAt: string }) {
     return () => clearInterval(id);
   }, [expiresAt]);
 
+  const deadline = new Date(expiresAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  if (!Number.isFinite(ms)) return null;
   if (ms <= 0) {
-    return <span className="font-mono text-sm text-destructive">Prazo expirado</span>;
+    return <span className="font-mono text-sm text-destructive">Vencido · {deadline}</span>;
   }
 
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  const dueDay = new Date(expiresAt).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  const tomorrow = new Date(Date.now() + 86400000).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  const label = dueDay === today ? "Vence hoje" : dueDay === tomorrow ? "Vence amanhã" : "Vence";
   const total = Math.floor(ms / 1000);
   const h = String(Math.floor(total / 3600)).padStart(2, "0");
   const m = String(Math.floor((total % 3600) / 60)).padStart(2, "0");
@@ -26,8 +32,8 @@ export function Countdown({ expiresAt }: { expiresAt: string }) {
     <span
       className={`font-mono text-sm tabular-nums ${ms <= 86400000 ? "text-primary font-semibold" : "text-muted-foreground"}`}
     >
-      {ms <= 86400000 ? "Vence em " : ""}
-      {h}:{m}:{s}
+      {label} · {deadline}
+      <span className="block text-xs">Restam {h}:{m}:{s}</span>
     </span>
   );
 }

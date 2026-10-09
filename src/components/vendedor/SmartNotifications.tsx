@@ -30,7 +30,7 @@ export function SmartNotifications({
     return null;
 
   return (
-    <div className="mb-8 grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="mb-4 space-y-2">
       {dueSoonCount > 0 && (
         <button
           type="button"
@@ -46,6 +46,7 @@ export function SmartNotifications({
           </div>
         </button>
       )}
+      {(lateOrderCount + outOfStockCount + pendingShippingCount + waitlistCount) > 0 && <details className="rounded-xl border border-border/50 p-3"><summary className="min-h-10 cursor-pointer text-sm font-medium leading-10">Outras pendências ({lateOrderCount + outOfStockCount + pendingShippingCount + waitlistCount})</summary><div className="grid gap-2 pt-2 sm:grid-cols-2">
       {lateOrderCount > 0 && (
         <button
           type="button"
@@ -109,6 +110,7 @@ export function SmartNotifications({
           </div>
         </button>
       )}
+      </div></details>}
     </div>
   );
 }

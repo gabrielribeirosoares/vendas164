@@ -34,3 +34,16 @@ export const checkPushSubscriptionServer = createServerFn({ method: "POST" })
     if (error) throw new Error("push_subscription_check_failed");
     return !!subscription;
   });
+
+export const removePushSubscriptionServer = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { endpoint: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { data: removed, error } = await context.supabase
+      .from("push_subscriptions")
+      .delete()
+      .eq("endpoint", data.endpoint)
+      .eq("user_id", context.userId)
+      .select("id");
+    if (error || !removed?.length) throw new Error("push_subscription_removal_failed");
+  });

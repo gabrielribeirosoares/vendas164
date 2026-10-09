@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Bell, BellOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { savePushSubscriptionServer, checkPushSubscriptionServer } from "@/lib/push";
+import { savePushSubscriptionServer, checkPushSubscriptionServer, removePushSubscriptionServer } from "@/lib/push";
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -17,7 +17,7 @@ function urlB64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
-export function PushNotificationManager({ storeId }: { storeId?: string }) {
+export function PushNotificationManager({ storeId, showLabel = false }: { storeId?: string; showLabel?: boolean }) {
   const [isSupported, setIsSupported] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -122,13 +122,31 @@ export function PushNotificationManager({ storeId }: { storeId?: string }) {
     }
   }
 
+  async function unsubscribeFromPush() {
+    setIsLoading(true);
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        await removePushSubscriptionServer({ data: { endpoint: subscription.endpoint } });
+        await subscription.unsubscribe();
+      }
+      setIsSubscribed(false);
+      toast.success("Notificações desativadas neste dispositivo.");
+    } catch {
+      toast.error("Não foi possível desativar. Tente novamente.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   if (!isSupported) return null;
 
   if (isSubscribed) {
     return (
-      <Button variant="ghost" size="sm" className="gap-1 px-3 text-emerald-600 dark:text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950" disabled>
+      <Button variant="ghost" size="sm" className="gap-1 px-3 text-emerald-600 dark:text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950" onClick={unsubscribeFromPush} disabled={isLoading} aria-label="Desativar notificações neste dispositivo">
         <Bell className="size-4" />
-        <span className="hidden sm:inline">Notificações Ativas</span>
+        <span className={showLabel ? "inline" : "hidden sm:inline"}>Desativar notificações</span>
       </Button>
     );
   }
@@ -138,6 +156,7 @@ export function PushNotificationManager({ storeId }: { storeId?: string }) {
       variant="ghost"
       size="sm"
       className="gap-1 px-3"
+      aria-label="Receber notificações neste dispositivo"
       onClick={subscribeToPush}
       disabled={isLoading}
     >
@@ -146,7 +165,7 @@ export function PushNotificationManager({ storeId }: { storeId?: string }) {
       ) : (
         <BellOff className="size-4 text-muted-foreground" />
       )}
-      <span className="hidden sm:inline">Ativar Notificações</span>
+      <span className={showLabel ? "inline" : "hidden sm:inline"}>Receber notificações</span>
     </Button>
   );
 }

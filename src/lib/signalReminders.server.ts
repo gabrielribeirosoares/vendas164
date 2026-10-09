@@ -83,14 +83,6 @@ export async function sendSignalExpiryReminders() {
             results.skipped++;
             return;
           }
-          const deadline = new Date(item.expires_at).toLocaleString("pt-BR", {
-            timeZone: "America/Sao_Paulo",
-            day: "2-digit",
-            month: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-          const amount = dueAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
           await webpush.sendNotification(
             {
               endpoint: subscription.endpoint,
@@ -98,7 +90,7 @@ export async function sendSignalExpiryReminders() {
             },
             JSON.stringify({
               title: "Seu sinal está próximo do vencimento",
-              body: `${item.store_name}: sinal de ${amount} para ${item.model} vence em ${deadline}. Acesse suas reservas para pagar.`,
+              body: "Uma reserva tem sinal próximo do vencimento. Acesse suas reservas para consultar o prazo e pagar.",
               url: "/painel",
               tag: `signal-${item.order_id}-${Date.parse(item.expires_at)}`,
             }),

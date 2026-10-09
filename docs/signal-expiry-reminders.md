@@ -1,6 +1,6 @@
 # Lembretes de sinal
 
-A interface destaca reservas aguardando sinal que vencem nas próximas 24 horas. Clientes com notificações autorizadas recebem um push com valor, produto e prazo. Reservas criadas com prazo menor que 24 horas entram na próxima execução; não prometemos envio exatamente 24 horas antes.
+A interface destaca reservas aguardando sinal que vencem nas próximas 24 horas. Clientes com notificações autorizadas recebem um push discreto, sem valor, produto ou identificação do cliente. Reservas criadas com prazo menor que 24 horas entram na próxima execução; não prometemos envio exatamente 24 horas antes.
 
 ## Ativação após validar testes
 
@@ -22,3 +22,11 @@ A interface destaca reservas aguardando sinal que vencem nas próximas 24 horas.
 - Assinaturas expiradas (404/410) são removidas. O clique abre `/painel`, que exige autenticação.
 - Não dispara WhatsApp nem envia notificações ao lojista automaticamente. O lojista tem o alerta acionável no painel.
 - A migração e o agendamento não são aplicados automaticamente pelo deploy GitHub/Vercel.
+
+## Homologação mobile
+
+O menu mobile reúne tema e notificações. A desativação remove apenas a inscrição da conta autenticada neste dispositivo. Não alteramos variáveis, chaves, migrações remotas ou agendamento nesta entrega. Validar em 320, 375, 390 e 430 px, incluindo PWA iOS: menu, seção ativa, rodinhas autorizadas, card fechado e detalhes. Testar duas contas no mesmo dispositivo e sinal pago/cancelado antes do envio.
+
+Aplicar também `20261009182842_signal_expiry_priority.sql`, após as migrações de variantes, para ordenar os sinais pelo prazo mais próximo antes da paginação. A migração está preparada no repositório e não foi aplicada remotamente.
+
+Validação desta entrega: 129 testes Node/PGlite, 48 casos do parser CSV, TypeScript e build aprovados. A validação visual em navegador não foi concluída: o download do Chromium neste ambiente retornou um arquivo inválido. Validar menu e cards no preview autenticado antes de promover para main. A disponibilidade de cron, políticas efetivas, chaves e entregas em dispositivos reais não foi verificada remotamente.

@@ -1,25 +1,19 @@
+import { getSellerNavigation } from "@/lib/sellerNavigation";
 import { createFileRoute } from '@tanstack/react-router';
 import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Copy,
-  CreditCard,
   ExternalLink,
   Loader2,
-  Package,
-  Palette,
   ShieldAlert,
   ShieldCheck,
   XCircle,
-  Zap,
   Sparkles,
   Settings,
   Crown,
   Calendar,
   Plus,
-  Car,
-  Clock,
-  User,
   RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -581,49 +575,15 @@ function SellerDashboard() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="mt-8 md:grid md:grid-cols-[190px_minmax(0,1fr)] md:items-start md:gap-6">
           <TabsList className="hidden md:flex md:sticky md:top-24 h-auto w-full flex-col items-stretch justify-start gap-1 rounded-xl border border-border/50 bg-card/70 p-2 shadow-sm [&>button]:min-h-11 [&>button]:justify-start">
-            <span className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Operação
-            </span>
-            <TabsTrigger value="produtos" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <Package className="size-3.5 text-muted-foreground" /> Pré-vendas
-            </TabsTrigger>
-            <TabsTrigger value="pronta_entrega" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <Zap className="size-3.5 text-muted-foreground" /> Pronta Entrega
-            </TabsTrigger>
-            {store.wheels_enabled && <TabsTrigger value="rodinhas" className="gap-1.5 text-xs sm:text-sm"><Car className="size-3.5" /> Rodinhas</TabsTrigger>}
-            <TabsTrigger value="reservas" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <Car className="size-3.5 text-muted-foreground" /> Reservas
-            </TabsTrigger>
-            <TabsTrigger value="clientes" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <User className="size-3.5 text-muted-foreground" /> Clientes
-            </TabsTrigger>
-            <TabsTrigger value="fila_espera" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <Clock className="size-3.5 text-muted-foreground" />
-              <span>Fila de Espera</span>
-              {alertCounts.waitlist > 0 && (
-                <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 font-semibold text-muted-foreground border-border/50">
-                  {alertCounts.waitlist}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="rastreamento" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <RefreshCw className="size-3.5 text-muted-foreground" /> Rastreamento
-            </TabsTrigger>
-            <div className="mx-2 my-1 h-px bg-border/60" />
-            <span className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Configuração
-            </span>
-            <TabsTrigger value="loja" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <Palette className="size-3.5 text-muted-foreground" /> Personalização
-            </TabsTrigger>
-            <TabsTrigger value="pagamentos" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <CreditCard className="size-3.5 text-muted-foreground" /> Pagamentos
-            </TabsTrigger>
-            {isAdmin && (
-              <TabsTrigger value="admin_moderation" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-                <ShieldCheck className="size-3.5 text-muted-foreground" /> Moderação
-              </TabsTrigger>
-            )}
+            {getSellerNavigation(!!store.wheels_enabled, isAdmin).map((section, index, sections) => {
+              const Icon = section.icon;
+              return <div key={section.id}>
+                {(index === 0 || section.group !== sections[index - 1].group) && <span className="block px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{section.group}</span>}
+                <TabsTrigger value={section.id} className="w-full justify-start gap-1.5 text-sm text-muted-foreground data-[state=active]:text-foreground">
+                  <Icon className="size-3.5" />{section.title}
+                </TabsTrigger>
+              </div>;
+            })}
           </TabsList>
 
           <div className="min-w-0">

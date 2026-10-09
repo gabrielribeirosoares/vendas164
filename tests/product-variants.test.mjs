@@ -58,6 +58,7 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/20261008173147_product_color_variants.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20261008203000_product_variant_options.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20261008203820_wheels_store_access.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261009182842_signal_expiry_priority.sql', import.meta.url), 'utf8'));
   await db.query('INSERT INTO private.platform_admins(user_id) VALUES($1)',[guest]);
 });
 after(() => db.close());
@@ -207,4 +208,25 @@ test('only admins release wheels; catalog and checkout respect store access',asy
   await assert.rejects(db.query('SELECT create_manual_reservations($1,$2,1,$3)',[request,id,JSON.stringify({user_id:customer,total_price:100,installment_count:1,payment_status:'sem_sinal'})]),/wheels_not_enabled/);
   await db.query("UPDATE orders SET payment_status='cancelado' WHERE id=$1",[orders[0]]);
   assert.ok((await catalog('all')).total>0);
+});
+
+test('due-soon orders sort by earliest deadline before pagination, preserving variant groups', async () => {
+  const fixtures = [];
+  for (const hours of [8, 1, 4]) {
+    const { id, red } = await coloredProduct();
+    const [order] = await checkout([item(id, { variant_id: red })]);
+    await db.exec('RESET ROLE');
+    await db.query("UPDATE products SET model='Priority expiry fixture' WHERE id=$1", [id]);
+    await db.query("UPDATE orders SET reservation_expires_at=now()+($1 || ' hours')::interval WHERE id=$2", [String(hours), order]);
+    fixtures.push({ hours, order });
+    await asUser();
+  }
+  await asUser(owner);
+  const page = async n => (await db.query("SELECT seller_orders_page($1,_search=>'Priority expiry fixture',_focus=>'vencendo',_page=>$2,_page_size=>1) AS result", [store,n])).rows[0].result;
+  for (const [index, fixture] of fixtures.sort((a,b)=>a.hours-b.hours).entries()) {
+    const result = await page(index+1);
+    assert.equal(result.total,3);
+    assert.equal(result.groups[0].order.id,fixture.order);
+    assert.equal(result.groups[0].quantity,1);
+  }
 });
