@@ -1047,7 +1047,7 @@ function OrdersTabContent({
   const activeFilterCount = Number(categoryFilter !== "todos") + Number(Boolean(startDate || endDate)) + Number(paymentFilter !== "todos") + Number(deliveryFilter !== "todos") + Number(Boolean(focusFilter));
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <details className="rounded-xl border border-border/60 p-3 md:hidden"><summary className="cursor-pointer text-sm font-medium">Resumo e indicadores</summary><div className="mt-3"><SellerOverview totals={overviewTotals} brandData={overviewBrands} /></div></details>
       <div className="hidden md:block"><SellerOverview totals={overviewTotals} brandData={overviewBrands} /></div>
       {isOrdersError && (
@@ -1065,7 +1065,7 @@ function OrdersTabContent({
           <Button variant="ghost" size="sm" onClick={onClearFocus}>Limpar filtro do alerta</Button>
         </div>
       )}
-      <Card className="border-border/60 panel relative">
+      <Card className="@container min-w-0 border-border/60 panel relative">
         <SellerWorkflowSummary workflowView={workflowView} onChange={setWorkflowView} />
 
         <div className="space-y-3 border-b border-border/60 p-3 sm:p-4">
@@ -1211,7 +1211,7 @@ function OrdersTabContent({
 
         <CardContent className="p-0">
           {viewMode === "kanban" ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 min-h-[500px] p-4 bg-muted/5">
+            <div className="grid grid-cols-1 @[640px]:grid-cols-2 @[1100px]:grid-cols-5 gap-4 min-h-[500px] p-4 bg-muted/5">
               {Object.entries(kanbanBoard).map(([statusKey, col]) => (
                 <div
                   key={statusKey}
@@ -1320,8 +1320,8 @@ function OrdersTabContent({
             </div>
           ) : (
             <>
-              {/* VISÃO PARA CELULAR (CARDS INDIVIDUAIS COM ESPAÇAMENTO CLARO) */}
-              <div ref={parentRef} className="h-[70dvh] overflow-y-auto bg-muted/20 px-3 md:hidden">
+              {/* CARDS QUANDO A ÁREA DAS RESERVAS NÃO COMPORTA A TABELA */}
+              <div ref={parentRef} className="h-[70dvh] min-w-0 overflow-x-hidden overflow-y-auto bg-muted/20 px-3 @[960px]:hidden print:hidden">
                 <div
                   style={{
                     height: `${rowVirtualizer.getTotalSize() + 32}px`,
@@ -1634,8 +1634,8 @@ function OrdersTabContent({
           )}
         </div>
 
-        {/* VISÃO PARA DESKTOP (TABELA COMPLETA SEM ROLAGEM HORIZONTAL) */}
-        <div className="hidden md:block overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden print:overflow-visible">
+        {/* TABELA QUANDO A ÁREA DAS RESERVAS TEM AO MENOS 960 PX */}
+        <div className="hidden @[960px]:block [&>div]:overflow-visible print:block print:overflow-visible">
           <Table className="w-full text-xs print:w-full">
             <TableHeader>
               <TableRow className="print:border-b-2">
