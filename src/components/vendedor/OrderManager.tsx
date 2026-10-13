@@ -1,3 +1,4 @@
+import { CustomerPackingDialog } from "./CustomerPackingDialog";
 import { useSession } from "@/lib/session";
 import { reservationListKey, readReservationList, saveReservationList } from "@/lib/reservationListMemory";
 import React, { useState, useRef, useMemo, useEffect, useDeferredValue } from 'react';
@@ -349,6 +350,7 @@ function OrdersTabContent({
   const [trackingDrafts, setTrackingDrafts] = useState<Record<string, string>>({});
   const [trackingUpdating, setTrackingUpdating] = useState<Set<string>>(new Set());
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
+  const [customerPackingOpen,setCustomerPackingOpen]=useState(false);
   const [packingSlipOpen, setPackingSlipOpen] = useState(false);
   const [detailsGroup, setDetailsGroup] = useState<GroupedOrderRow | null>(null);
   const [detailsSection, setDetailsSection] = useState<ReservationDetailSection | undefined>();
@@ -1183,6 +1185,7 @@ function OrdersTabContent({
               <DropdownMenuTrigger asChild><Button variant="outline" className="h-10 gap-2">Mais ações<ChevronDown className="size-4" /></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onSelect={() => void handleFinancialExport()}><Download className="mr-2 size-4" />Exportar Relatório Financeiro</DropdownMenuItem>
+                {storeId && <DropdownMenuItem onSelect={() => setCustomerPackingOpen(true)}><Package className="mr-2 size-4" />Separação por cliente</DropdownMenuItem>}
                 <DropdownMenuItem onSelect={() => setPackingSlipOpen(true)}><Truck className="mr-2 size-4" />Romaneio de Envio</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -2125,6 +2128,7 @@ function OrdersTabContent({
         </div>
       )}
 
+      {storeId && <CustomerPackingDialog open={customerPackingOpen} onOpenChange={setCustomerPackingOpen} storeId={storeId} />}
       <PackingSlipDialog
         open={packingSlipOpen}
         onOpenChange={setPackingSlipOpen}
