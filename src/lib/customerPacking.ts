@@ -17,40 +17,6 @@ export type PackingOrder = {
     sku?: string | null;
   } | null;
 };
-export type PackingLine = {
-  key: string;
-  orderIds: string[];
-  productName: string;
-  brand: string;
-  variantName: string | null;
-  imageUrl: string | null;
-  sku: string | null;
-  quantity: number;
-  available: boolean;
-  releaseDate: string | null;
-};
-export type CustomerPackage = {
-  key: string;
-  name: string;
-  phone: string | null;
-  email: string | null;
-  lines: PackingLine[];
-  quantity: number;
-};
-export type PackingPage = { groups: Array<{ order: PackingOrder; ids: string[] }>; total: number };
-
-export async function loadPackingOrders(fetchPage: (page: number) => Promise<PackingPage>) {
-  const orders = new Map<string, PackingOrder>();
-  let total = 0;
-  for (let page = 1; page === 1 || (page - 1) * 100 < total; page++) {
-    const result = await fetchPage(page);
-    total = result.total;
-    for (const group of result.groups)
-      for (const id of group.ids) orders.set(id, { ...group.order, id });
-  }
-  return [...orders.values()];
-}
-
 export function packingCustomerIdentity(order: PackingOrder) {
   let guest: { name?: string; phone?: string } | null = null;
   const raw = order.pix_key || "";
@@ -78,58 +44,4 @@ export function packingCustomerIdentity(order: PackingOrder) {
       : order.profiles?.name || order.profiles?.email?.split("@")[0] || "Cliente sem nome",
     email: isGuest ? null : order.profiles?.email || null,
   };
-}
-
-export function groupCustomerPackages(orders: PackingOrder[], today: string): CustomerPackage[] {
-  const customers = new Map<string, CustomerPackage>();
-  const seen = new Set<string>();
-  for (const order of orders) {
-    if (
-      seen.has(order.id) ||
-      order.payment_status !== "quitado" ||
-      ["enviado", "em_transito", "entregue", "cancelado"].includes(order.delivery_status)
-    )
-      continue;
-    const releaseDate = order.products?.release_date?.slice(0, 10) || null;
-    const available = !releaseDate || releaseDate <= today;
-    seen.add(order.id);
-    const identity = packingCustomerIdentity(order);
-    const { key } = identity;
-    let customer = customers.get(key);
-    if (!customer) {
-      customer = { ...identity, lines: [], quantity: 0 };
-      customers.set(key, customer);
-    }
-    const lineKey = `${order.product_id}:${order.variant_id || ""}:${order.variant_name || ""}`;
-    let line = customer.lines.find((line) => line.key === lineKey);
-    if (!line) {
-      line = {
-        key: lineKey,
-        orderIds: [],
-        productName: order.products?.model || "Miniatura",
-        brand: order.products?.brand || "",
-        variantName: order.variant_name || null,
-        imageUrl: order.variant_image_url || order.products?.image_url || null,
-        sku: order.products?.sku || null,
-        available,
-        releaseDate,
-        quantity: 0,
-      };
-      customer.lines.push(line);
-    }
-    line.orderIds.push(order.id);
-    line.quantity++;
-    customer.quantity++;
-  }
-  return [...customers.values()]
-    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
-    .map((customer) => ({
-      ...customer,
-      lines: customer.lines.sort((a, b) =>
-        `${a.brand} ${a.productName} ${a.variantName || ""}`.localeCompare(
-          `${b.brand} ${b.productName} ${b.variantName || ""}`,
-          "pt-BR",
-        ),
-      ),
-    }));
 }
