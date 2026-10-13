@@ -51,6 +51,35 @@ export async function loadPackingOrders(fetchPage: (page: number) => Promise<Pac
   return [...orders.values()];
 }
 
+export function packingCustomerIdentity(order: PackingOrder) {
+  let guest: { name?: string; phone?: string } | null = null;
+  const raw = order.pix_key || "";
+  const isGuest = raw.startsWith("GUEST:") || raw.startsWith('{"manual_guest":true');
+  try {
+    if (isGuest) {
+      const parsed = JSON.parse(raw.startsWith("GUEST:") ? raw.slice(6) : raw);
+      guest = {
+        name: typeof parsed?.name === "string" ? parsed.name : undefined,
+        phone: typeof parsed?.phone === "string" ? parsed.phone : undefined,
+      };
+    }
+  } catch {
+    guest = null;
+  }
+  const phone = isGuest ? guest?.phone || null : order.profiles?.phone || null;
+  const key = isGuest
+    ? `guest:${guest?.phone?.replace(/\D/g, "") || order.id}`
+    : `user:${order.user_id}`;
+  return {
+    key,
+    phone,
+    name: isGuest
+      ? guest?.name || (phone ? `Convidado (${phone})` : "Convidado sem nome")
+      : order.profiles?.name || order.profiles?.email?.split("@")[0] || "Cliente sem nome",
+    email: isGuest ? null : order.profiles?.email || null,
+  };
+}
+
 export function groupCustomerPackages(orders: PackingOrder[], today: string): CustomerPackage[] {
   const customers = new Map<string, CustomerPackage>();
   const seen = new Set<string>();
@@ -64,36 +93,11 @@ export function groupCustomerPackages(orders: PackingOrder[], today: string): Cu
     const releaseDate = order.products?.release_date?.slice(0, 10) || null;
     const available = !releaseDate || releaseDate <= today;
     seen.add(order.id);
-    let guest: { name?: string; phone?: string } | null = null;
-    const raw = order.pix_key || "";
-    const isGuest = raw.startsWith("GUEST:") || raw.startsWith('{"manual_guest":true');
-    try {
-      if (isGuest) {
-        const parsed = JSON.parse(raw.startsWith("GUEST:") ? raw.slice(6) : raw);
-        guest = {
-          name: typeof parsed?.name === "string" ? parsed.name : undefined,
-          phone: typeof parsed?.phone === "string" ? parsed.phone : undefined,
-        };
-      }
-    } catch {
-      guest = null;
-    }
-    const phone = isGuest ? guest?.phone || null : order.profiles?.phone || null;
-    const key = isGuest
-      ? `guest:${guest?.phone?.replace(/\D/g, "") || order.id}`
-      : `user:${order.user_id}`;
+    const identity = packingCustomerIdentity(order);
+    const { key } = identity;
     let customer = customers.get(key);
     if (!customer) {
-      customer = {
-        key,
-        name: isGuest
-          ? guest?.name || (phone ? `Convidado (${phone})` : "Convidado sem nome")
-          : order.profiles?.name || order.profiles?.email?.split("@")[0] || "Cliente sem nome",
-        phone,
-        email: isGuest ? null : order.profiles?.email || null,
-        lines: [],
-        quantity: 0,
-      };
+      customer = { ...identity, lines: [], quantity: 0 };
       customers.set(key, customer);
     }
     const lineKey = `${order.product_id}:${order.variant_id || ""}:${order.variant_name || ""}`;
