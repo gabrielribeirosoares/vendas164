@@ -69,8 +69,8 @@ export function CustomerPackingDialog({
             Separação por cliente
           </DialogTitle>
           <DialogDescription>
-            Pedidos quitados pendentes de envio. Os itens com chegada futura aparecem como
-            aguardando chegada.
+            Pedidos quitados pendentes de envio. Confira manualmente os itens; a data prevista de
+            chegada é apenas uma referência.
           </DialogDescription>
         </div>
         <div className="space-y-2 border-b p-4">
@@ -96,19 +96,15 @@ export function CustomerPackingDialog({
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            {visible.length} cliente(s) ·{" "}
+            {visible.length} cliente(s) · {visible.reduce((sum, c) => sum + c.quantity, 0)}{" "}
+            unidade(s) ·{" "}
             {visible.reduce(
               (sum, c) =>
-                sum + c.lines.filter((l) => l.available).reduce((n, l) => n + l.quantity, 0),
+                sum +
+                c.lines.reduce((n, l) => n + l.orderIds.filter((id) => checked.has(id)).length, 0),
               0,
             )}{" "}
-            para separar ·{" "}
-            {visible.reduce(
-              (sum, c) =>
-                sum + c.lines.filter((l) => !l.available).reduce((n, l) => n + l.quantity, 0),
-              0,
-            )}{" "}
-            aguardando chegada
+            conferidas
           </p>
           <p className="text-xs text-muted-foreground">Conferência temporária nesta tela</p>
         </div>
@@ -134,9 +130,7 @@ export function CustomerPackingDialog({
             </p>
           ) : (
             visible.map((customer) => {
-              const ids = customer.lines
-                .filter((line) => line.available)
-                .flatMap((line) => line.orderIds);
+              const ids = customer.lines.flatMap((line) => line.orderIds);
               const checkedCount = ids.filter((id) => checked.has(id)).length;
               const ready = ids.length > 0 && checkedCount === ids.length;
               return (
@@ -152,7 +146,7 @@ export function CustomerPackingDialog({
                       {ready ? (
                         <>
                           <CheckCircle2 className="mr-1 size-3" />
-                          Disponíveis conferidos
+                          Pacote conferido
                         </>
                       ) : ids.length ? (
                         `${checkedCount}/${ids.length} conferidas`
@@ -163,18 +157,20 @@ export function CustomerPackingDialog({
                   </div>
                   <div className="divide-y">
                     {customer.lines.map((line) => {
-                      const allChecked =
-                        line.available && line.orderIds.every((id) => checked.has(id));
+                      const allChecked = line.orderIds.every((id) => checked.has(id));
+                      const checkboxId = `packing-${storeId}-${line.orderIds[0]}`;
                       const label = `${line.brand} ${line.productName}${line.variantName ? ` — ${line.variantName}` : ""}`;
                       return (
                         <label
                           key={line.key}
+                          htmlFor={checkboxId}
                           className="flex min-w-0 cursor-pointer items-start gap-3 p-3"
                         >
                           <Checkbox
+                            id={checkboxId}
                             className="mt-3 shrink-0"
                             checked={allChecked}
-                            disabled={isFetching || !line.available}
+                            disabled={isFetching}
                             onCheckedChange={() => toggle(line.orderIds)}
                             aria-label={`Conferir ${line.quantity} unidade(s) de ${label} para ${customer.name}`}
                           />
@@ -200,7 +196,7 @@ export function CustomerPackingDialog({
                             )}
                             {!line.available && line.releaseDate && (
                               <p className="mt-1 text-xs font-medium text-muted-foreground">
-                                Aguardando chegada · previsão{" "}
+                                Previsão de chegada no cadastro:{" "}
                                 {new Date(line.releaseDate + "T12:00:00").toLocaleDateString(
                                   "pt-BR",
                                   { month: "2-digit", year: "numeric" },
