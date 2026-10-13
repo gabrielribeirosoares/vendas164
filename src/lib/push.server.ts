@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 import webpush from "web-push";
 import { supabaseAdmin } from "../integrations/supabase/client.server";
 
@@ -9,9 +11,9 @@ function configureWebPush() {
   webpush.setVapidDetails("mailto:contato@vendas164.com.br", publicKey, privateKey);
 }
 
-export async function saveSubscriptionToDatabase(userId: string, data: { endpoint: string; p256dh: string; auth: string; user_agent?: string; store_id?: string }) {
+export async function saveSubscriptionToDatabase(userId: string, data: { endpoint: string; p256dh: string; auth: string; user_agent?: string; store_id?: string }, client: SupabaseClient<Database>) {
   configureWebPush();
-  const { error } = await supabaseAdmin
+  const { error } = await client
     .from("push_subscriptions")
     .upsert(
       {
@@ -73,21 +75,13 @@ export async function sendPushNotification(
   await Promise.allSettled(promises);
 }
 
-export async function notifySellerNewOrder(storeId: string) {
-  const { data: store } = await supabaseAdmin.from("stores").select("owner_id").eq("id", storeId).maybeSingle();
-  if (store && store.owner_id) {
-    await sendPushNotification(store.owner_id, {
-      title: "Novo Pedido/Reserva!",
-      body: "Acesse seu painel de Vendedor para visualizar.",
-      url: "/vendedor?tab=reservas",
-    });
-  }
-}
-
-export async function notifyCustomerOrderUpdate(customerId: string, status: string) {
-  await sendPushNotification(customerId, {
-    title: "Atualização no seu pedido",
-    body: `O status do seu pedido mudou para: ${status}.`,
-    url: "/painel",
-  });
+export async function notifyAuthorizedOrder(client: SupabaseClient<Database>, orderId:string, kind:"new"|"update", field?:"payment"|"delivery") {
+  configureWebPush();
+  const {data,error} = await client.rpc("claim_order_push",{_order_id:orderId,_kind:kind,_field:field});
+  if(error) throw new Error("notification_access_denied");
+  if(!data) return;
+  const target=data as {recipient:string;status:string|null};
+  await sendPushNotification(target.recipient,kind === "new" ? {
+    title:"Novo Pedido/Reserva!",body:"Acesse seu painel de Vendedor para visualizar.",url:"/vendedor?tab=reservas"
+  } : {title:"Atualização no seu pedido",body:`O status do seu pedido mudou para: ${target.status}.`,url:"/painel"});
 }

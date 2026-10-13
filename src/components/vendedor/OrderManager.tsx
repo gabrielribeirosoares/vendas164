@@ -766,80 +766,34 @@ function OrdersTabContent({
     }
   }
 
-  async function adjustStockOnCancel(productId: string, isCancelling: boolean, quantity: number) {
-    if (!productId) return;
-    const { data: product } = await supabase
-      .from("products")
-      .select("stock, is_open, color_variants")
-      .eq("id", productId)
-      .maybeSingle();
-
-    if (!product) return;
-    if (Array.isArray(product.color_variants) && product.color_variants.length) return; // Variant lifecycle is atomic in the database.
-
-    if (isCancelling) {
-      const newStock = (product.stock ?? 0) + quantity;
-      await supabase
-        .from("products")
-        .update({ stock: newStock, is_open: true })
-        .eq("id", productId);
-    } else {
-      const newStock = Math.max(0, (product.stock ?? 0) - quantity);
-      await supabase
-        .from("products")
-        .update({ stock: newStock })
-        .eq("id", productId);
-    }
-  }
-
   async function updateGroup(
     ids: string[],
     patch: Partial<Pick<Tables<"orders">, "down_payment" | "payment_status" | "delivery_status" | "reservation_expires_at">>,
-  ) {
-    const chunkSize = 40;
-
-    // Pega os user_ids antes de atualizar, pra notificar
-    const { data: ordersData } = await supabase.from("orders").select("user_id, id").in("id", ids);
-
-    for (let i = 0; i < ids.length; i += chunkSize) {
-      const chunk = ids.slice(i, i + chunkSize);
-      const { error } = await supabase.from("orders").update(patch).in("id", chunk);
-      if (error) return toast.error("Não foi possível atualizar a reserva.");
+  ): Promise<boolean> {
+    const {error} = await supabase.rpc("seller_mutate_orders", {_ids:ids,_patch:patch,_delete:false});
+    if(error) {toast.error(error.message.includes("out_of_stock") ? "Estoque insuficiente para reativar a reserva." : "Não foi possível atualizar as reservas. Nenhuma alteração foi concluída."); return false;}
+    if(patch.payment_status || patch.delivery_status) {
+      const {data: orders} = await supabase.from("orders").select("id,user_id").in("id",ids);
+      const notified = new Set<string>();
+      for(const order of orders || []) if(!notified.has(order.user_id)) {
+        notified.add(order.user_id);
+        notifyCustomerOrderUpdateServer({data:{orderId:order.id,field:patch.payment_status ? "payment" : "delivery"}}).catch(console.error);
+      }
     }
+    await queryClient.invalidateQueries();
+    return true;
+  }
 
-    // Notifica os clientes afetados
-    if (ordersData && (patch.payment_status || patch.delivery_status)) {
-      const statusLabel = patch.payment_status || patch.delivery_status || "atualizado";
-      const customerIds = [...new Set(ordersData.map(o => o.user_id).filter(Boolean))];
-      customerIds.forEach(customerId => {
-        if (customerId) {
-          notifyCustomerOrderUpdateServer({ data: { customerId, status: statusLabel } }).catch(console.error);
-        }
-      });
-    }
-
-    queryClient.invalidateQueries();
+  async function deleteOrders(ids: string[]) {
+    const {error} = await supabase.rpc("seller_mutate_orders", {_ids:ids,_patch:{},_delete:true});
+    if(error) {toast.error("Não foi possível excluir as reservas. Nenhuma alteração foi concluída."); return false;}
+    await queryClient.invalidateQueries();
+    return true;
   }
 
   async function handleDeleteGroup(item: GroupedOrderRow) {
-    if (!window.confirm(`Tem certeza que deseja excluir permanentemente esta reserva (${item.quantity} unidade(s))?`)) {
-      return;
-    }
-    const { order: o, quantity, ids } = item;
-    const wasCancelled = o.payment_status === "cancelado" || o.delivery_status === "cancelado";
-    if (!wasCancelled) {
-      await adjustStockOnCancel(o.product_id, true, quantity);
-    }
-    const { error } = await supabase.from("orders").delete().in("id", ids);
-    if (!error) {
-      // Exclui parcelas explicitamente caso o banco não tenha cascade configurado
-      await supabase.from("order_installments").delete().in("order_id", ids);
-    }
-    if (error) {
-      return toast.error("Não foi possível excluir a reserva.");
-    }
-    queryClient.invalidateQueries();
-    toast.success("Reserva excluída!");
+    if (!window.confirm(`Tem certeza que deseja excluir permanentemente esta reserva (${item.quantity} unidade(s))?`)) return;
+    if(await deleteOrders(item.ids)) toast.success("Reserva excluída!");
   }
 
   function handlePaymentStatusChange(item: GroupedOrderRow, newStatus: string) {
@@ -848,7 +802,7 @@ function OrdersTabContent({
   }
 
   async function applyPaymentStatusChange(item: GroupedOrderRow, newStatus: string) {
-    const { order: o, quantity, ids } = item;
+    const { order: o, ids } = item;
     const groupId = ids[0];
     let downPayment = Number(drafts[groupId] ?? o.down_payment);
     const totalPrice = Number(o.total_price);
@@ -856,14 +810,6 @@ function OrdersTabContent({
 
     const wasCancelled = o.payment_status === "cancelado" || o.delivery_status === "cancelado";
     const isNowCancelled = newStatus === "cancelado";
-
-    if (!wasCancelled && isNowCancelled) {
-      await adjustStockOnCancel(o.product_id, true, quantity);
-      // Apaga as parcelas pendentes caso a reserva seja cancelada
-      await supabase.from("order_installments").delete().in("order_id", ids);
-    } else if (wasCancelled && !isNowCancelled) {
-      await adjustStockOnCancel(o.product_id, false, quantity);
-    }
 
     const patch: any = { payment_status: newStatus };
 
@@ -876,22 +822,9 @@ function OrdersTabContent({
       patch.down_payment = downPayment;
       patch.reservation_expires_at = null;
 
-      // Ajustar parcelas pendentes para descontar o sinal recém-pago
-      for (const id of ids) {
-        const { data: insts } = await supabase.from("order_installments").select("id, amount, status").eq("order_id", id);
-        if (insts && insts.length === 1 && insts[0].status === "pending") {
-          const expectedAmount = Math.max(0, totalPrice - downPayment);
-          await supabase.from("order_installments").update({ amount: expectedAmount }).eq("id", insts[0].id);
-        }
-      }
     } else if (newStatus === "quitado") {
-      // Manter o sinal original, não substituir pelo total
       patch.down_payment = downPayment;
       patch.reservation_expires_at = null;
-      // Marcar todas as parcelas pendentes como pagas automaticamente
-      for (const id of ids) {
-        await supabase.from("order_installments").update({ status: "paid" }).eq("order_id", id).eq("status", "pending");
-      }
     } else if (newStatus === "pronta_entrega" || newStatus === "sem_sinal") {
       downPayment = 0;
       patch.down_payment = 0;
@@ -913,11 +846,11 @@ function OrdersTabContent({
       patch.down_payment = downPayment;
     }
 
+    if(!await updateGroup(ids, patch)) return;
     setDrafts((prev) => ({ ...prev, [groupId]: String(downPayment) }));
-    await updateGroup(ids, patch);
 
     if (!wasCancelled && isNowCancelled) {
-      toast.success(`Reserva cancelada! +${quantity} unidade(s) devolvida(s) ao estoque.`);
+      toast.success("Reserva cancelada. Estoque atualizado automaticamente.");
     } else {
       toast.success("Reserva atualizada.");
     }
@@ -929,21 +862,14 @@ function OrdersTabContent({
   }
 
   async function applyDeliveryStatusChange(item: GroupedOrderRow, newStatus: string) {
-    const { order: o, quantity, ids } = item;
+    const { order: o, ids } = item;
     const wasCancelled = o.payment_status === "cancelado" || o.delivery_status === "cancelado";
     const isNowCancelled = newStatus === "cancelado";
 
-    if (!wasCancelled && isNowCancelled) {
-      await adjustStockOnCancel(o.product_id, true, quantity);
-      // Apaga as parcelas pendentes caso o envio/reserva seja cancelado
-      await supabase.from("order_installments").delete().in("order_id", ids);
-    } else if (wasCancelled && !isNowCancelled) {
-      await adjustStockOnCancel(o.product_id, false, quantity);
-    }
-    await updateGroup(ids, { delivery_status: newStatus });
+    if(!await updateGroup(ids, { delivery_status: newStatus })) return;
 
     if (!wasCancelled && isNowCancelled) {
-      toast.success(`Envio cancelado! +${quantity} unidade(s) devolvida(s) ao estoque.`);
+      toast.success("Envio cancelado. Estoque atualizado automaticamente.");
     } else {
       toast.success("Status de envio atualizado.");
     }
@@ -1071,75 +997,18 @@ function OrdersTabContent({
   };
 
   const applyBulkStatus = async (statusType: "payment" | "delivery", newStatus: string, allIds: string[], selectedCount: number) => {
-    const chunkSize = 40;
-    if (statusType === "payment") {
-      await updateGroup(allIds, { payment_status: newStatus });
-      if (newStatus === "cancelado") {
-        for (let i = 0; i < allIds.length; i += chunkSize) {
-          const chunk = allIds.slice(i, i + chunkSize);
-          try {
-            await supabase.from("order_installments").delete().in("order_id", chunk);
-          } catch {}
-        }
-      }
-      toast.success(`${selectedCount} reserva(s) atualizada(s)!`);
-    } else {
-      await updateGroup(allIds, { delivery_status: newStatus });
-      if (newStatus === "cancelado") {
-        for (let i = 0; i < allIds.length; i += chunkSize) {
-          const chunk = allIds.slice(i, i + chunkSize);
-          try {
-            await supabase.from("order_installments").delete().in("order_id", chunk);
-          } catch {}
-        }
-      }
-      toast.success(`${selectedCount} reserva(s) atualizada(s)!`);
-    }
+    const patch = statusType === "payment" ? {payment_status:newStatus} : {delivery_status:newStatus};
+    if(!await updateGroup(allIds,patch)) return;
+    toast.success(`${selectedCount} reserva(s) atualizada(s)!`);
     setSelectedOrders(new Set());
   };
 
   const handleBulkDelete = async () => {
-    if (selectedOrders.size === 0) return;
-    const confirmed = window.confirm(
-      `Tem certeza que deseja excluir permanentemente as ${selectedOrders.size} reservas selecionadas? Esta ação não pode ser desfeita.`
-    );
-    if (!confirmed) return;
-
-    const allIds: string[] = [];
-    const itemsToDelete: GroupedOrderRow[] = [];
-    selectedOrders.forEach((groupId) => {
-      const item = rows.find((r) => r.ids[0] === groupId);
-      if (item) {
-        itemsToDelete.push(item);
-        allIds.push(...item.ids);
-      }
-    });
-
-    if (allIds.length === 0) return;
-
-    for (const item of itemsToDelete) {
-      const { order: o, quantity } = item;
-      const wasCancelled = o.payment_status === "cancelado" || o.delivery_status === "cancelado";
-      if (!wasCancelled) {
-        await adjustStockOnCancel(o.product_id, true, quantity);
-      }
-    }
-
-    const chunkSize = 40;
-    for (let i = 0; i < allIds.length; i += chunkSize) {
-      const chunk = allIds.slice(i, i + chunkSize);
-      try {
-        await supabase.from("order_installments").delete().in("order_id", chunk);
-      } catch {}
-      const { error } = await supabase.from("orders").delete().in("id", chunk);
-      if (error) {
-        return toast.error("Não foi possível excluir as reservas selecionadas.");
-      }
-    }
-
-    toast.success(`${selectedOrders.size} reserva(s) excluída(s) com sucesso!`);
+    if(selectedOrders.size===0 || !window.confirm(`Excluir permanentemente ${selectedOrders.size} reservas selecionadas? Esta ação não pode ser desfeita.`)) return;
+    const allIds = rows.filter(row=>selectedOrders.has(row.ids[0])).flatMap(row=>row.ids);
+    if(!allIds.length || !await deleteOrders(allIds)) return;
+    toast.success(`${selectedOrders.size} reserva(s) excluída(s)!`);
     setSelectedOrders(new Set());
-    queryClient.invalidateQueries();
   };
 
   const workflowView = paymentFilter === "aguardando_sinal"

@@ -75,7 +75,7 @@ export function CartDrawer() {
     setReserving(true);
     setErrorMessage('');
     try {
-      await checkoutCart(cart.getRequestId(), cart.items.map(item => ({
+      const orderIds = await checkoutCart(cart.getRequestId(), cart.items.map(item => ({
         product_id: item.productId,
         variant_id: item.variantId,
         quantity: item.quantity,
@@ -87,11 +87,17 @@ export function CartDrawer() {
       setIsOpen(false);
       toast.success('Reservas confirmadas! Acompanhe os pagamentos no seu painel.');
       
-      // Notify sellers
-      const storeIds = [...new Set(cart.items.map(i => i.storeId))];
-      storeIds.forEach(storeId => {
-        if (storeId) notifySellerNewOrderServer({ data: storeId }).catch(console.error);
-      });
+      // The server resolves the recipient from an authenticated, recent order.
+      const notifiedStores = new Set<string>();
+      let orderIndex = 0;
+      for(const item of cart.items) {
+        const orderId = orderIds[orderIndex];
+        orderIndex += item.quantity;
+        if(orderId && !notifiedStores.has(item.storeId)) {
+          notifiedStores.add(item.storeId);
+          notifySellerNewOrderServer({data:{orderId}}).catch(console.error);
+        }
+      }
 
       await queryClient.invalidateQueries();
       navigate({ to: '/painel' });

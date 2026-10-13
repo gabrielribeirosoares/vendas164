@@ -60,6 +60,8 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/20261008203820_wheels_store_access.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20261009182842_signal_expiry_priority.sql', import.meta.url), 'utf8'));
   await db.query('INSERT INTO private.platform_admins(user_id) VALUES($1)',[guest]);
+  await db.exec(await readFile(new URL('../supabase/migrations/20260920153000_push_subscriptions.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261013135108_atomic_seller_operations_and_financial_totals.sql',import.meta.url),'utf8'));
 });
 after(() => db.close());
 async function coloredProduct(redStock = 1, blueStock = 2) {
@@ -229,4 +231,63 @@ test('due-soon orders sort by earliest deadline before pagination, preserving va
     assert.equal(result.groups[0].order.id,fixture.order);
     assert.equal(result.groups[0].quantity,1);
   }
+});
+
+const mutate=async(ids,patch={},remove=false)=>(await db.query('SELECT seller_mutate_orders($1,$2,$3) AS changed',[ids,JSON.stringify(patch),remove])).rows[0].changed;
+test('ordinary stock cancellation and deletion are atomic and never restored twice',async()=>{
+  const id=await product(); const ids=await checkout([item(id,{quantity:2,expected_total:200,expected_signal:40})]);
+  await asUser(owner);
+  assert.equal(await mutate(ids,{payment_status:'cancelado'}),2);
+  assert.equal(await stock(id),10);
+  await mutate(ids,{payment_status:'cancelado'});assert.equal(await stock(id),10);
+  await mutate(ids,{payment_status:'sem_sinal'});assert.equal(await stock(id),8);
+  await mutate(ids,{},true);assert.equal(await stock(id),10);
+  await assert.rejects(mutate(ids,{},true),/store_access_denied/);assert.equal(await stock(id),10);
+});
+test('whole batch rolls back on shortage, invalid payment and unauthorized orders',async()=>{
+  const id=await product();const ids=await checkout([item(id,{quantity:2,expected_total:200,expected_signal:40})]);
+  await asUser();await assert.rejects(mutate(ids,{payment_status:'cancelado'}),/store_access_denied/);
+  await asUser(owner);await mutate(ids,{payment_status:'cancelado'});
+  await db.query('UPDATE products SET stock=1 WHERE id=$1',[id]);
+  await assert.rejects(mutate(ids,{payment_status:'sem_sinal'}),/out_of_stock/);
+  assert.equal(await stock(id),1);
+  assert.deepEqual((await db.query('SELECT payment_status FROM orders WHERE id=ANY($1)',[ids])).rows.map(x=>x.payment_status),['cancelado','cancelado']);
+  await assert.rejects(mutate(ids,{down_payment:1000}),/invalid_payment_amount/);
+  assert.equal(await stock(id),1);
+});
+test('variant batch lifecycle remains independent; paid installments survive cancellation',async()=>{
+  const {id,red}=await coloredProduct(2,1);const ids=await checkout([item(id,{variant_id:red,quantity:2,expected_total:200,expected_signal:40})]);
+  await asUser(owner);
+  await db.query("UPDATE order_installments SET status='paid' WHERE order_id=$1 AND installment_number=1",[ids[0]]);
+  await mutate(ids,{payment_status:'cancelado'});assert.equal(await stock(id),3);
+  await mutate(ids,{delivery_status:'cancelado'});assert.equal(await stock(id),3);
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM order_installments WHERE order_id=ANY($1) AND status='paid'",[ids])).rows[0].n,1);
+  await mutate(ids,{},true);assert.equal(await stock(id),3);
+});
+test('fully paid orders match both financial summaries without installment evidence',async()=>{
+  const id=await product();const ids=await checkout([item(id)]);
+  await db.exec('RESET ROLE');await db.query("DELETE FROM order_installments WHERE order_id=$1",[ids[0]]);
+  await db.query("UPDATE orders SET payment_status='quitado',down_payment=0 WHERE id=$1",[ids[0]]);
+  await asUser(owner);
+  const page=(await db.query('SELECT seller_orders_page($1) AS result',[store])).rows[0].result;
+  const expected=(await db.query("SELECT sum(CASE WHEN payment_status='quitado' THEN total_price ELSE LEAST(total_price,CASE WHEN payment_status='sinal_pago' THEN down_payment ELSE 0 END+coalesce((SELECT sum(amount) FROM order_installments WHERE order_id=orders.id AND status='paid'),0)) END) AS received FROM orders WHERE store_id=$1 AND payment_status<>'cancelado' AND delivery_status<>'cancelado'",[store])).rows[0].received;
+  assert.equal(page.overview.received,Number(expected));
+  const client=(await db.query('SELECT seller_clients_page($1) AS result',[store])).rows[0].result.clients.find(c=>c.userId===customer);
+  assert.ok(client.totalPaid>=100);
+});
+test('push claims require the order relationship, derive recipient and prevent replay',async()=>{
+  const id=await product();const ids=await checkout([item(id)]);
+  const claim=async(kind,field=null)=>(await db.query('SELECT claim_order_push($1,$2,$3) AS claim',[ids[0],kind,field])).rows[0].claim;
+  await asUser(other);await assert.rejects(claim('new'),/notification_access_denied/);await assert.rejects(claim('update','payment'),/notification_access_denied/);
+  await asUser();assert.equal((await claim('new')).recipient,owner);assert.equal(await claim('new'),null);
+  await asUser(owner);assert.deepEqual(await claim('update','payment'),{recipient:customer,status:'aguardando_sinal'});assert.equal(await claim('update','payment'),null);
+  await asUser(null,'anon');await assert.rejects(claim('new'),/permission denied/);
+});
+test('store association cannot expose or overwrite another subscriber credentials',async()=>{
+  await db.exec('RESET ROLE');
+  await db.query("INSERT INTO push_subscriptions(user_id,store_id,endpoint,p256dh,auth) VALUES($1,$2,'https://web.push.apple.com/private','private-key','private-auth')",[customer,store]);
+  await asUser(owner);
+  assert.equal((await db.query("SELECT id FROM push_subscriptions WHERE endpoint='https://web.push.apple.com/private'")).rows.length,0);
+  assert.equal((await db.query("DELETE FROM push_subscriptions WHERE endpoint='https://web.push.apple.com/private' RETURNING id")).rows.length,0);
+  await assert.rejects(db.query("INSERT INTO push_subscriptions(user_id,endpoint,p256dh,auth) VALUES($1,'https://web.push.apple.com/private','changed','changed') ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id,p256dh=excluded.p256dh",[owner]),/row-level security/);
 });
