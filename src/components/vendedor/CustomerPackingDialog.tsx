@@ -69,8 +69,8 @@ export function CustomerPackingDialog({
             Separação por cliente
           </DialogTitle>
           <DialogDescription>
-            Pedidos quitados, disponíveis para envio e ainda não despachados. Confira os itens
-            enquanto monta cada pacote.
+            Pedidos quitados pendentes de envio. Os itens com chegada futura aparecem como
+            aguardando chegada.
           </DialogDescription>
         </div>
         <div className="space-y-2 border-b p-4">
@@ -97,9 +97,20 @@ export function CustomerPackingDialog({
           </div>
           <p className="text-xs text-muted-foreground">
             {visible.length} cliente(s) ·{" "}
-            {visible.reduce((sum, customer) => sum + customer.quantity, 0)} unidade(s) · Conferência
-            temporária nesta sessão
+            {visible.reduce(
+              (sum, c) =>
+                sum + c.lines.filter((l) => l.available).reduce((n, l) => n + l.quantity, 0),
+              0,
+            )}{" "}
+            para separar ·{" "}
+            {visible.reduce(
+              (sum, c) =>
+                sum + c.lines.filter((l) => !l.available).reduce((n, l) => n + l.quantity, 0),
+              0,
+            )}{" "}
+            aguardando chegada
           </p>
+          <p className="text-xs text-muted-foreground">Conferência temporária nesta tela</p>
         </div>
         <div className="min-h-0 space-y-3 overflow-y-auto p-4">
           {isFetching && (
@@ -119,13 +130,15 @@ export function CustomerPackingDialog({
             <p className="py-8 text-center text-sm text-muted-foreground">
               {search
                 ? "Nenhum cliente ou item encontrado."
-                : "Nenhum pedido pago disponível para separar. Pré-vendas com chegada futura aparecerão após a data prevista."}
+                : "Nenhum pedido quitado pendente de envio."}
             </p>
           ) : (
             visible.map((customer) => {
-              const ids = customer.lines.flatMap((line) => line.orderIds);
+              const ids = customer.lines
+                .filter((line) => line.available)
+                .flatMap((line) => line.orderIds);
               const checkedCount = ids.filter((id) => checked.has(id)).length;
-              const ready = checkedCount === ids.length;
+              const ready = ids.length > 0 && checkedCount === ids.length;
               return (
                 <section key={customer.key} className="min-w-0 rounded-xl border">
                   <div className="flex flex-wrap items-start justify-between gap-2 border-b bg-muted/20 p-3">
@@ -139,16 +152,19 @@ export function CustomerPackingDialog({
                       {ready ? (
                         <>
                           <CheckCircle2 className="mr-1 size-3" />
-                          Pacote conferido
+                          Disponíveis conferidos
                         </>
+                      ) : ids.length ? (
+                        `${checkedCount}/${ids.length} conferidas`
                       ) : (
-                        `${checkedCount}/${customer.quantity} conferidas`
+                        "Aguardando chegada"
                       )}
                     </Badge>
                   </div>
                   <div className="divide-y">
                     {customer.lines.map((line) => {
-                      const allChecked = line.orderIds.every((id) => checked.has(id));
+                      const allChecked =
+                        line.available && line.orderIds.every((id) => checked.has(id));
                       const label = `${line.brand} ${line.productName}${line.variantName ? ` — ${line.variantName}` : ""}`;
                       return (
                         <label
@@ -158,7 +174,7 @@ export function CustomerPackingDialog({
                           <Checkbox
                             className="mt-3 shrink-0"
                             checked={allChecked}
-                            disabled={isFetching}
+                            disabled={isFetching || !line.available}
                             onCheckedChange={() => toggle(line.orderIds)}
                             aria-label={`Conferir ${line.quantity} unidade(s) de ${label} para ${customer.name}`}
                           />
@@ -180,6 +196,15 @@ export function CustomerPackingDialog({
                             {line.variantName && (
                               <p className="break-words text-sm font-semibold text-primary">
                                 {line.variantName}
+                              </p>
+                            )}
+                            {!line.available && line.releaseDate && (
+                              <p className="mt-1 text-xs font-medium text-muted-foreground">
+                                Aguardando chegada · previsão{" "}
+                                {new Date(line.releaseDate + "T12:00:00").toLocaleDateString(
+                                  "pt-BR",
+                                  { month: "2-digit", year: "numeric" },
+                                )}
                               </p>
                             )}
                             {line.sku && (

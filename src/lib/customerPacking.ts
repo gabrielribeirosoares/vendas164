@@ -26,6 +26,8 @@ export type PackingLine = {
   imageUrl: string | null;
   sku: string | null;
   quantity: number;
+  available: boolean;
+  releaseDate: string | null;
 };
 export type CustomerPackage = {
   key: string;
@@ -59,7 +61,8 @@ export function groupCustomerPackages(orders: PackingOrder[], today: string): Cu
       ["enviado", "em_transito", "entregue", "cancelado"].includes(order.delivery_status)
     )
       continue;
-    if (order.products?.release_date && order.products.release_date.slice(0, 10) > today) continue;
+    const releaseDate = order.products?.release_date?.slice(0, 10) || null;
+    const available = !releaseDate || releaseDate <= today;
     seen.add(order.id);
     let guest: { name?: string; phone?: string } | null = null;
     const raw = order.pix_key || "";
@@ -104,6 +107,8 @@ export function groupCustomerPackages(orders: PackingOrder[], today: string): Cu
         variantName: order.variant_name || null,
         imageUrl: order.variant_image_url || order.products?.image_url || null,
         sku: order.products?.sku || null,
+        available,
+        releaseDate,
         quantity: 0,
       };
       customer.lines.push(line);

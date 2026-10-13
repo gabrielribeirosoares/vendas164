@@ -145,7 +145,7 @@ function getWhatsAppTemplates(o: OrderRow, quantity: number, displayName: string
   const signal = Number(o.down_payment) > 0 ? Number(o.down_payment) * quantity : expectedSignal;
   const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid");
   const totalPaidInsts = paidInsts.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-  const remaining = Math.max(0, (Number(o.total_price) * quantity) - signal - totalPaidInsts);
+  const remaining = o.payment_status === "quitado" || o.payment_status === "cancelado" || o.delivery_status === "cancelado" ? 0 : Math.max(0, (Number(o.total_price) * quantity) - signal - totalPaidInsts);
   const tracking = o.tracking_code?.trim();
   const trackingLink = tracking ? `https://rastreamento.correios.com.br/app/index.php?codigo=${encodeURIComponent(tracking)}` : '';
   const pixInfo = storePixKey ? `\n\n🔑 *Chave PIX da loja:* ${storePixKey}` : '';
@@ -695,7 +695,7 @@ function OrdersTabContent({
         quantity,
         paymentStatus: o.payment_status,
         deliveryStatus: o.delivery_status,
-        remainingBalance: (Number(o.remaining_balance) || 0) * quantity,
+        remainingBalance: o.payment_status === "quitado" || o.payment_status === "cancelado" || o.delivery_status === "cancelado" ? 0 : (Number(o.remaining_balance) || 0) * quantity,
         trackingCode: o.tracking_code || null,
         createdAt: o.created_at,
       };
@@ -1293,7 +1293,7 @@ function OrdersTabContent({
                               )}
                             </div>
                           </div>
-                          <ReservationNextAction paymentStatus={o.payment_status} deliveryStatus={o.delivery_status} onOpenDetails={(section) => openReservationDetails(item, section)} />
+                          <ReservationNextAction paymentStatus={o.payment_status} deliveryStatus={o.delivery_status} releaseDate={o.products?.release_date} onOpenDetails={(section) => openReservationDetails(item, section)} />
                           <div className="flex justify-between items-center mt-2 border-t border-border/40 pt-2">
                             <span className="text-xs font-semibold">{brl(Number(o.total_price) * quantity)}</span>
                             <div className="flex items-center gap-1">
@@ -1446,6 +1446,7 @@ function OrdersTabContent({
                             <p className="text-xs text-muted-foreground">Saldo a receber</p>
                             <p className="mt-0.5 break-words text-base font-bold text-primary tabular-nums">
                               {(() => {
+                                if(o.payment_status === "quitado" || o.payment_status === "cancelado" || o.delivery_status === "cancelado") return brl(0);
                                 const total = Number(o.total_price) * quantity;
                                 const sinal = Number(o.down_payment) * quantity;
                                 const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid");
@@ -1457,7 +1458,7 @@ function OrdersTabContent({
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2"><PaymentBadge status={o.payment_status} /><DeliveryBadge status={o.delivery_status} />{o.payment_status === "aguardando_sinal" && o.reservation_expires_at && <Countdown expiresAt={o.reservation_expires_at} />}</div>
-                        <ReservationNextAction hideDetails paymentStatus={o.payment_status} deliveryStatus={o.delivery_status} onOpenDetails={(section) => openReservationDetails(item, section)} />
+                        <ReservationNextAction hideDetails paymentStatus={o.payment_status} deliveryStatus={o.delivery_status} releaseDate={o.products?.release_date} onOpenDetails={(section) => openReservationDetails(item, section)} />
                         <details className="rounded-xl border border-border/40 p-3 group">
                           <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">Mais opções da reserva<ChevronDown className="size-4 group-open:rotate-180" /></summary>
                           <div className="mt-3 space-y-3">
@@ -1703,7 +1704,7 @@ function OrdersTabContent({
                           variant="badge"
                         />
                       </div>
-                      <ReservationNextAction paymentStatus={o.payment_status} deliveryStatus={o.delivery_status} onOpenDetails={(section) => openReservationDetails(item, section)} />
+                      <ReservationNextAction paymentStatus={o.payment_status} deliveryStatus={o.delivery_status} releaseDate={o.products?.release_date} onOpenDetails={(section) => openReservationDetails(item, section)} />
                       <p className="text-[9px] text-muted-foreground/50 font-mono mt-0.5">#{groupId.slice(0, 8)}</p>
                     </TableCell>
                     <TableCell className="min-w-[170px] max-w-[250px] align-top py-2.5 px-2">
@@ -1790,6 +1791,7 @@ function OrdersTabContent({
                       <div className="flex flex-col gap-1 items-end">
                         <span className="font-bold text-xs text-primary whitespace-nowrap">
                           {(() => {
+                            if(o.payment_status === "quitado" || o.payment_status === "cancelado" || o.delivery_status === "cancelado") return brl(0);
                             const total = Number(o.total_price) * quantity;
                             const sinal = Number(o.down_payment) * quantity;
                             const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid");

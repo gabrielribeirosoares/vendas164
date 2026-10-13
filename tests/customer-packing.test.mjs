@@ -15,10 +15,13 @@ test('packages consolidate all units but preserve customer identity and wheel co
  assert.equal(customer.lines.find(l=>l.variantName?.startsWith('Vermelho')).imageUrl,'red.webp');
  assert.equal(customer.lines.find(l=>!l.variantName).quantity,2);
 });
-test('only fully paid, unshipped and available orders enter packing',()=>{
- const excluded=[{payment_status:'sinal_pago'},{payment_status:'cancelado'},...['enviado','em_transito','entregue','cancelado'].map(delivery_status=>({delivery_status})),{products:{...base.products,release_date:'2026-10-14'}}];
+test('paid pending orders show future arrival separately from available items',()=>{
+ const excluded=[{payment_status:'sinal_pago'},{payment_status:'cancelado'},...['enviado','em_transito','entregue','cancelado'].map(delivery_status=>({delivery_status}))];
  const packages=groupCustomerPackages([base,...excluded.map((extra,i)=>({...base,id:`excluded${i}`,...extra})),{...base,id:'today',products:{...base.products,release_date:'2026-10-13'}}],'2026-10-13');
  assert.equal(packages[0].quantity,2);
+ const future=groupCustomerPackages([{...base,products:{...base.products,release_date:'2026-12-01'}}],'2026-10-13');
+ assert.equal(future[0].quantity,1);assert.equal(future[0].lines[0].available,false);assert.equal(future[0].lines[0].releaseDate,'2026-12-01');
+ assert.equal(packages[0].lines[0].available,true);
 });
 test('guests on the seller account group by phone and malformed metadata stays separate',()=>{
  const guest=(id,phone)=>({...base,id,user_id:'seller',pix_key:'GUEST:'+JSON.stringify({name:'Cliente',phone})});
