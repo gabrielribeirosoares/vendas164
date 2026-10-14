@@ -673,9 +673,9 @@ function CustomerDashboardContent() {
         )}
 
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
-          <StatCard label="Total reservado" value={brl(total)} />
-          <StatCard label="Sinal pago" value={brl(paid)} accent />
-          <StatCard label="Saldo devedor" value={brl(total - paid)} />
+          <StatCard label="Valor total" value={brl(total)} />
+          <StatCard label="Valor pago" value={brl(paid)} accent />
+          <StatCard label="Saldo a pagar" value={brl(total - paid)} />
         </div>
 
         {feed?.links && feed.links.length > 0 && (
@@ -902,7 +902,7 @@ function CustomerDashboardContent() {
                                 Sinal pago: {brl(Number(o.down_payment) * qty)}
                               </p>
                               <p className="text-sm font-bold text-primary">
-                                Saldo restante: {brl(Number(o.remaining_balance) * qty)}
+                                Saldo a pagar: {brl(Number(o.remaining_balance) * qty)}
                               </p>
                             </>
                           ) : isQuitado ? (

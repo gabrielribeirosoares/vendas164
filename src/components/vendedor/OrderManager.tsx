@@ -118,7 +118,7 @@ function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: stri
 
   let msg = `Olá ${displayName},\n\nAqui é o resumo da sua reserva:\n- Miniatura: *${modelName}*\n`;
   if (quantity > 1) msg += `- Quantidade: ${quantity}x\n`;
-  msg += `- Valor Total: *${brl(total)}*\n`;
+  msg += `- Valor total: *${brl(total)}*\n`;
 
   if (o.payment_status === "aguardando_sinal") {
     msg += `- Sinal a pagar: *${brl(expectedSignal)}*\n`;
@@ -126,7 +126,7 @@ function getOrderSummaryMessage(o: OrderRow, quantity: number, displayName: stri
     const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid");
     const totalPaidInsts = paidInsts.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
     const dynamicBalance = Math.max(0, total - (Number(o.down_payment) * quantity) - totalPaidInsts);
-    msg += `- Sinal pago: *${brl(Number(o.down_payment) * quantity)}*\n- Saldo restante: *${brl(dynamicBalance)}*\n`;
+    msg += `- Sinal pago: *${brl(Number(o.down_payment) * quantity)}*\n- Saldo a pagar: *${brl(dynamicBalance)}*\n`;
   } else if (o.payment_status === "quitado") {
     msg += `- Status: *Totalmente Quitado*\n`;
   } else if (isPronta && isSemSinal) {
@@ -154,7 +154,7 @@ function getWhatsAppTemplates(o: OrderRow, quantity: number, displayName: string
 
   const signalReminder = `Olá ${displayName}!\n\nPassando para lembrar da sua reserva da miniatura *${modelName}*${quantity > 1 ? ` (${quantity}x)` : ''}.\n\n📌 *Valor do Sinal:* ${brl(signal)}${o.reservation_expires_at ? `\n⏳ *Prazo de Validade:* ${new Date(o.reservation_expires_at).toLocaleDateString("pt-BR")}` : ''}${pixInfo}\n\nAssim que efetuar o pagamento do sinal, nos envie o comprovante para confirmarmos sua reserva! Muito obrigado!`;
 
-  const arrived = `Olá ${displayName}, ótimas notícias! 📦🎉\n\nA sua miniatura *${modelName}*${quantity > 1 ? ` (${quantity}x)` : ''} acabou de chegar em nosso estoque!\n\n💰 *Saldo restante a pagar:* ${brl(remaining)}${pixInfo}\n\nPor favor, nos envie o comprovante e confirme seu endereço de entrega para realizarmos o despacho!`;
+  const arrived = `Olá ${displayName}, ótimas notícias! 📦🎉\n\nA sua miniatura *${modelName}*${quantity > 1 ? ` (${quantity}x)` : ''} acabou de chegar em nosso estoque!\n\n💰 *Saldo a pagar a pagar:* ${brl(remaining)}${pixInfo}\n\nPor favor, nos envie o comprovante e confirme seu endereço de entrega para realizarmos o despacho!`;
 
   const shipped = `Olá ${displayName}! 🚚💨\n\nSeu pedido da miniatura *${modelName}* foi postado e já está a caminho!\n\n📦 *Código de Rastreio:* ${tracking || 'Em processamento'}${trackingLink ? `\n🔗 *Acompanhe pelo link:* ${trackingLink}` : ''}\n\nQualquer dúvida estamos à disposição!`;
 
@@ -1443,7 +1443,7 @@ function OrdersTabContent({
                             </p>
                           </div>
                           <div className="min-w-0 text-right">
-                            <p className="text-xs text-muted-foreground">Saldo a receber</p>
+                            <p className="text-xs text-muted-foreground">Saldo a pagar</p>
                             <p className="mt-0.5 break-words text-base font-bold text-primary tabular-nums">
                               {(() => {
                                 if(o.payment_status === "quitado" || o.payment_status === "cancelado" || o.delivery_status === "cancelado") return brl(0);

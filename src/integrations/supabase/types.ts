@@ -14,6 +14,12 @@ export type Database = {
   }
   public: {
     Tables: {
+      store_customer_notes: {
+        Row: { store_id: string; customer_id: string; note: string; updated_at: string }
+        Insert: { store_id: string; customer_id: string; note?: string; updated_at?: string }
+        Update: { store_id?: string; customer_id?: string; note?: string; updated_at?: string }
+        Relationships: []
+      }
       customer_store_link: {
         Row: {
           created_at: string
