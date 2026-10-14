@@ -98,8 +98,6 @@ export function OrderInstallmentsDialog({
   });
 
   const unitExpectedSignal = getProductSignalAmount(orderMeta?.products, 1).amount;
-  const isSemSinal = orderMeta?.payment_status === "sem_sinal" || orderMeta?.payment_status === "pagar_na_chegada";
-  const isAguardandoSinal = orderMeta?.payment_status === "aguardando_sinal";
 
   const { data: installments, isLoading } = useQuery({
     queryKey: ["order_installments", orderId, targetIds.join(",")],
@@ -112,76 +110,14 @@ export function OrderInstallmentsDialog({
         .order("installment_number", { ascending: true });
       
       if (error) throw error;
-      let list = data ?? [];
-
-      const listSum = list.reduce((acc, c) => acc + Number(c.amount), 0);
-      const maxSig = listSum > 0 ? Math.max(0, totalPrice - listSum) : totalPrice;
-      let effUnitSig = 0;
-      if (!isSemSinal && !isAguardandoSinal) {
-        if (orderMeta?.signal_amount != null && Number(orderMeta.signal_amount) > 0) {
-          effUnitSig = Math.min(Number(orderMeta.signal_amount), maxSig);
-        } else if (unitExpectedSignal > 0) {
-          effUnitSig = Math.min(unitExpectedSignal, maxSig);
-        } else {
-          effUnitSig = Math.min(Number(orderMeta?.down_payment ?? downPayment ?? 0), maxSig);
-        }
-      }
-      const effActualSig = effUnitSig * qty;
-
-      const paidItems = list.filter((i) => i.status === "paid");
-      const paidSum = effActualSig + paidItems.reduce((acc, curr) => acc + Number(curr.amount), 0);
-      const isOrderFullyPaid = orderMeta?.payment_status === "quitado" || paidSum >= (totalPrice - 0.01);
-
-      // Se o pedido estiver quitado, todas as parcelas pendentes devem ser confirmadas como pagas
-      if (isOrderFullyPaid) {
-        const pendingItems = list.filter((i) => i.status === "pending");
-        if (pendingItems.length > 0) {
-          const nowStr = new Date().toISOString();
-          await supabase
-            .from("order_installments")
-            .update({ status: "paid", paid_at: nowStr })
-            .in("id", pendingItems.map((p) => p.id));
-          list = list.map((item) =>
-            item.status === "pending"
-              ? { ...item, status: "paid", paid_at: nowStr }
-              : item
-          );
-        }
-      }
-
-      // Se existir 1 única parcela pendente cujo valor é igual ao valor total do produto (sem o sinal deduzido),
-      // ajustamos automaticamente para abater o sinal
-      const sigToDeduct = Math.max(unitExpectedSignal * qty, effActualSig);
-      if (list.length === 1 && list[0].status === "pending" && sigToDeduct > 0 && Math.abs(Number(list[0].amount) - totalPrice) < 0.01) {
-        const adjustedAmount = Math.max(0, totalPrice - sigToDeduct);
-        await supabase.from("order_installments").update({ amount: adjustedAmount }).eq("id", list[0].id);
-        list[0].amount = adjustedAmount;
-      }
-
-      return list;
+      return data ?? [];
     }
   });
 
   const currentList = installments || [];
-  const allInstallmentsSum = currentList.reduce((acc, curr) => acc + Number(curr.amount), 0);
-
-  // Se existem parcelas cadastradas, o sinal pago NUNCA pode ultrapassar (totalPrice - soma_parcelas)
-  // Exemplo: total R$ 380, parcelas somam R$ 355 -> sinal máximo é R$ 25
-  const maxPossibleSignal = allInstallmentsSum > 0
-    ? Math.max(0, totalPrice - allInstallmentsSum)
-    : totalPrice;
-
-  let unitSignal = 0;
-  if (!isSemSinal && !isAguardandoSinal) {
-    if (orderMeta?.signal_amount != null && Number(orderMeta.signal_amount) > 0) {
-      unitSignal = Math.min(Number(orderMeta.signal_amount), maxPossibleSignal);
-    } else if (unitExpectedSignal > 0) {
-      unitSignal = Math.min(unitExpectedSignal, maxPossibleSignal);
-    } else {
-      const rawDown = Number(orderMeta?.down_payment ?? downPayment ?? 0);
-      unitSignal = Math.min(rawDown, maxPossibleSignal);
-    }
-  }
+  const unitSignal = ["sinal_pago", "quitado"].includes(orderMeta?.payment_status)
+    ? Number(orderMeta?.down_payment ?? downPayment ?? 0)
+    : 0;
 
   const actualSignal = unitSignal * qty;
   const signalToDeduct = Math.max(unitExpectedSignal * qty, actualSignal);
@@ -390,6 +326,11 @@ export function OrderInstallmentsDialog({
       queryClient.invalidateQueries({ queryKey: ["order_installments", id] });
       queryClient.invalidateQueries({ queryKey: ["order_meta", id] });
     });
+    queryClient.invalidateQueries({ queryKey: ["seller-client-orders"] });
+    queryClient.invalidateQueries({ queryKey: ["seller-clients-page"] });
+    queryClient.invalidateQueries({ queryKey: ["seller-clients-legacy-orders"] });
+    queryClient.invalidateQueries({ queryKey: ["seller-orders-page"] });
+    queryClient.invalidateQueries({ queryKey: ["my-garage"] });
     queryClient.invalidateQueries({ queryKey: ["store-orders"] });
     queryClient.invalidateQueries({ queryKey: ["my-orders"] });
     queryClient.invalidateQueries({ queryKey: ["all_installments"] });
