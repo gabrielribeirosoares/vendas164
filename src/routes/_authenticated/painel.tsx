@@ -38,7 +38,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { brl, getProductSignalAmount, isOrderProntaEntrega, whatsappLink } from "@/lib/format";
 import { formatStockRemaining } from "@/lib/stock";
 import { useSession } from "@/lib/session";
-import { getStoreFullUrl, getStoreDisplayDomain, redirectToMainIfOnSubdomain } from "@/lib/subdomain";
+import { getStoreFullUrl, redirectToMainIfOnSubdomain } from "@/lib/subdomain";
 
 export const Route = createFileRoute("/_authenticated/painel")({
   head: () => ({
@@ -702,7 +702,6 @@ function CustomerDashboardContent() {
                       )}
                       <div>
                         <p className="text-sm font-semibold text-foreground">{l.stores?.name}</p>
-                        <p className="text-xs text-muted-foreground font-mono">{getStoreDisplayDomain(l.stores?.slug ?? "")}</p>
                       </div>
                     </CardContent>
                   </Card>
