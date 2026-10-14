@@ -582,7 +582,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
     if (!client) return "";
     const name = client.profile.name || "Cliente";
     const storeName = storeData?.name || "Nossa Loja";
-    const pixKey = storeData?.pix_key ? `\n🔑 *Chave PIX da loja:* ${storeData.pix_key}` : "";
+    const pixKey = storeData?.pix_key ? `\n*Chave PIX:* ${storeData.pix_key}` : "";
 
     // Filtra apenas pedidos em aberto / não entregues para não poluir o extrato
     const activeOrders = (client.orders || []).filter(
@@ -616,38 +616,37 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
     }
 
     const activeRemaining = Math.max(0, activeSpent - activePaid);
-    const activeProgress = activeSpent > 0 ? Math.min(100, Math.round((activePaid / activeSpent) * 100)) : 100;
 
-    let text = `Olá *${name}*! 🏎️💨\n\n`;
-    text += `Passando para enviar o resumo atualizado do seu acervo / reservas em aberto na *${storeName}*:\n\n`;
-    text += `📊 *RESUMO DAS RESERVAS ATIVAS:*\n`;
-    text += `• Miniaturas em Aberto: *${activeOrders.length} peças*\n`;
-    text += `• Valor Total em Aberto: *${brl(activeSpent)}*\n`;
-    text += `• Total Já Pago: *${brl(activePaid)}* (${activeProgress}%)\n`;
-    text += `• Saldo Restante a Pagar: *${brl(activeRemaining)}*\n\n`;
+    let text = `Olá, *${name}*!\n\n`;
+    text += `Segue o resumo das suas miniaturas na *${storeName}*:\n\n`;
+    text += `*Resumo*\n`;
+    text += `Miniaturas aguardando entrega: *${activeOrders.length} peças*\n`;
+    text += `Valor total das miniaturas: *${brl(activeSpent)}*\n`;
+    text += `Total já pago: *${brl(activePaid)}*\n`;
+    text += `Saldo a pagar: *${brl(activeRemaining)}*\n\n`;
 
-    text += `📦 *STATUS DA SUA CAIXA:*\n`;
-    if (activeArrived > 0) text += `• 🟢 *${activeArrived}* já na loja (Prontas para envio)\n`;
-    if (activePreorder > 0) text += `• ⏳ *${activePreorder}* em pré-venda (Aguardando lançamento)\n`;
-    if (activeShipped > 0) text += `• 🚚 *${activeShipped}* em trânsito a caminho\n`;
-    if (client.deliveredCount > 0) text += `• ✓ *${client.deliveredCount}* já entregues anteriormente\n`;
+    text += `*Situação das miniaturas*\n`;
+    if (activeArrived > 0) text += `Na loja: *${activeArrived}*\n`;
+    if (activePreorder > 0) text += `Em pré-venda: *${activePreorder}*\n`;
+    if (activeShipped > 0) text += `Em trânsito: *${activeShipped}*\n`;
+    if (client.deliveredCount > 0) text += `Entregues anteriormente: *${client.deliveredCount}*\n`;
 
     if (detailed && activeOrders.length > 0) {
-      text += `\n📋 *DETALHAMENTO DOS MODELOS ATIVOS:*\n`;
+      text += `\n*Miniaturas*\n`;
       activeOrders.forEach((o: OrderRow, idx: number) => {
         const brand = o.products?.brand || "";
         const model = o.products?.model || "Miniatura";
-        const statusPag = o.payment_status === "quitado" ? "✓ Quitado" : o.payment_status === "sinal_pago" ? "🟡 Sinal Pago" : "⏳ Pendente";
+        const statusPag = o.payment_status === "quitado" ? "Quitado" : o.payment_status === "sinal_pago" ? "Sinal pago" : "Pagamento pendente";
         const isShipped = (o as any).delivery_status === "em_transito";
         const releaseDate = (o.products as any)?.release_date;
         const isArrived = releaseDate ? new Date(releaseDate + "T00:00:00") <= now : true;
-        const statusLog = isShipped ? "🚚 Em Trânsito" : isArrived ? "📦 Na Loja" : "⏳ Pré-venda";
+        const statusLog = isShipped ? "Em trânsito" : isArrived ? "Na loja" : "Pré-venda";
 
         text += `${idx + 1}. *${brand} ${model}* - ${brl(Number(o.total_price))} (${statusPag} | ${statusLog})\n`;
       });
     }
 
-    text += `${pixKey}\n\nQualquer dúvida ou quando quiser solicitar o despacho das miniaturas prontas, é só nos avisar! Muito obrigado pela parceria! 🏁`;
+    text += `${pixKey}\n\nSe tiver dúvidas ou quiser solicitar o envio, entre em contato. Obrigado!`;
     return text;
   }
 
