@@ -62,6 +62,8 @@ before(async () => {
   await db.query('INSERT INTO private.platform_admins(user_id) VALUES($1)',[guest]);
   await db.exec(await readFile(new URL('../supabase/migrations/20260920153000_push_subscriptions.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20261013135108_atomic_seller_operations_and_financial_totals.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261014113445_recalculate_reversed_installment_payments.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261014114555_preserve_manual_settlement_on_payment_confirmation.sql',import.meta.url),'utf8'));
 });
 after(() => db.close());
 async function coloredProduct(redStock = 1, blueStock = 2) {
@@ -290,4 +292,43 @@ test('store association cannot expose or overwrite another subscriber credential
   assert.equal((await db.query("SELECT id FROM push_subscriptions WHERE endpoint='https://web.push.apple.com/private'")).rows.length,0);
   assert.equal((await db.query("DELETE FROM push_subscriptions WHERE endpoint='https://web.push.apple.com/private' RETURNING id")).rows.length,0);
   await assert.rejects(db.query("INSERT INTO push_subscriptions(user_id,endpoint,p256dh,auth) VALUES($1,'https://web.push.apple.com/private','changed','changed') ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id,p256dh=excluded.p256dh",[owner]),/row-level security/);
+});
+
+async function paymentFixture(signal = 0) {
+  const id = await product();
+  const [oid] = await checkout([item(id)]);
+  await asUser(owner);
+  await db.query('DELETE FROM order_installments WHERE order_id=$1', [oid]);
+  await db.query("UPDATE orders SET down_payment=$1,signal_amount=$1,payment_status=$2 WHERE id=$3", [signal, signal ? 'sinal_pago' : 'sem_sinal', oid]);
+  const receipt = (await db.query("INSERT INTO order_installments(order_id,installment_number,amount,due_date,status) VALUES($1,1,$2,current_date,'pending') RETURNING id", [oid, 100-signal])).rows[0].id;
+  return { oid, receipt };
+}
+const paymentState = async oid => (await db.query('SELECT payment_status FROM orders WHERE id=$1', [oid])).rows[0].payment_status;
+test('seller can settle, undo and delete receipts atomically while preserving the deposit', async () => {
+  for (const signal of [0, 20]) {
+    const { oid, receipt } = await paymentFixture(signal);
+    await db.query("UPDATE order_installments SET status='paid' WHERE id=$1", [receipt]);
+    assert.equal(await paymentState(oid), 'quitado');
+    await db.query("UPDATE order_installments SET status='pending' WHERE id=$1", [receipt]);
+    assert.equal(await paymentState(oid), signal ? 'sinal_pago' : 'sem_sinal');
+    await db.query("UPDATE order_installments SET status='paid' WHERE id=$1", [receipt]);
+    await db.query('DELETE FROM order_installments WHERE id=$1', [receipt]);
+    assert.equal(await paymentState(oid), signal ? 'sinal_pago' : 'sem_sinal');
+  }
+});
+test('manual settlement survives confirming an incomplete ledger until a receipt is reversed', async () => {
+  const { oid, receipt } = await paymentFixture();
+  await db.query('UPDATE order_installments SET amount=30 WHERE id=$1', [receipt]);
+  await mutate([oid], { payment_status: 'quitado' });
+  assert.equal(await paymentState(oid), 'quitado');
+  await db.query('DELETE FROM order_installments WHERE id=$1', [receipt]);
+  assert.equal(await paymentState(oid), 'sem_sinal');
+});
+test('customers cannot reverse seller receipts or change settlement', async () => {
+  const { oid, receipt } = await paymentFixture();
+  await db.query("UPDATE order_installments SET status='paid' WHERE id=$1", [receipt]);
+  await asUser();
+  assert.equal((await db.query('DELETE FROM order_installments WHERE id=$1 RETURNING id', [receipt])).rows.length, 0);
+  assert.equal((await db.query("UPDATE order_installments SET status='pending' WHERE id=$1 RETURNING id", [receipt])).rows.length, 0);
+  assert.equal(await paymentState(oid), 'quitado');
 });
