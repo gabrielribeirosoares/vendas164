@@ -322,9 +322,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
       totalSpent += price;
       totalItems += 1;
 
-      const signalPaid = (order.payment_status === "sinal_pago" || order.payment_status === "quitado") ? Number(order.down_payment || 0) : 0;
-      const paidInsts = (order.order_installments || []).filter((i: any) => i.status === "paid").reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-      const orderPaid = Math.min(price, signalPaid + paidInsts);
+      const orderPaid = summarizeReservation([order]).received;
       totalPaid += orderPaid;
 
       const isDelivered = (order as any).delivery_status === "entregue";
@@ -460,11 +458,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
     // Filtrar pedidos elegíveis (com saldo a pagar)
     const eligibleOrders = (currentSelectedClient.orders || []).filter((o: OrderRow) => {
       if (o.payment_status === "cancelado" || (o as any).delivery_status === "cancelado") return false;
-      const price = Number(o.total_price || 0);
-      const signalPaid = (o.payment_status === "sinal_pago" || o.payment_status === "quitado") ? Number(o.down_payment || 0) : 0;
-      const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid").reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-      const paid = Math.min(price, signalPaid + paidInsts);
-      return (price - paid) > 0.01;
+      return summarizeReservation([o]).balance > 0.01;
     });
 
     // Ordenar segundo a estratégia
@@ -501,10 +495,9 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
       if (available <= 0.001) break;
 
       const price = Number(order.total_price || 0);
-      const signalPaid = (order.payment_status === "sinal_pago" || order.payment_status === "quitado") ? Number(order.down_payment || 0) : 0;
-      const paidInsts = (order.order_installments || []).filter((i: any) => i.status === "paid").reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-      const currentPaid = Math.min(price, signalPaid + paidInsts);
-      const currentRemaining = Math.max(0, price - currentPaid);
+      const financial = summarizeReservation([order]);
+      const currentPaid = financial.received;
+      const currentRemaining = financial.balance;
 
       const toDeduct = Math.min(available, currentRemaining);
       const afterRemaining = Math.max(0, currentRemaining - toDeduct);
@@ -606,9 +599,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
       const price = Number(order.total_price || 0);
       activeSpent += price;
 
-      const signalPaid = (order.payment_status === "sinal_pago" || order.payment_status === "quitado") ? Number(order.down_payment || 0) : 0;
-      const paidInsts = (order.order_installments || []).filter((i: any) => i.status === "paid").reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-      const orderPaid = Math.min(price, signalPaid + paidInsts);
+      const orderPaid = summarizeReservation([order]).received;
       activePaid += orderPaid;
 
       const isShipped = (order as any).delivery_status === "em_transito";

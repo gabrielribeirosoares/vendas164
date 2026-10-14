@@ -81,3 +81,13 @@ test("centavos e recebimento parcial do sinal são preservados", () => {
     { total: 10.01, received: 0.5, balance: 9.51, dueNow: 0.51 },
   );
 });
+
+test("manual settlement clears balance even when only the original deposit is recorded", () => {
+  const settled = { ...order, total_price: 859.6, down_payment: 244.8, payment_status: "quitado" };
+  assert.deepEqual(summarizeReservation([settled]), {
+    total: 859.6, received: 859.6, balance: 0, dueNow: 0,
+  });
+  const mixed = summarizeReservation([settled, { ...order, total_price: 100 }]);
+  assert.equal(mixed.received, 859.6);
+  assert.equal(mixed.balance, 100);
+});
