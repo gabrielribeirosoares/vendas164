@@ -1,3 +1,4 @@
+import { getColorVariants, getCartAvailableStock, getVariantPricingProduct, getVariantLabel } from "./productVariants";
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Tables } from '@/integrations/supabase/types';
@@ -7,6 +8,8 @@ export type Product = Tables<'products'>;
 export interface CartItem {
   id: string;
   productId: string;
+  variantId?: string;
+  variantName?: string;
   storeId: string;
   storeName?: string;
   quantity: number;
@@ -30,21 +33,29 @@ export interface CartItem {
 const money = (value: number) => Math.round(value * 100) / 100;
 export function repriceCartItem(item: CartItem, quantity: number, product = item.pricingProduct): CartItem {
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) throw new Error('invalid_quantity');
-  const option = product && getInstallmentOptions(product, quantity).find(o => o.value === item.selectedInstallment);
+  const variants = getColorVariants(product);
+  const variant = variants.find(v => v.id === item.variantId);
+  if (variants.length && !variant) throw new Error('variant_required');
+  if (item.variantId && !variant) throw new Error('variant_not_found');
+  if (product && item.variantId && quantity > getCartAvailableStock({ ...item, pricingProduct: product })) throw new Error('variant_out_of_stock');
+  const effectiveProduct = product && getVariantPricingProduct(product, variant);
+  const option = effectiveProduct && getInstallmentOptions(effectiveProduct, quantity).find(o => o.value === item.selectedInstallment);
   if (product && !option) throw new Error('invalid_installments');
   const unit = money(option ? option.totalPrice / quantity : item.unitPriceForChosenOption);
   const totalPrice = money(unit * quantity);
-  const signal = product ? Math.min(unit, getProductSignalAmount(product, 1).amount) : item.downPaymentToPay / item.quantity;
+  const signal = product ? Math.min(unit, getProductSignalAmount(effectiveProduct, 1).amount) : item.downPaymentToPay / item.quantity;
   const downPaymentToPay = money(signal * quantity);
   return {
     ...item,
     quantity,
+    variantName: variant ? getVariantLabel(variant) : item.variantName,
+    productSnapshot: { ...item.productSnapshot, image_url: variant?.image_url || product?.image_url || item.productSnapshot.image_url },
     pricingProduct: product,
     unitPriceForChosenOption: unit,
     totalPrice,
     downPaymentToPay,
     remainingBalance: money(totalPrice - downPaymentToPay),
-    hasNoSignal: product ? hasNoSignalRequirement(product) : item.hasNoSignal,
+    hasNoSignal: product ? hasNoSignalRequirement(effectiveProduct) : item.hasNoSignal,
     isProntaEntrega: product ? isProntaEntrega(product) : item.isProntaEntrega,
   };
 }
@@ -67,7 +78,7 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
   items: [],
   requestId: null,
   addItem: (item) => set(state => {
-    const existing = state.items.find(i => i.productId === item.productId && i.selectedInstallment === item.selectedInstallment);
+    const existing = state.items.find(i => i.productId === item.productId && i.variantId === item.variantId && i.selectedInstallment === item.selectedInstallment);
     const next = repriceCartItem({ ...item, id: existing?.id ?? crypto.randomUUID() }, (existing?.quantity ?? 0) + item.quantity);
     return { requestId: null, items: existing ? state.items.map(i => i.id === existing.id ? next : i) : [...state.items, next] };
   }),

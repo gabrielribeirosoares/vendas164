@@ -19,13 +19,13 @@ test("mobile navigation uses controlled accessible sheet semantics", () => {
 });
 
 test("seller navigation exposes and identifies the active destination", () => {
-  assert.match(header, /tab: "admin_moderation"/);
+  assert.match(header, /getSellerNavigation/);
   assert.match(header, /aria-current=/);
-  assert.match(header, /activeSellerTab === "reservas"/);
+  assert.match(header, /activeSellerTab === section\.id/);
 });
 
 test("mobile seller sections live in the hamburger menu, including payments", () => {
-  assert.match(header, /search=\{\{ tab: "pagamentos" \}\}/);
+  assert.match(header, /search=\{\{ tab: section\.id \}\}/);
   assert.doesNotMatch(sellerRoute, /Navegação de Abas no Mobile/);
   assert.doesNotMatch(sellerRoute, /className="flex md:hidden items-center gap-1\.5 overflow-x-auto/);
 });

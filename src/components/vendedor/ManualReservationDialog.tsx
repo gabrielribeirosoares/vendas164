@@ -1,3 +1,4 @@
+import { getColorVariants, getVariantPricingProduct } from "@/lib/productVariants";
 
 import { getInstallmentOptions, getProductSignalAmount, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -66,6 +67,7 @@ export function ManualReservationDialog({
   const themeColor = storeColor || "#e11d48";
   const { user: currentUser } = useSession();
   const queryClient = useQueryClient();
+  const [selectedVariantId, setSelectedVariantId] = useState("");
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedClientMode, setSelectedClientMode] = useState<"existing" | "new">("new");
   const [selectedUserId, setSelectedUserId] = useState<string>("");
@@ -208,6 +210,7 @@ export function ManualReservationDialog({
       }
     }
   }, [selectedProductId, products]);
+  useEffect(() => { setSelectedVariantId(""); setManualQuantity(1); }, [selectedProductId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -270,9 +273,13 @@ export function ManualReservationDialog({
 
     const product = products.find((p) => p.id === selectedProductId);
     if (!product) return toast.error("Pré-venda não encontrada.");
-    if (product.stock <= 0) return toast.error("Unidades esgotadas para esta pré-venda.");
+    const variants = getColorVariants(product);
+    const variant = variants.find(v => v.id === selectedVariantId);
+    if (variants.length && !variant) return toast.error("Selecione uma combinação.");
+    const availableStock = variant?.stock ?? product.stock;
+    if (availableStock <= 0) return toast.error("Unidades esgotadas para esta pré-venda.");
 
-    const qtyToCreate = Math.min(manualQuantity, product.stock);
+    const qtyToCreate = Math.min(manualQuantity, availableStock);
     if (qtyToCreate <= 0) return toast.error("Quantidade inválida.");
 
     setSaving(true);
@@ -301,8 +308,9 @@ export function ManualReservationDialog({
       }
 
       // 4. Calcular preços unitários
-      const cashPrice = Number(product.price);
-      const instOptions = getInstallmentOptions(product);
+      const effectiveProduct = getVariantPricingProduct(product, variant);
+      const cashPrice = Number(effectiveProduct.price);
+      const instOptions = getInstallmentOptions(effectiveProduct);
       const chosenOption = instOptions.find((o: any) => o.value === installmentCount) ?? instOptions[0];
       const totalPrice = installmentCount > 1 ? chosenOption.totalPrice : cashPrice;
       
@@ -310,7 +318,7 @@ export function ManualReservationDialog({
       let downPayment = 0;
 
       if (paymentStatus === "sinal_pago") {
-        downPayment = customSignal > 0 ? customSignal : Math.round(cashPrice * 0.2 * 100) / 100;
+        downPayment = Math.min(totalPrice, customSignal > 0 ? customSignal : Math.round(cashPrice * 0.2 * 100) / 100);
       } else if (paymentStatus === "quitado") {
         downPayment = totalPrice;
       } else if (paymentStatus === "pronta_entrega" || paymentStatus === "sem_sinal") {
@@ -338,10 +346,11 @@ export function ManualReservationDialog({
         : (pixKey.trim() || null);
 
       const orderPayload = {
+        variant_id: variant?.id,
         user_id: effectiveUserId, total_price: totalPrice, down_payment: downPayment,
         payment_status: paymentStatus, reservation_expires_at: expiresAt,
         installment_count: installmentCount, pix_key: guestKeyString,
-        signal_amount: Math.min(totalPrice, getProductSignalAmount(product, 1).amount),
+        signal_amount: Math.min(totalPrice, getProductSignalAmount(effectiveProduct, 1).amount),
       };
       const fingerprint = JSON.stringify({ product: product.id, quantity: qtyToCreate, order: { ...orderPayload, reservation_expires_at: null } });
       if (manualAttempt.current?.fingerprint !== fingerprint) manualAttempt.current = { fingerprint, id: crypto.randomUUID(), expiresAt };
@@ -407,12 +416,22 @@ export function ManualReservationDialog({
             </Select>
           </div>
 
+          {getColorVariants(products.find(p => p.id === selectedProductId)).length > 0 && <div className="space-y-1">
+            <Label htmlFor="manual-color">Combinação</Label>
+            <Select value={selectedVariantId} onValueChange={value => { setSelectedVariantId(value); setManualQuantity(1); }}>
+              <SelectTrigger id="manual-color"><SelectValue placeholder="Selecione a combinação" /></SelectTrigger>
+              <SelectContent>{getColorVariants(products.find(p => p.id === selectedProductId)).map(v =>
+                <SelectItem key={v.id} value={v.id} disabled={v.stock === 0}>{v.name} · {v.stock} unidades</SelectItem>
+              )}</SelectContent>
+            </Select>
+          </div>}
           {/* Quantidade e Resumo de Valor */}
           {(() => {
             const selProd = products.find((p) => p.id === selectedProductId);
             if (!selProd) return null;
-            const maxStock = Math.min(selProd.stock, 20);
-            const unitPrice = Number(selProd.price || 0);
+            const variants = getColorVariants(selProd);
+            const maxStock = Math.min(variants.length ? variants.find(v => v.id === selectedVariantId)?.stock ?? 0 : selProd.stock, 20);
+            const unitPrice = Number(getVariantPricingProduct(selProd, variants.find(v => v.id === selectedVariantId)).price || 0);
             const totalPrice = unitPrice * manualQuantity;
 
             return (
@@ -667,7 +686,7 @@ export function ManualReservationDialog({
           {/* Seleção de Parcelamento */}
           {(() => {
             const selectedProduct = products.find((p) => p.id === selectedProductId);
-            const instOptions = selectedProduct ? getInstallmentOptions(selectedProduct, manualQuantity) : [];
+            const instOptions = selectedProduct ? getInstallmentOptions(getVariantPricingProduct(selectedProduct, getColorVariants(selectedProduct).find(v => v.id === selectedVariantId)), manualQuantity) : [];
             const chosenOption = instOptions.find((o: any) => o.value === installmentCount) ?? instOptions[0];
             return (
               <div className="space-y-2 min-w-0">

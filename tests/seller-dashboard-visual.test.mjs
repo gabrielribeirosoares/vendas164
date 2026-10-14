@@ -13,11 +13,13 @@ test("painel identifica a seção ativa e separa grupos da navegação", async (
   ]);
 
   assert.match(route, /<SellerSectionHeader activeSection=\{activeTab\} storeName=\{store\.name\}/);
-  assert.match(route, />\s*Operação\s*</);
-  assert.match(route, />\s*Configuração\s*</);
+  const navigation = await readFile(new URL("../src/lib/sellerNavigation.ts", import.meta.url), "utf8");
+  assert.match(route, /getSellerNavigation/);
+  assert.match(navigation, /group: "Operação"/);
+  assert.match(navigation, /group: "Configuração"/);
   assert.match(header, /Seção atual/);
-  assert.match(header, /Reservas e pedidos/);
-  assert.match(header, /Personalização da loja/);
+  assert.match(navigation, /Reservas e pedidos/);
+  assert.match(navigation, /Personalização da loja/);
 });
 
 test("indicadores permanecem compactos e legíveis no celular", async () => {

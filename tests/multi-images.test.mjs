@@ -35,7 +35,7 @@ test("ProductManager uses ProductPhotosInput for both new products and editing",
 test("Product detail page features interactive multi-photo gallery and thumbnails", async () => {
   const source = await read("src/routes/loja.$slug.$itemSlug.tsx");
 
-  assert.match(source, /getProductImageUrls\(product\?\.image_url\)/);
+  assert.match(source, /getProductImageUrls\(selectedVariant\?\.image_url \|\| product\?\.image_url\)/);
   assert.match(source, /selectedImageIndex/);
   assert.match(source, /object-contain p-3 sm:p-5/);
   assert.match(source, /Foto anterior/);

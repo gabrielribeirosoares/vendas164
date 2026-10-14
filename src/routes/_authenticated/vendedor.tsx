@@ -1,25 +1,19 @@
+import { getSellerNavigation } from "@/lib/sellerNavigation";
 import { createFileRoute } from '@tanstack/react-router';
 import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Copy,
-  CreditCard,
   ExternalLink,
   Loader2,
-  Package,
-  Palette,
   ShieldAlert,
   ShieldCheck,
   XCircle,
-  Zap,
   Sparkles,
   Settings,
   Crown,
   Calendar,
   Plus,
-  Car,
-  Clock,
-  User,
   RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -247,6 +241,8 @@ function SellerDashboard() {
         document.title = `${store.name} — Personalização`;
       } else if (activeTab === "pronta_entrega") {
         document.title = `${store.name} — Pronta Entrega`;
+      } else if (activeTab === "rodinhas") {
+        document.title = `${store.name} — Rodinhas`;
       } else if (activeTab === "clientes") {
         document.title = `${store.name} — Clientes`;
       } else if (activeTab === "fila_espera") {
@@ -275,7 +271,13 @@ function SellerDashboard() {
     },
   });
 
-  const needsProducts = ["produtos", "pronta_entrega", "reservas", "fila_espera"].includes(activeTab) || !!manualReservationWaitlist;
+  useEffect(() => {
+    if (store && activeTab === "rodinhas" && !store.wheels_enabled) {
+      void navigate({ search: { tab: "produtos" }, replace: true });
+    }
+  }, [store, activeTab, navigate]);
+
+  const needsProducts = ["produtos", "pronta_entrega", "rodinhas", "reservas", "fila_espera"].includes(activeTab) || !!manualReservationWaitlist;
   const needsFullWaitlist = activeTab === "fila_espera";
   const needsWaitlistProductIds = ["produtos", "pronta_entrega"].includes(activeTab);
 
@@ -571,50 +573,17 @@ function SellerDashboard() {
           onOpenWaitlist={() => setActiveTab("fila_espera")}
         />
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="mt-8 md:grid md:grid-cols-[190px_minmax(0,1fr)] md:items-start md:gap-6">
-          <TabsList className="hidden md:flex md:sticky md:top-24 h-auto w-full flex-col items-stretch justify-start gap-1 rounded-xl border border-border/50 bg-card/70 p-2 shadow-sm [&>button]:min-h-11 [&>button]:justify-start">
-            <span className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Operação
-            </span>
-            <TabsTrigger value="produtos" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <Package className="size-3.5 text-muted-foreground" /> Pré-vendas
-            </TabsTrigger>
-            <TabsTrigger value="pronta_entrega" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <Zap className="size-3.5 text-muted-foreground" /> Pronta Entrega
-            </TabsTrigger>
-            <TabsTrigger value="reservas" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <Car className="size-3.5 text-muted-foreground" /> Reservas
-            </TabsTrigger>
-            <TabsTrigger value="clientes" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <User className="size-3.5 text-muted-foreground" /> Clientes
-            </TabsTrigger>
-            <TabsTrigger value="fila_espera" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <Clock className="size-3.5 text-muted-foreground" />
-              <span>Fila de Espera</span>
-              {alertCounts.waitlist > 0 && (
-                <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 font-semibold text-muted-foreground border-border/50">
-                  {alertCounts.waitlist}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="rastreamento" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <RefreshCw className="size-3.5 text-muted-foreground" /> Rastreamento
-            </TabsTrigger>
-            <div className="mx-2 my-1 h-px bg-border/60" />
-            <span className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Configuração
-            </span>
-            <TabsTrigger value="loja" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <Palette className="size-3.5 text-muted-foreground" /> Personalização
-            </TabsTrigger>
-            <TabsTrigger value="pagamentos" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-              <CreditCard className="size-3.5 text-muted-foreground" /> Pagamentos
-            </TabsTrigger>
-            {isAdmin && (
-              <TabsTrigger value="admin_moderation" className="gap-1.5 text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground">
-                <ShieldCheck className="size-3.5 text-muted-foreground" /> Moderação
-              </TabsTrigger>
-            )}
+        <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="mt-8 md:grid md:grid-cols-[240px_minmax(0,1fr)] lg:grid-cols-[260px_minmax(0,1fr)] md:items-start md:gap-6">
+          <TabsList className="hidden md:flex md:sticky md:top-24 h-auto w-full flex-col items-stretch justify-start gap-1 rounded-xl border border-border/50 bg-card/70 p-2 shadow-sm">
+            {getSellerNavigation(!!store.wheels_enabled, isAdmin).map((section, index, sections) => {
+              const Icon = section.icon;
+              return <div key={section.id} className="min-w-0">
+                {(index === 0 || section.group !== sections[index - 1].group) && <span className="block px-3 pb-2 pt-4 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{section.group}</span>}
+                <TabsTrigger value={section.id} className="h-auto min-h-11 w-full justify-start gap-2.5 whitespace-normal rounded-lg px-3 py-3 text-left text-sm leading-snug text-muted-foreground data-[state=active]:text-foreground">
+                  <Icon className="size-4 shrink-0" /><span className="min-w-0 break-words">{section.title}</span>
+                </TabsTrigger>
+              </div>;
+            })}
           </TabsList>
 
           <div className="min-w-0">
@@ -625,6 +594,9 @@ function SellerDashboard() {
             {productsError ? <SellerDataError onRetry={() => void retryProducts()} /> : <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pre_venda" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} waitlistCounts={waitlistCounts} />}
           </TabsContent>
 
+          {store.wheels_enabled && <TabsContent value="rodinhas" className="mt-5">
+            {productsError ? <SellerDataError onRetry={() => void retryProducts()} /> : <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="rodinhas" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} waitlistCounts={waitlistCounts} />}
+          </TabsContent>}
           <TabsContent value="pronta_entrega" className="mt-5">
             {productsError ? <SellerDataError onRetry={() => void retryProducts()} /> : <ProductsTab onlyOutOfStock={onlyOutOfStock} onClearStockFilter={() => setOnlyOutOfStock(false)} mode="pronta_entrega" store={store} products={products ?? []} userId={user!.id} onSelectTab={setActiveTab} waitlistCounts={waitlistCounts} />}
           </TabsContent>
@@ -855,6 +827,19 @@ function AdminModerationPanel() {
   const queryClient = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
   // Estado do Modal de Gerenciamento de Assinatura e Dias de Teste
+  const [wheelsSaving, setWheelsSaving] = useState<string | null>(null);
+  async function toggleWheels(st: {id:string; wheels_enabled?:boolean}) {
+    setWheelsSaving(st.id);
+    try {
+      const {error} = await supabase.rpc("set_store_wheels_enabled", {_store_id:st.id,_enabled:!st.wheels_enabled});
+      if(error) throw error;
+      await queryClient.invalidateQueries({queryKey:["admin-all-stores"]});
+      await queryClient.invalidateQueries({queryKey:["my-store"]});
+      await queryClient.invalidateQueries({queryKey:["my-store-header"]});
+      toast.success(st.wheels_enabled ? "Aba Rodinhas desabilitada." : "Aba Rodinhas habilitada para esta loja.");
+    } catch {toast.error("Não foi possível alterar a liberação das rodinhas.");}
+    finally {setWheelsSaving(null);}
+  }
   const [managingStore, setManagingStore] = useState<any>(null);
   const [selectedPlanType, setSelectedPlanType] = useState<"subscriber" | "trial" | "rejected">("subscriber");
   const [customDays, setCustomDays] = useState<number>(14);
@@ -1125,6 +1110,9 @@ function AdminModerationPanel() {
                         <Settings className="size-3.5" /> Gerenciar Assinatura / Dias
                       </Button>
 
+                      <Button size="sm" variant="outline" disabled={wheelsSaving !== null} aria-pressed={!!st.wheels_enabled} onClick={() => void toggleWheels(st)}>
+                        {st.wheels_enabled ? "Desabilitar rodinhas" : "Habilitar rodinhas"}
+                      </Button>
                       {cleanPhone && (
                         <Button
                           asChild

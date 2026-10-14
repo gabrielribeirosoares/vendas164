@@ -1,3 +1,5 @@
+import { ProductVariantsInput } from "./ProductVariantsInput";
+import { getColorVariants, variantsToJson, validateVariants, type ColorVariant } from "@/lib/productVariants";
 import { ManualReservationDialog } from "./ManualReservationDialog";
 import { BookmarkCheck, CopyPlus, Zap, Sparkles, Clock } from "lucide-react";
 import { formatDeadlineHours, getProductInstallmentInfo, hasNoSignalRequirement, isProntaEntrega } from "@/lib/format";
@@ -84,14 +86,15 @@ export function ProductsTab({
   store: Store;
   products: Product[];
   userId: string;
-  mode?: "pre_venda" | "pronta_entrega" | "all";
+  mode?: "pre_venda" | "pronta_entrega" | "rodinhas" | "all";
   onSelectTab?: (tab: string) => void;
   onlyOutOfStock?: boolean;
   onClearStockFilter?: () => void;
   waitlistCounts?: Record<string, number>;
 }) {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({ ...emptyProduct, category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda" });
+  const [form, setForm] = useState({ ...emptyProduct, category: (mode === "pronta_entrega" || mode === "rodinhas") ? "pronta_entrega" : "pre_venda" });
+  const [variants, setVariants] = useState<ColorVariant[]>([]);
   const [saving, setSaving] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
@@ -102,19 +105,20 @@ export function ProductsTab({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [blingOpen, setBlingOpen] = useState(false);
 
-  const isBlingEligible = true;
+  const isBlingEligible = mode !== "rodinhas";
 
   const activeColor = store.primary_color || "#e11d48";
   const activeTextColor = getReadableTextColor(activeColor);
 
   const displayedProducts = useMemo(() => {
-    let list = products;
+    const ordinaryProducts = products.filter(p => p.product_kind !== "rodinhas");
+    let list = mode === "rodinhas" ? products.filter(p => p.product_kind === "rodinhas" && (!onlyOutOfStock || p.stock === 0)) : ordinaryProducts;
     if (mode === "pronta_entrega") {
-      list = products.filter((p) => isProntaEntrega(p) && (!onlyOutOfStock || p.stock === 0));
+      list = ordinaryProducts.filter((p) => isProntaEntrega(p) && (!onlyOutOfStock || p.stock === 0));
     } else if (mode === "pre_venda") {
-      list = products.filter((p) => !isProntaEntrega(p) && (!onlyOutOfStock || p.stock === 0));
+      list = ordinaryProducts.filter((p) => !isProntaEntrega(p) && (!onlyOutOfStock || p.stock === 0));
     } else if (onlyOutOfStock) {
-      list = products.filter((p) => p.stock === 0);
+      list = list.filter((p) => p.stock === 0);
     }
 
     if (searchQuery.trim()) {
@@ -214,8 +218,10 @@ export function ProductsTab({
       return toast.error("Por favor, selecione ou informe a marca da miniatura.");
     }
 
+    const variantsError = validateVariants(variants);
+    if (variantsError) return toast.error(variantsError);
     setSaving(true);
-    const isPronta = (form as any).category === "pronta_entrega" || mode === "pronta_entrega";
+    const isPronta = (form as any).category === "pronta_entrega" || mode === "pronta_entrega" || mode === "rodinhas";
     const isSemSinal = isPronta || (form as any).signal_rule === "sem_sinal";
     let computedHours = isSemSinal ? 0 : 24;
     if (!isSemSinal && form.payment_deadline_date) {
@@ -231,6 +237,8 @@ export function ProductsTab({
 
     const payload: any = {
       store_id: store.id,
+      product_kind: mode === "rodinhas" ? "rodinhas" : "miniatura",
+      ...(variants.length ? { color_variants: variantsToJson(variants) } : {}),
       brand: form.brand.trim(),
       model: form.model.trim(),
       sku: form.sku?.trim() || null,
@@ -246,9 +254,9 @@ export function ProductsTab({
       payment_deadline_date: isSemSinal ? null : (form.payment_deadline_date || null),
       payment_deadline_hours: isSemSinal ? 0 : computedHours,
       down_payment_amount: isSemSinal || form.down_payment_amount === "" ? null : Number(form.down_payment_amount || 0),
-      stock: Number(form.stock || 0),
-      initial_stock: Number(form.stock || 0),
-      image_url: form.image_url || null,
+      stock: variants.length ? variants.reduce((sum, v) => sum + v.stock, 0) : Number(form.stock || 0),
+      initial_stock: variants.length ? variants.reduce((sum, v) => sum + v.stock, 0) : Number(form.stock || 0),
+      image_url: form.image_url || variants.find(v => v.image_url)?.image_url || null,
       slug: slugify(`${form.brand.trim()}-${form.model.trim()}`),
       bulk_discount_threshold: (form as any).bulk_discount_threshold ? Number((form as any).bulk_discount_threshold) : null,
       bulk_discount_price: (form as any).bulk_discount_price ? Number((form as any).bulk_discount_price) : null,
@@ -329,7 +337,8 @@ export function ProductsTab({
       }
     }
 
-    setForm({ ...emptyProduct, category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda" });
+    setVariants([]);
+    setForm({ ...emptyProduct, category: (mode === "pronta_entrega" || mode === "rodinhas") ? "pronta_entrega" : "pre_venda" });
     setSheetOpen(false);
     setIsCustomBrand(false);
     queryClient.invalidateQueries({ queryKey: ["store-products"] });
@@ -344,6 +353,7 @@ export function ProductsTab({
   }
 
   async function handleQuickStock(product: Product, delta: number) {
+    if (getColorVariants(product).length) { setEditingProduct(product); return toast.info("Ajuste o estoque de cada combinação na edição do produto."); }
     const currentStock = product.stock ?? 0;
     const newStock = Math.max(0, currentStock + delta);
     // initial_stock acompanha o delta: se lojista adiciona/remove unidades, o total original muda junto
@@ -371,6 +381,7 @@ export function ProductsTab({
   }
 
   function handleDuplicateProduct(p: Product) {
+    setVariants(getColorVariants(p).map(v => ({ ...v, id: crypto.randomUUID(), stock: 0 })));
     setForm({
       brand: p.brand || "",
       model: `${p.model} (Nova Edição)`,
@@ -444,12 +455,26 @@ export function ProductsTab({
                   <span>Cadastrar miniatura a pronta entrega</span>
                 </>
               ) : (
-                <span>Nova pré-venda</span>
+                <span>{mode === "rodinhas" ? "Cadastrar rodinhas" : "Nova pré-venda"}</span>
               )}
             </SheetTitle>
           </SheetHeader>
-            <form onSubmit={submit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <form onSubmit={submit} onInvalidCapture={(event) => { if (event.target instanceof HTMLElement) { const section = event.target.closest("details"); if (section) section.open = true; } }} className="space-y-4">
+              <div className="space-y-1.5">
+                {mode === "rodinhas" && <ProductVariantsInput value={variants} onChange={setVariants} userId={userId} disabled={saving} />}
+                <ProductPhotosInput
+                  images={getProductImageUrls(form.image_url)}
+                  onChange={(next) => {
+                    setForm((f) => ({
+                      ...f,
+                      image_url: next.length > 1 ? JSON.stringify(next) : (next[0] || ""),
+                    }));
+                  }}
+                  userId={userId}
+                  disabled={saving}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="brand" className="text-xs font-medium text-muted-foreground">Marca</Label>
                   <Select
@@ -491,18 +516,9 @@ export function ProductsTab({
                     />
                   )}
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="scale" className="text-xs font-medium text-muted-foreground">Escala</Label>
-                  <Input
-                    id="scale"
-                    maxLength={12}
-                    value={form.scale}
-                    onChange={(e) => setForm({ ...form, scale: e.target.value })}
-                    className="bg-muted/20 border-border/30"
-                  />
-                </div>
+
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="sm:col-span-2 space-y-1.5">
                   <Label htmlFor="model" className="text-xs font-medium text-muted-foreground">Modelo</Label>
                   <Input
@@ -514,52 +530,11 @@ export function ProductsTab({
                     className="bg-muted/20 border-border/30"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="sku" className="text-xs font-medium text-muted-foreground">
-                    SKU <span className="text-[10px] font-normal opacity-70">(Código)</span>
-                  </Label>
-                  <Input
-                    id="sku"
-                    placeholder="Ex: HW-001"
-                    maxLength={40}
-                    value={form.sku}
-                    onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                    className="bg-muted/20 border-border/30 font-mono text-xs"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="badge" className="text-xs font-medium text-muted-foreground">Selo (Badge)</Label>
-                  <Select
-                    value={(form as any).badge || "__none"}
-                    onValueChange={(val) => setForm({ ...form, badge: val === "__none" ? "" : val } as any)}
-                  >
-                    <SelectTrigger id="badge" className="bg-muted/20 border-border/30">
-                      <SelectValue placeholder="Selo..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PRESET_BADGES.map((b) => (
-                        <SelectItem key={b.value || "__none"} value={b.value || "__none"}>
-                          {b.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+
+
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="cost_price" className="text-xs font-medium text-muted-foreground">Custo (R$) <span className="text-[10px] font-normal opacity-70">(Opcional)</span></Label>
-                  <Input
-                    id="cost_price"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="150"
-                    value={form.cost_price}
-                    onChange={(e) => setForm({ ...form, cost_price: e.target.value })}
-                    className="bg-muted/20 border-border/30"
-                  />
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
                 <div className="space-y-1.5">
                   <Label htmlFor="price" className="text-xs font-medium text-muted-foreground">Venda À vista (R$)</Label>
                   <Input
@@ -574,7 +549,7 @@ export function ProductsTab({
                     className="bg-muted/20 border-border/30"
                   />
                 </div>
-                {mode !== "pronta_entrega" && (
+                {mode !== "pronta_entrega" && mode !== "rodinhas" && (
                   <div className="space-y-1.5 flex flex-col justify-end">
                     <Label htmlFor="signal_rule" className="text-xs font-medium text-muted-foreground whitespace-nowrap">Exigência Sinal</Label>
                     <Select 
@@ -597,7 +572,7 @@ export function ProductsTab({
                     </Select>
                   </div>
                 )}
-                {mode !== "pronta_entrega" && ((form as any).signal_rule !== 'sem_sinal') && (
+                {mode !== "pronta_entrega" && mode !== "rodinhas" && ((form as any).signal_rule !== 'sem_sinal') && (
                   <div className="space-y-1.5 flex flex-col justify-end">
                     <Label htmlFor="down_payment" className="text-xs font-medium text-muted-foreground">Sinal (R$)</Label>
                     <Input
@@ -619,15 +594,17 @@ export function ProductsTab({
                     type="number"
                     min="0"
                     required
-                    value={form.stock}
+                    value={variants.length ? variants.reduce((sum, v) => sum + v.stock, 0) : form.stock}
+                    disabled={variants.length > 0}
                     onChange={(e) => setForm({ ...form, stock: e.target.value })}
                     className="bg-muted/20 border-border/30"
                   />
                 </div>
               </div>
 
-              <div className="space-y-3 rounded-lg border border-amber-500/15 bg-amber-500/5 p-4">
-                <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Desconto por Quantidade (Atacado)</p>
+              <details className="space-y-3 rounded-lg border border-border/30 bg-muted/15 p-4">
+                <summary className="min-h-11 cursor-pointer text-sm font-semibold leading-6">Desconto por quantidade<span className="block text-xs font-normal text-muted-foreground">{Number((form as any).bulk_discount_threshold) > 0 ? `A partir de ${(form as any).bulk_discount_threshold} unidades` : "Opcional · configurar atacado"}</span></summary>
+                <div className="space-y-3 pt-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="bulk_threshold" className="text-xs font-medium text-muted-foreground">A partir de (unidades)</Label>
@@ -693,8 +670,10 @@ export function ProductsTab({
                   </>
                 )}
               </div>
+              </details>
 
-              <div className="space-y-3 rounded-lg border border-border/30 bg-muted/15 p-4">
+              <details className="space-y-3 rounded-lg border border-border/30 bg-muted/15 p-4"><summary className="min-h-11 cursor-pointer text-sm font-semibold leading-6">Parcelamento<span className="block text-xs font-normal text-muted-foreground">{Number(form.max_installments) > 1 ? `Até ${form.max_installments}x · ${(form as any).has_surcharge === "true" ? "com acréscimo" : "sem acréscimo"}` : "Somente à vista"}</span></summary>
+                <div className="space-y-3 pt-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium text-muted-foreground">Máximo de parcelas</Label>
@@ -768,7 +747,8 @@ export function ProductsTab({
                   </div>
                 )}
               </div>
-              {mode !== "pronta_entrega" && (
+              </details>
+              {mode !== "pronta_entrega" && mode !== "rodinhas" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="release" className="text-xs font-medium text-muted-foreground">Data estimada</Label>
@@ -792,7 +772,58 @@ export function ProductsTab({
                   </div>
                 </div>
               )}
-              <div className="space-y-1.5">
+
+              <details className="rounded-lg border border-border/30 bg-muted/15 p-4"><summary className="min-h-11 cursor-pointer text-sm font-semibold leading-6">Mais opções<span className="block text-xs font-normal text-muted-foreground">Escala, código SKU, selo, custo e observações</span></summary><div className="grid grid-cols-1 gap-3 pt-3 sm:grid-cols-2"><div className="space-y-1.5">
+                  <Label htmlFor="scale" className="text-xs font-medium text-muted-foreground">Escala</Label>
+                  <Input
+                    id="scale"
+                    maxLength={12}
+                    value={form.scale}
+                    onChange={(e) => setForm({ ...form, scale: e.target.value })}
+                    className="bg-muted/20 border-border/30"
+                  />
+                </div><div className="space-y-1.5">
+                  <Label htmlFor="sku" className="text-xs font-medium text-muted-foreground">
+                    SKU <span className="text-[10px] font-normal opacity-70">(Código)</span>
+                  </Label>
+                  <Input
+                    id="sku"
+                    placeholder="Ex: HW-001"
+                    maxLength={40}
+                    value={form.sku}
+                    onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                    className="bg-muted/20 border-border/30 font-mono text-xs"
+                  />
+                </div><div className="space-y-1.5">
+                  <Label htmlFor="badge" className="text-xs font-medium text-muted-foreground">Selo (Badge)</Label>
+                  <Select
+                    value={(form as any).badge || "__none"}
+                    onValueChange={(val) => setForm({ ...form, badge: val === "__none" ? "" : val } as any)}
+                  >
+                    <SelectTrigger id="badge" className="bg-muted/20 border-border/30">
+                      <SelectValue placeholder="Selo..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PRESET_BADGES.map((b) => (
+                        <SelectItem key={b.value || "__none"} value={b.value || "__none"}>
+                          {b.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div><div className="space-y-1.5">
+                  <Label htmlFor="cost_price" className="text-xs font-medium text-muted-foreground">Custo (R$) <span className="text-[10px] font-normal opacity-70">(Opcional)</span></Label>
+                  <Input
+                    id="cost_price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="150"
+                    value={form.cost_price}
+                    onChange={(e) => setForm({ ...form, cost_price: e.target.value })}
+                    className="bg-muted/20 border-border/30"
+                  />
+                </div><div className="space-y-1.5">
                 <Label htmlFor="observation" className="text-xs font-medium text-muted-foreground">
                   Observações / Detalhes <span className="text-[10px] font-normal opacity-70">(Aparece na vitrine)</span>
                 </Label>
@@ -805,22 +836,11 @@ export function ProductsTab({
                   onChange={(e) => setForm({ ...form, observation: e.target.value })}
                   className="bg-muted/20 border-border/30 text-xs resize-none"
                 />
-              </div>
-              <div className="space-y-1.5">
-                <ProductPhotosInput
-                  images={getProductImageUrls(form.image_url)}
-                  onChange={(next) => {
-                    setForm((f) => ({
-                      ...f,
-                      image_url: next.length > 1 ? JSON.stringify(next) : (next[0] || ""),
-                    }));
-                  }}
-                  userId={userId}
-                  disabled={saving}
-                />
-              </div>
+              </div></div>
+              </details>
+
               <Button type="submit" className="w-full text-white font-semibold hover:opacity-90" style={{ backgroundColor: activeColor, color: activeTextColor }} disabled={saving}>
-                {saving && <Loader2 className="size-4 animate-spin" />} {mode === "pronta_entrega" ? "Publicar a pronta entrega" : "Publicar pré-venda"}
+                {saving && <Loader2 className="size-4 animate-spin" />} {mode === "rodinhas" ? "Publicar rodinhas" : mode === "pronta_entrega" ? "Publicar a pronta entrega" : "Publicar pré-venda"}
               </Button>
             </form>
           </SheetContent>
@@ -835,7 +855,7 @@ export function ProductsTab({
                 <Zap className="size-5 text-emerald-500" />
                 <span>Pronta Entrega ({displayedProducts.length})</span>
               </>
-            ) : mode === "pre_venda" ? (
+            ) : mode === "rodinhas" ? (<span>Rodinhas ({displayedProducts.length})</span>) : mode === "pre_venda" ? (
               <span>Estoque e Pré-vendas ({displayedProducts.length})</span>
             ) : (
               <span>Catálogo da Loja ({displayedProducts.length})</span>
@@ -864,11 +884,11 @@ export function ProductsTab({
             <Button
               type="button"
               size="sm"
-              onClick={() => { setForm({ ...emptyProduct, category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda", badge: mode === "pronta_entrega" ? "Pronta Entrega" : "" }); setIsCustomBrand(false); setSheetOpen(true); }}
+              onClick={() => { setVariants([]); setForm({ ...emptyProduct, category: (mode === "pronta_entrega" || mode === "rodinhas") ? "pronta_entrega" : "pre_venda", badge: mode === "pronta_entrega" ? "Pronta Entrega" : "" }); setIsCustomBrand(false); setSheetOpen(true); }}
               className="gap-1.5 text-white font-semibold shadow-xs transition-opacity hover:opacity-90"
               style={{ backgroundColor: activeColor, color: activeTextColor }}
             >
-              <Plus className="size-4" /> {mode === "pronta_entrega" ? "Nova pronta entrega" : "Nova pré-venda"}
+              <Plus className="size-4" /> {mode === "rodinhas" ? "Novas rodinhas" : mode === "pronta_entrega" ? "Nova pronta entrega" : "Nova pré-venda"}
             </Button>
           </div>
         </div>
@@ -1179,7 +1199,9 @@ export function ProductsTab({
                 title={
                   searchQuery || selectedBrand !== "all" || onlyOutOfStock
                     ? "Nenhuma miniatura corresponde aos filtros"
-                    : mode === "pronta_entrega"
+                    : mode === "rodinhas"
+                      ? "Nenhuma rodinha cadastrada"
+                      : mode === "pronta_entrega"
                       ? "Nenhuma miniatura a pronta entrega"
                       : mode === "pre_venda"
                         ? "Nenhuma pré-venda cadastrada"
@@ -1188,7 +1210,7 @@ export function ProductsTab({
                 description={
                   searchQuery || selectedBrand !== "all" || onlyOutOfStock
                     ? "Limpe os filtros ou tente uma busca diferente para visualizar outros itens."
-                    : "Cadastre a primeira miniatura para começar a organizar e compartilhar seu catálogo."
+                    : mode === "rodinhas" ? "Cadastre um modelo de rodinhas e suas combinações de cor, medida e freio." : "Cadastre a primeira miniatura para começar a organizar e compartilhar seu catálogo."
                 }
                 action={
                   searchQuery || selectedBrand !== "all" || onlyOutOfStock ? (
@@ -1209,7 +1231,7 @@ export function ProductsTab({
                       onClick={() => {
                         setForm({
                           ...emptyProduct,
-                          category: mode === "pronta_entrega" ? "pronta_entrega" : "pre_venda",
+                          category: (mode === "pronta_entrega" || mode === "rodinhas") ? "pronta_entrega" : "pre_venda",
                           badge: mode === "pronta_entrega" ? "Pronta Entrega" : "",
                         });
                         setIsCustomBrand(false);
@@ -1219,7 +1241,7 @@ export function ProductsTab({
                       style={{ backgroundColor: activeColor, color: activeTextColor }}
                     >
                       <Plus className="size-4" />
-                      {mode === "pronta_entrega" ? "Cadastrar pronta entrega" : "Cadastrar pré-venda"}
+                      {mode === "rodinhas" ? "Cadastrar rodinhas" : mode === "pronta_entrega" ? "Cadastrar pronta entrega" : "Cadastrar pré-venda"}
                     </Button>
                   )
                 }
@@ -1362,6 +1384,7 @@ export function ProductsTab({
       <EditProductDialog
         product={editingProduct}
         storeId={store.id}
+        wheelsEnabled={!!store.wheels_enabled}
         userId={userId}
         onClose={() => setEditingProduct(null)}
       />
@@ -1397,12 +1420,14 @@ export function ProductsTab({
 }
 
 function EditProductDialog({
+  wheelsEnabled,
   product,
   storeId,
   userId,
   onClose,
 }: {
   product: Product | null;
+  wheelsEnabled: boolean;
   storeId?: string;
   userId: string;
   onClose: () => void;
@@ -1431,6 +1456,7 @@ function EditProductDialog({
     bulk_has_installment_surcharge: "false",
     bulk_installment_price: "",
   });
+  const [variants, setVariants] = useState<ColorVariant[]>([]);
   const [saving, setSaving] = useState(false);
   const [isCustomBrand, setIsCustomBrand] = useState(false);
 
@@ -1443,6 +1469,7 @@ function EditProductDialog({
 
   useEffect(() => {
     if (product) {
+      setVariants(getColorVariants(product));
       const rawVal = (product as any).down_payment_amount;
       const rawMaxInst = (product as any).max_installments;
       const rawPrice2x = (product as any).price_2x;
@@ -1470,6 +1497,7 @@ function EditProductDialog({
         payment_deadline_hours: product.payment_deadline_hours != null ? String(product.payment_deadline_hours) : "24",
         is_open: product.is_open ?? true,
         image_url: product.image_url ?? "",
+        product_kind: product.product_kind || "miniatura",
         category: isPronta ? "pronta_entrega" : ((product as any).category || "pre_venda"),
         bulk_discount_threshold: (product as any).bulk_discount_threshold != null ? String((product as any).bulk_discount_threshold) : "",
         bulk_discount_price: (product as any).bulk_discount_price != null ? String((product as any).bulk_discount_price) : "",
@@ -1490,6 +1518,8 @@ function EditProductDialog({
       return toast.error("Por favor, informe a marca da miniatura.");
     }
 
+    const variantsError = validateVariants(variants);
+    if (variantsError) return toast.error(variantsError);
     setSaving(true);
     const isPronta = (form as any).category === "pronta_entrega";
     const isSemSinal = isPronta || (form as any).signal_rule === "sem_sinal";
@@ -1507,13 +1537,15 @@ function EditProductDialog({
     const hasSurcharge = maxInst > 1 && form.has_surcharge === "true";
     const instPrice = maxInst > 1 ? (hasSurcharge && form.installment_price ? Number(form.installment_price) : Number(form.price || 0)) : null;
 
-    const newStock = Number(form.stock || 0);
+    const newStock = variants.length ? variants.reduce((sum, v) => sum + v.stock, 0) : Number(form.stock || 0);
     const currentStock = product.stock ?? 0;
     const currentInitial = (product as any).initial_stock ?? currentStock;
     const stockDelta = newStock - currentStock;
     const newInitial = Math.max(newStock, currentInitial + stockDelta);
 
     const payload: any = {
+      product_kind: (form as any).product_kind || "miniatura",
+      ...(variants.length || getColorVariants(product).length ? { color_variants: variantsToJson(variants) } : {}),
       brand: form.brand.trim(),
       model: form.model.trim(),
       sku: form.sku?.trim() || null,
@@ -1532,7 +1564,7 @@ function EditProductDialog({
       stock: newStock,
       initial_stock: newInitial,
       is_open: form.is_open,
-      image_url: form.image_url || null,
+      image_url: form.image_url || variants.find(v => v.image_url)?.image_url || null,
       slug: slugify(`${form.brand.trim()}-${form.model.trim()}`),
       bulk_discount_threshold: (form as any).bulk_discount_threshold ? Number((form as any).bulk_discount_threshold) : null,
       bulk_discount_price: (form as any).bulk_discount_price ? Number((form as any).bulk_discount_price) : null,
@@ -1540,10 +1572,21 @@ function EditProductDialog({
       bulk_installment_price: (form as any).bulk_has_installment_surcharge === "true" && (form as any).bulk_installment_price ? Number((form as any).bulk_installment_price) : null,
     };
 
-    let { error } = await supabase
-      .from("products")
-      .update(payload)
-      .eq("id", product.id);
+    let update = supabase.from("products").update(payload).eq("id", product.id);
+    if (payload.color_variants) update = update.eq("color_variants", JSON.stringify(product.color_variants || []));
+    const result = await update.select("id").maybeSingle();
+    let error = result.error;
+    if (!error && !result.data) {
+      setSaving(false);
+      await queryClient.invalidateQueries();
+      return toast.error("O estoque mudou enquanto você editava. Reabra o produto para atualizar os valores.");
+    }
+    if (error && payload.color_variants) {
+      setSaving(false);
+      return toast.error(error.message.includes("variant_has_orders")
+        ? "Esta combinação já possui pedidos. Mantenha a combinação e ajuste seu estoque para zero."
+        : "Não foi possível salvar as combinações. Confira os dados e se a migração de variações foi aplicada.");
+    }
 
     // Fallbacks progressivos para lidar com colunas ausentes no banco
     if (error && (error.code === "PGRST204" || error.message?.includes("sku") || error.message?.includes("observation") || (error as any).status === 400)) {
@@ -1620,7 +1663,7 @@ function EditProductDialog({
       <DialogContent className="max-w-md border-border/30 bg-card/90 max-h-[85vh] overflow-y-auto pr-3">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-            {isProntaMode ? (
+            {(form as any).product_kind === "rodinhas" ? (<span>Editar rodinhas</span>) : isProntaMode ? (
               <>
                 <Zap className="size-5 text-emerald-500" />
                 <span>Editar pronta entrega</span>
@@ -1630,7 +1673,15 @@ function EditProductDialog({
             )}
           </DialogTitle>
         </DialogHeader>
-        <form onSubmit={submit} className="space-y-3 pt-2">
+        <form onSubmit={submit} onInvalidCapture={(event) => { if (event.target instanceof HTMLElement) { const section = event.target.closest("details"); if (section) section.open = true; } }} className="space-y-3 pt-2">
+          {wheelsEnabled && <div className="space-y-1.5">
+            <Label htmlFor="product-section">Seção da loja</Label>
+            <Select value={(form as any).product_kind || "miniatura"} onValueChange={value => setForm({...form,product_kind:value} as any)}>
+              <SelectTrigger id="product-section"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="miniatura">Miniaturas</SelectItem><SelectItem value="rodinhas">Rodinhas</SelectItem></SelectContent>
+            </Select>
+          </div>}
+
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground">Tipo de Anúncio</Label>
             <Select
@@ -1667,7 +1718,18 @@ function EditProductDialog({
             </Select>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <ProductPhotosInput
+            images={getProductImageUrls(form.image_url)}
+            onChange={(next) => {
+              setForm((f) => ({
+                ...f,
+                image_url: next.length > 1 ? JSON.stringify(next) : (next[0] || ""),
+              }));
+            }}
+            userId={userId}
+            disabled={saving}
+          />
+          <div className="grid grid-cols-1 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="edit-brand" className="text-xs font-medium text-muted-foreground">Marca</Label>
               <Select
@@ -1709,19 +1771,10 @@ function EditProductDialog({
                 />
               )}
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-scale" className="text-xs font-medium text-muted-foreground">Escala</Label>
-              <Input
-                id="edit-scale"
-                maxLength={12}
-                value={form.scale}
-                onChange={(e) => setForm({ ...form, scale: e.target.value })}
-                className="bg-muted/20 border-border/30"
-              />
-            </div>
+
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2 space-y-1.5">
               <Label htmlFor="edit-model" className="text-xs font-medium text-muted-foreground">Modelo</Label>
               <Input
@@ -1733,53 +1786,12 @@ function EditProductDialog({
                 className="bg-muted/20 border-border/30"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-sku" className="text-xs font-medium text-muted-foreground">
-                SKU <span className="text-[10px] font-normal opacity-70">(Código)</span>
-              </Label>
-              <Input
-                id="edit-sku"
-                placeholder="Ex: HW-001"
-                maxLength={40}
-                value={form.sku}
-                onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                className="bg-muted/20 border-border/30 font-mono text-xs"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-badge" className="text-xs font-medium text-muted-foreground">Selo (Badge)</Label>
-              <Select
-                value={(form as any).badge || "__none"}
-                onValueChange={(val) => setForm({ ...form, badge: val === "__none" ? "" : val } as any)}
-              >
-                <SelectTrigger id="edit-badge" className="bg-muted/20 border-border/30">
-                  <SelectValue placeholder="Selo..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRESET_BADGES.map((b) => (
-                    <SelectItem key={b.value || "__none"} value={b.value || "__none"}>
-                      {b.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+
+
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-cost-price" className="text-xs font-medium text-muted-foreground">Custo (R$)</Label>
-              <Input
-                id="edit-cost-price"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Ex: 150"
-                value={form.cost_price}
-                onChange={(e) => setForm({ ...form, cost_price: e.target.value })}
-                className="bg-muted/20 border-border/30"
-              />
-            </div>
+          <div className="grid grid-cols-2 sm:grid-cols-2 gap-2">
+
             <div className="space-y-1.5">
               <Label htmlFor="edit-price" className="text-xs font-medium text-muted-foreground">Venda (R$)</Label>
               <Input
@@ -1838,15 +1850,17 @@ function EditProductDialog({
                 type="number"
                 min="0"
                 required
-                value={form.stock}
+                value={variants.length ? variants.reduce((sum, v) => sum + v.stock, 0) : form.stock}
+                    disabled={variants.length > 0}
                 onChange={(e) => setForm({ ...form, stock: e.target.value })}
                 className="bg-muted/20 border-border/30"
               />
             </div>
           </div>
 
-          <div className="space-y-3 rounded-lg border border-amber-500/15 bg-amber-500/5 p-4">
-            <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Desconto por Quantidade (Atacado)</p>
+          <details className="space-y-3 rounded-lg border border-border/30 bg-muted/15 p-4">
+            <summary className="min-h-11 cursor-pointer text-sm font-semibold leading-6">Desconto por quantidade<span className="block text-xs font-normal text-muted-foreground">{Number((form as any).bulk_discount_threshold) > 0 ? `A partir de ${(form as any).bulk_discount_threshold} unidades` : "Opcional · configurar atacado"}</span></summary>
+                <div className="space-y-3 pt-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="edit_bulk_threshold" className="text-xs font-medium text-muted-foreground">A partir de (unidades)</Label>
@@ -1912,8 +1926,10 @@ function EditProductDialog({
               </>
             )}
           </div>
+              </details>
 
-          <div className="space-y-3 rounded-lg border border-border/30 bg-muted/15 p-4">
+          <details className="space-y-3 rounded-lg border border-border/30 bg-muted/15 p-4"><summary className="min-h-11 cursor-pointer text-sm font-semibold leading-6">Parcelamento<span className="block text-xs font-normal text-muted-foreground">{Number(form.max_installments) > 1 ? `Até ${form.max_installments}x · ${(form as any).has_surcharge === "true" ? "com acréscimo" : "sem acréscimo"}` : "Somente à vista"}</span></summary>
+                <div className="space-y-3 pt-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground">Máximo de parcelas</Label>
@@ -1987,6 +2003,7 @@ function EditProductDialog({
               </div>
             )}
           </div>
+              </details>
 
           {!isProntaMode && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2025,7 +2042,60 @@ function EditProductDialog({
             </div>
           </div>
 
-          <div className="space-y-1.5">
+
+
+          {((form as any).product_kind === "rodinhas" || getColorVariants(product).length > 0) && <ProductVariantsInput value={variants} onChange={setVariants} userId={userId} disabled={saving} />}
+              <details className="rounded-lg border border-border/30 bg-muted/15 p-4"><summary className="min-h-11 cursor-pointer text-sm font-semibold leading-6">Mais opções<span className="block text-xs font-normal text-muted-foreground">Escala, código SKU, selo, custo e observações</span></summary><div className="grid grid-cols-1 gap-3 pt-3 sm:grid-cols-2"><div className="space-y-1.5">
+              <Label htmlFor="edit-scale" className="text-xs font-medium text-muted-foreground">Escala</Label>
+              <Input
+                id="edit-scale"
+                maxLength={12}
+                value={form.scale}
+                onChange={(e) => setForm({ ...form, scale: e.target.value })}
+                className="bg-muted/20 border-border/30"
+              />
+            </div><div className="space-y-1.5">
+              <Label htmlFor="edit-sku" className="text-xs font-medium text-muted-foreground">
+                SKU <span className="text-[10px] font-normal opacity-70">(Código)</span>
+              </Label>
+              <Input
+                id="edit-sku"
+                placeholder="Ex: HW-001"
+                maxLength={40}
+                value={form.sku}
+                onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                className="bg-muted/20 border-border/30 font-mono text-xs"
+              />
+            </div><div className="space-y-1.5">
+              <Label htmlFor="edit-badge" className="text-xs font-medium text-muted-foreground">Selo (Badge)</Label>
+              <Select
+                value={(form as any).badge || "__none"}
+                onValueChange={(val) => setForm({ ...form, badge: val === "__none" ? "" : val } as any)}
+              >
+                <SelectTrigger id="edit-badge" className="bg-muted/20 border-border/30">
+                  <SelectValue placeholder="Selo..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRESET_BADGES.map((b) => (
+                    <SelectItem key={b.value || "__none"} value={b.value || "__none"}>
+                      {b.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div><div className="space-y-1.5">
+              <Label htmlFor="edit-cost-price" className="text-xs font-medium text-muted-foreground">Custo (R$)</Label>
+              <Input
+                id="edit-cost-price"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Ex: 150"
+                value={form.cost_price}
+                onChange={(e) => setForm({ ...form, cost_price: e.target.value })}
+                className="bg-muted/20 border-border/30"
+              />
+            </div><div className="space-y-1.5">
             <Label htmlFor="edit-observation" className="text-xs font-medium text-muted-foreground">
               Observações / Detalhes <span className="text-[10px] font-normal opacity-70">(Aparece na vitrine)</span>
             </Label>
@@ -2038,19 +2108,9 @@ function EditProductDialog({
               onChange={(e) => setForm({ ...form, observation: e.target.value })}
               className="bg-muted/20 border-border/30 text-xs resize-none"
             />
-          </div>
+          </div></div>
+              </details>
 
-          <ProductPhotosInput
-            images={getProductImageUrls(form.image_url)}
-            onChange={(next) => {
-              setForm((f) => ({
-                ...f,
-                image_url: next.length > 1 ? JSON.stringify(next) : (next[0] || ""),
-              }));
-            }}
-            userId={userId}
-            disabled={saving}
-          />
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={onClose}>

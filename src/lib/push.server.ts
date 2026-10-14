@@ -1,19 +1,19 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 import webpush from "web-push";
 import { supabaseAdmin } from "../integrations/supabase/client.server";
 
-// Configure Web Push Keys
-const vapidPublicKey = process.env.VITE_VAPID_PUBLIC_KEY || "BDdwrBpz-nGKX2I5uZL4LpQ8oY57fdNSmqpiZyUTo9DnAxUsW2Pxp_2k7aPyXAAUksfWwYW60uIjH7BB7yUMnNs";
-const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "K72Ai7yO_rdAJ0mtwwwHV9vzytuvukF8qKOLFrtJDNE";
-const contactEmail = "mailto:contato@vendas164.com.br";
-
-try {
-  webpush.setVapidDetails(contactEmail, vapidPublicKey, vapidPrivateKey);
-} catch (error) {
-  console.error("Falha ao configurar VAPID details. Chaves não configuradas?", error);
+// Configure only from deployment secrets; never use committed fallback keys.
+function configureWebPush() {
+  const publicKey = process.env.VITE_VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  if (!publicKey || !privateKey) throw new Error("push_not_configured");
+  webpush.setVapidDetails("mailto:contato@vendas164.com.br", publicKey, privateKey);
 }
 
-export async function saveSubscriptionToDatabase(userId: string, data: { endpoint: string; p256dh: string; auth: string; user_agent?: string; store_id?: string }) {
-  const { error } = await supabaseAdmin
+export async function saveSubscriptionToDatabase(userId: string, data: { endpoint: string; p256dh: string; auth: string; user_agent?: string; store_id?: string }, client: SupabaseClient<Database>) {
+  configureWebPush();
+  const { error } = await client
     .from("push_subscriptions")
     .upsert(
       {
@@ -48,6 +48,7 @@ export async function sendPushNotification(
     return; // User has no subscriptions, silently return
   }
 
+  configureWebPush();
   const pushPayload = JSON.stringify(payload);
 
   const promises = subscriptions.map(async (sub) => {
@@ -74,21 +75,13 @@ export async function sendPushNotification(
   await Promise.allSettled(promises);
 }
 
-export async function notifySellerNewOrder(storeId: string) {
-  const { data: store } = await supabaseAdmin.from("stores").select("owner_id").eq("id", storeId).maybeSingle();
-  if (store && store.owner_id) {
-    await sendPushNotification(store.owner_id, {
-      title: "Novo Pedido/Reserva!",
-      body: "Acesse seu painel de Vendedor para visualizar.",
-      url: "/vendedor?tab=reservas",
-    });
-  }
-}
-
-export async function notifyCustomerOrderUpdate(customerId: string, status: string) {
-  await sendPushNotification(customerId, {
-    title: "Atualização no seu pedido",
-    body: `O status do seu pedido mudou para: ${status}.`,
-    url: "/painel",
-  });
+export async function notifyAuthorizedOrder(client: SupabaseClient<Database>, orderId:string, kind:"new"|"update", field?:"payment"|"delivery") {
+  configureWebPush();
+  const {data,error} = await client.rpc("claim_order_push",{_order_id:orderId,_kind:kind,_field:field});
+  if(error) throw new Error("notification_access_denied");
+  if(!data) return;
+  const target=data as {recipient:string;status:string|null};
+  await sendPushNotification(target.recipient,kind === "new" ? {
+    title:"Novo Pedido/Reserva!",body:"Acesse seu painel de Vendedor para visualizar.",url:"/vendedor?tab=reservas"
+  } : {title:"Atualização no seu pedido",body:`O status do seu pedido mudou para: ${target.status}.`,url:"/painel"});
 }

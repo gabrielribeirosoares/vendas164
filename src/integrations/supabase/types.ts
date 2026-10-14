@@ -86,6 +86,9 @@ export type Database = {
       }
       orders: {
         Row: {
+          variant_id?: string | null
+          variant_name?: string | null
+          variant_image_url?: string | null
           created_at: string
           delivery_status: string
           down_payment: number
@@ -105,6 +108,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          variant_id?: string | null
+          variant_name?: string | null
+          variant_image_url?: string | null
           created_at?: string
           delivery_status?: string
           down_payment?: number
@@ -124,6 +130,9 @@ export type Database = {
           user_id: string
         }
         Update: {
+          variant_id?: string | null
+          variant_name?: string | null
+          variant_image_url?: string | null
           created_at?: string
           delivery_status?: string
           down_payment?: number
@@ -202,6 +211,8 @@ export type Database = {
       }
       products: {
         Row: {
+          product_kind?: string
+          color_variants?: Json
           brand: string
           created_at: string
           id: string
@@ -229,6 +240,8 @@ export type Database = {
           observation?: string | null
         }
         Insert: {
+          product_kind?: string
+          color_variants?: Json
           brand: string
           created_at?: string
           id?: string
@@ -256,6 +269,8 @@ export type Database = {
           observation?: string | null
         }
         Update: {
+          product_kind?: string
+          color_variants?: Json
           brand?: string
           created_at?: string
           id?: string
@@ -318,6 +333,7 @@ export type Database = {
       }
       stores: {
         Row: {
+          wheels_enabled?: boolean
           contact_email: string | null
           contact_instagram: string | null
           created_at: string
@@ -336,6 +352,7 @@ export type Database = {
           whatsapp_number: string | null
         }
         Insert: {
+          wheels_enabled?: boolean
           contact_email?: string | null
           contact_instagram?: string | null
           created_at?: string
@@ -354,6 +371,7 @@ export type Database = {
           whatsapp_number?: string | null
         }
         Update: {
+          wheels_enabled?: boolean
           contact_email?: string | null
           contact_instagram?: string | null
           created_at?: string
@@ -435,6 +453,9 @@ export type Database = {
       }
       create_reservation: { Args: { _product_id: string }; Returns: string }
       expire_stale_orders: { Args: never; Returns: number }
+      set_store_wheels_enabled: { Args: { _store_id: string; _enabled: boolean }; Returns: undefined }
+      seller_mutate_orders: { Args: {_ids:string[];_patch?:Json;_delete?:boolean}; Returns:number }
+      claim_order_push: { Args: {_order_id:string;_kind:string;_field?:string}; Returns:Json }
       is_platform_admin: { Args: never; Returns: boolean }
       is_store_owner: { Args: { _store_id: string }; Returns: boolean }
       migrate_reservations_by_phone: { Args: { p_new_user_id: string; p_phone: string }; Returns: number }

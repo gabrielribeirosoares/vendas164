@@ -1,6 +1,7 @@
+import { getSellerNavigation } from "@/lib/sellerNavigation";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Car, ChevronDown, Clock, CreditCard, LogOut, Menu, Package, Palette, ShieldCheck, Store as StoreIcon, User, Zap, RefreshCw } from "lucide-react";
+import { Car, ChevronDown, LogOut, Menu, Store as StoreIcon, User } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -24,6 +25,7 @@ import { getStoreFullUrl } from "@/lib/subdomain";
 interface AppHeaderProps {
   store?: {
     id?: string;
+    wheels_enabled?: boolean;
     name: string;
     logo_url?: string | null;
     favicon_url?: string | null;
@@ -57,7 +59,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
     queryFn: async () => {
       const { data } = await supabase
         .from("stores")
-        .select("id, name, logo_url, favicon_url, primary_color")
+        .select("id, name, logo_url, favicon_url, primary_color, wheels_enabled")
         .eq("owner_id", user!.id)
         .maybeSingle();
       return data;
@@ -199,9 +201,8 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                 </div>
 
                 <div className="flex items-center gap-1 sm:gap-1.5">
-                  <PushNotificationManager storeId={currentStore?.id} />
-                  <ThemeToggle />
-                  <CartDrawer />
+                  <div className="flex items-center gap-1"><PushNotificationManager storeId={currentStore?.id} /><ThemeToggle /></div>
+                  {location.pathname !== "/vendedor" && <CartDrawer />}
                   <div className="hidden md:flex"><TourTriggerButton /></div>
                   
                   <div className="flex md:hidden">
@@ -229,56 +230,20 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                             {currentStore ? (
                               <div className="py-2 border-y border-border/50 my-2">
                                 <div className="mb-2 px-2">
-                                  <h4 className="text-xs font-semibold text-muted-foreground uppercase">Minha Loja</h4>
+                                  <h4 className="text-xs font-semibold text-muted-foreground uppercase">Operação</h4>
                                   <p className="mt-0.5 truncate text-xs text-foreground">{currentStore.name}</p>
                                 </div>
-                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "produtos")} onClick={() => setMobileMenuOpen(false)}>
-                                  <Link to="/vendedor" search={{ tab: "produtos" }} aria-current={activeSellerTab === "produtos" ? "page" : undefined}>
-                                    <Package className="size-4 text-muted-foreground" /> Pré-vendas
-                                  </Link>
-                                </Button>
-                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "pronta_entrega")} onClick={() => setMobileMenuOpen(false)}>
-                                  <Link to="/vendedor" search={{ tab: "pronta_entrega" }} aria-current={activeSellerTab === "pronta_entrega" ? "page" : undefined}>
-                                    <Zap className="size-4 text-muted-foreground" /> Pronta Entrega
-                                  </Link>
-                                </Button>
-                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "reservas")} onClick={() => setMobileMenuOpen(false)}>
-                                  <Link to="/vendedor" search={{ tab: "reservas" }} aria-current={activeSellerTab === "reservas" ? "page" : undefined}>
-                                    <Car className="size-4 text-muted-foreground" /> Pedidos/Reservas
-                                  </Link>
-                                </Button>
-                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "clientes")} onClick={() => setMobileMenuOpen(false)}>
-                                  <Link to="/vendedor" search={{ tab: "clientes" }} aria-current={activeSellerTab === "clientes" ? "page" : undefined}>
-                                    <User className="size-4 text-muted-foreground" /> Clientes
-                                  </Link>
-                                </Button>
-                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "fila_espera")} onClick={() => setMobileMenuOpen(false)}>
-                                  <Link to="/vendedor" search={{ tab: "fila_espera" }} aria-current={activeSellerTab === "fila_espera" ? "page" : undefined}>
-                                    <Clock className="size-4 text-muted-foreground" /> Fila de Espera
-                                  </Link>
-                                </Button>
-                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "rastreamento")} onClick={() => setMobileMenuOpen(false)}>
-                                  <Link to="/vendedor" search={{ tab: "rastreamento" }} aria-current={activeSellerTab === "rastreamento" ? "page" : undefined}>
-                                    <RefreshCw className="size-4 text-muted-foreground" /> Rastreamento
-                                  </Link>
-                                </Button>
-                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "pagamentos")} onClick={() => setMobileMenuOpen(false)}>
-                                  <Link to="/vendedor" search={{ tab: "pagamentos" }} aria-current={activeSellerTab === "pagamentos" ? "page" : undefined}>
-                                    <CreditCard className="size-4 text-muted-foreground" /> Pagamentos
-                                  </Link>
-                                </Button>
-                                <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "loja")} onClick={() => setMobileMenuOpen(false)}>
-                                  <Link to="/vendedor" search={{ tab: "loja" }} aria-current={activeSellerTab === "loja" ? "page" : undefined}>
-                                    <Palette className="size-4 text-muted-foreground" /> Personalização
-                                  </Link>
-                                </Button>
-                                {isPlatformAdmin && (
-                                  <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === "admin_moderation")} onClick={() => setMobileMenuOpen(false)}>
-                                    <Link to="/vendedor" search={{ tab: "admin_moderation" }} aria-current={activeSellerTab === "admin_moderation" ? "page" : undefined}>
-                                      <ShieldCheck className="size-4 text-muted-foreground" /> Moderação
-                                    </Link>
-                                  </Button>
-                                )}
+                                {getSellerNavigation(!!myStore?.wheels_enabled, isPlatformAdmin).map((section, index, sections) => {
+                                  const Icon = section.icon;
+                                  return <div key={section.id}>
+                                    {index > 0 && section.group !== sections[index - 1].group && <h4 className="mt-4 mb-2 px-2 text-xs font-semibold text-muted-foreground uppercase">{section.group}</h4>}
+                                    <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === section.id)} onClick={() => setMobileMenuOpen(false)}>
+                                      <Link to="/vendedor" search={{ tab: section.id }} aria-current={activeSellerTab === section.id ? "page" : undefined}>
+                                        <Icon className="size-4 text-muted-foreground" />{section.title}
+                                      </Link>
+                                    </Button>
+                                  </div>;
+                                })}
                               </div>
                             ) : (
                               <Button asChild variant="ghost" className="w-full justify-start gap-3 h-11" onClick={() => setMobileMenuOpen(false)}>

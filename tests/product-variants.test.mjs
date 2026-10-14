@@ -1,0 +1,334 @@
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { PGlite } from '@electric-sql/pglite';
+const db = new PGlite();
+const customer = '10000000-0000-4000-8000-000000000001';
+const other = '10000000-0000-4000-8000-000000000002';
+const owner = '10000000-0000-4000-8000-000000000003';
+const guest = '10000000-0000-4000-8000-000000000004';
+const store = '20000000-0000-4000-8000-000000000001';
+async function asUser(id = customer, role = 'authenticated') {
+  await db.exec('RESET ROLE');
+  await db.query("SELECT set_config('request.jwt.claim.sub', $1, false)", [id]);
+  await db.exec(`SET ROLE ${role}`);
+}
+async function product(overrides = {}) {
+  await db.exec('RESET ROLE');
+  const id = randomUUID();
+  await db.query(`INSERT INTO products(id,store_id,brand,model,price,stock,max_installments,payment_deadline_hours,initial_stock) VALUES($1,$2,'Mini GT','Teste',100,10,3,24,10)`, [id, store]);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (!['stock', 'price', 'down_payment_amount', 'payment_deadline_hours', 'bulk_discount_threshold', 'bulk_discount_price'].includes(key)) throw new Error('unsupported fixture');
+    await db.query(`UPDATE products SET ${key}=$1 WHERE id=$2`, [value, id]);
+  }
+  await asUser(); return id;
+}
+const item = (id, extras = {}) => ({ product_id: id, quantity: 1, installments: 3, expected_total: 100, expected_signal: 20, ...extras });
+const checkout = async (items, key = randomUUID()) => (await db.query('SELECT checkout_cart($1,$2::jsonb) AS ids', [key, JSON.stringify(items)])).rows[0].ids;
+async function stock(id) { return (await db.query('SELECT stock FROM products WHERE id=$1', [id])).rows[0].stock; }
+before(async () => {
+  await db.exec(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;
+    CREATE SCHEMA auth; CREATE TABLE auth.users(id UUID PRIMARY KEY, phone TEXT, phone_confirmed_at TIMESTAMPTZ);
+    CREATE FUNCTION auth.uid() RETURNS UUID LANGUAGE sql STABLE AS $$SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+    GRANT USAGE ON SCHEMA public, auth TO anon, authenticated, service_role;
+    INSERT INTO auth.users(id,phone,phone_confirmed_at) VALUES
+      ('${customer}','48999999999',now()),('${other}','48988888888',null),('${owner}',null,null),('${guest}',null,null);`);
+  // Start with the repository's original schema, then the financial columns.
+  await db.exec(await readFile(new URL('../supabase/migrations/20260725203415_7a543904-d061-4fd1-bb06-d1b13ce19cde.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260729184600_add_installment_columns_to_products.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260731142025_add_bulk_discount_to_products.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260808150000_add_initial_stock_to_products.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260831121000_create_order_installments.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260831123600_fix_insert_order_installments.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260726124100_fix_profiles_rls_for_store_owners.sql', import.meta.url), 'utf8'));
+  await db.exec('GRANT SELECT, INSERT, UPDATE, DELETE ON order_installments TO authenticated, anon;');
+  await db.query('INSERT INTO stores(id,owner_id,name,slug) VALUES($1,$2,$3,$4)', [store,owner,'Loja','loja']);
+  await db.exec(await readFile(new URL('../supabase/migrations/20260905190000_secure_checkout.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260905191000_bling_server_credentials.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260726131700_add_pix_key_to_stores_and_orders.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260905192000_catalog_pagination.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260905193000_atomic_manual_reservations.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260907143000_harden_platform_authorization.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260920145545_keep_presale_open_and_cleanup_customer_waitlist.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260831122700_add_installment_due_day.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260922183409_atomic_order_financial_management.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260923004537_seller_server_pagination.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260924165900_atomic_global_payment.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261008173147_product_color_variants.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261008203000_product_variant_options.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261008203820_wheels_store_access.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261009182842_signal_expiry_priority.sql', import.meta.url), 'utf8'));
+  await db.query('INSERT INTO private.platform_admins(user_id) VALUES($1)',[guest]);
+  await db.exec(await readFile(new URL('../supabase/migrations/20260920153000_push_subscriptions.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261013135108_atomic_seller_operations_and_financial_totals.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261014113445_recalculate_reversed_installment_payments.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261014114555_preserve_manual_settlement_on_payment_confirmation.sql',import.meta.url),'utf8'));
+});
+after(() => db.close());
+async function coloredProduct(redStock = 1, blueStock = 2) {
+  const id = await product();
+  const red = randomUUID(), blue = randomUUID();
+  await db.exec('RESET ROLE');
+  await db.query('UPDATE products SET color_variants=$1::jsonb WHERE id=$2', [JSON.stringify([
+    {id:red,name:'Vermelho',stock:redStock,image_url:'https://example.com/red.webp'},
+    {id:blue,name:'Azul',stock:blueStock,image_url:'https://example.com/blue.webp'}
+  ]),id]);
+  await asUser();
+  return {id,red,blue};
+}
+async function variants(id) {
+  return (await db.query('SELECT color_variants FROM products WHERE id=$1',[id])).rows[0].color_variants;
+}
+test('color choice is mandatory, belongs to the product and has independent stock',async()=>{
+  const {id,red,blue}=await coloredProduct();
+  await assert.rejects(checkout([item(id)]), /variant_required/);
+  await assert.rejects(checkout([item(id,{variant_id:randomUUID()})]), /variant_not_found/);
+  const request=randomUUID(), payload=[item(id,{variant_id:red})];
+  const orders=await checkout(payload,request);
+  assert.deepEqual(await checkout(payload,request),orders);
+  assert.equal(await stock(id),2);
+  assert.equal((await variants(id)).find(v=>v.id===blue).stock,2);
+  await assert.rejects(checkout([item(id,{variant_id:red})]), /variant_out_of_stock/);
+  assert.equal(await stock(id),2);
+  const order=(await db.query('SELECT variant_id,variant_name,variant_image_url FROM orders WHERE id=$1',[orders[0]])).rows[0];
+  assert.equal(order.variant_id,red); assert.equal(order.variant_name,'Vermelho'); assert.equal(order.variant_image_url,'https://example.com/red.webp');
+});
+test('two colors of the same product are distinct checkout lines and seller groups',async()=>{
+  const {id,red,blue}=await coloredProduct();
+  const ids=await checkout([item(id,{variant_id:red}),item(id,{variant_id:blue})]);
+  assert.equal(ids.length,2); assert.equal(await stock(id),1);
+  await asUser(owner);
+  const page=(await db.query('SELECT seller_orders_page($1) AS result',[store])).rows[0].result;
+  const groups=page.groups.filter(g=>g.order.product_id===id);
+  assert.equal(groups.length,2); assert.deepEqual(groups.map(g=>g.quantity),[1,1]);
+});
+test('one unavailable color rolls back stock, orders, installments and other colors',async()=>{
+  const {id,red,blue}=await coloredProduct(0,2);
+  await assert.rejects(checkout([item(id,{variant_id:blue}),item(id,{variant_id:red})]), /variant_out_of_stock/);
+  assert.equal(await stock(id),2);
+  assert.equal((await variants(id)).find(v=>v.id===blue).stock,2);
+  assert.equal((await db.query('SELECT id FROM orders WHERE product_id=$1',[id])).rows.length,0);
+});
+test('cancellation restores the exact color once; reactivation and deletion remain atomic',async()=>{
+  const {id,red}=await coloredProduct(); const [order]=await checkout([item(id,{variant_id:red})]);
+  await asUser(owner);
+  await db.query("UPDATE orders SET payment_status='cancelado' WHERE id=$1",[order]);
+  assert.equal((await variants(id)).find(v=>v.id===red).stock,1);
+  await db.query("UPDATE orders SET delivery_status='cancelado' WHERE id=$1",[order]);
+  assert.equal((await variants(id)).find(v=>v.id===red).stock,1);
+  await db.query("UPDATE orders SET payment_status='aguardando_sinal',delivery_status='pendente' WHERE id=$1",[order]);
+  assert.equal((await variants(id)).find(v=>v.id===red).stock,0);
+  await db.query('DELETE FROM orders WHERE id=$1',[order]);
+  assert.equal((await variants(id)).find(v=>v.id===red).stock,1);
+});
+test('seller manual reservation records and consumes the selected color, with idempotency',async()=>{
+  const {id,blue}=await coloredProduct(); await asUser(owner);
+  const key=randomUUID(), payload={user_id:customer,total_price:100,down_payment:0,signal_amount:20,installment_count:1,payment_status:'aguardando_sinal',variant_id:blue};
+  const manual=async()=>(await db.query('SELECT create_manual_reservations($1,$2,1,$3::jsonb) AS ids',[key,id,JSON.stringify(payload)])).rows[0].ids;
+  const ids=await manual(); assert.deepEqual(await manual(),ids);
+  assert.equal((await variants(id)).find(v=>v.id===blue).stock,1);
+});
+test('variant stock cannot be negative, IDs cannot duplicate, snapshots cannot be changed and used colors cannot be removed',async()=>{
+  const {id,red}=await coloredProduct(); const [order]=await checkout([item(id,{variant_id:red})]);
+  await asUser(owner);
+  const colors=await variants(id);
+  await assert.rejects(db.query('UPDATE products SET color_variants=$1::jsonb WHERE id=$2',[JSON.stringify([{...colors[0],stock:-1}]),id]), /invalid_variants/);
+  await assert.rejects(db.query('UPDATE products SET color_variants=$1::jsonb WHERE id=$2',[JSON.stringify([colors[0],colors[0]]),id]), /duplicate_variant/);
+  await assert.rejects(db.query('UPDATE products SET color_variants=$1::jsonb WHERE id=$2',[JSON.stringify(colors.filter(v=>v.id!==red)),id]), /variant_has_orders/);
+  await assert.rejects(db.query("UPDATE orders SET variant_name='Azul' WHERE id=$1",[order]), /immutable_order_variant/);
+});
+test('expiration restores colored stock without assigning an unspecified color to the waitlist',async()=>{
+  const {id,red}=await coloredProduct(); const [order]=await checkout([item(id,{variant_id:red})]);
+  await db.exec('RESET ROLE');
+  await db.query("UPDATE orders SET reservation_expires_at=now()-interval '1 hour' WHERE id=$1",[order]);
+  await db.query('INSERT INTO waitlist(user_id,product_id,store_id) VALUES($1,$2,$3)',[other,id,store]);
+  await db.query('SELECT expire_stale_orders()');
+  assert.equal((await variants(id)).find(v=>v.id===red).stock,1);
+  assert.equal((await db.query('SELECT id FROM orders WHERE product_id=$1 AND user_id=$2',[id,other])).rows.length,0);
+});
+test('ordinary products keep the original checkout and stock behavior after the migration',async()=>{
+  const id=await product(); const request=randomUUID();
+  const ids=await checkout([item(id)],request);
+  assert.equal(ids.length,1); assert.equal(await stock(id),9);
+  assert.deepEqual(await checkout([item(id)],request),ids);
+  const order=(await db.query('SELECT variant_id,variant_name FROM orders WHERE id=$1',[ids[0]])).rows[0];
+  assert.equal(order.variant_id,null); assert.equal(order.variant_name,null);
+});
+test('deleting a product with colored orders allows the existing cascade to complete',async()=>{
+  const {id,red}=await coloredProduct(); await checkout([item(id,{variant_id:red})]);
+  await asUser(owner);
+  await db.query('DELETE FROM products WHERE id=$1',[id]);
+  assert.equal((await db.query('SELECT id FROM orders WHERE product_id=$1',[id])).rows.length,0);
+});
+
+test('combinations use server prices, optional attributes and independent stock',async()=>{
+  const id=await product({bulk_discount_threshold:2,bulk_discount_price:50});
+  const first=randomUUID(),second=randomUUID();
+  await db.exec('RESET ROLE');
+  const options=[{id:first,name:'ignored',color:'Azul',size:'12 mm',brake:'Com freio',price:150.5,stock:2,image_url:null},{id:second,name:'ignored',color:'Azul',size:'14 mm',brake:'Sem freio',stock:1,image_url:null}];
+  await db.query('UPDATE products SET color_variants=$1 WHERE id=$2',[JSON.stringify(options),id]);
+  await asUser();
+  await assert.rejects(checkout([item(id,{variant_id:first,expected_total:100})]),/price_changed/);
+  const orders=await checkout([item(id,{variant_id:first,quantity:2,expected_total:301,expected_signal:60.2})]);
+  const saved=(await db.query('SELECT total_price,signal_amount,variant_name FROM orders WHERE id=$1',[orders[0]])).rows[0];
+  assert.equal(Number(saved.total_price),150.5);
+  assert.equal(Number(saved.signal_amount),30.1);
+  assert.equal(saved.variant_name,'Azul — 12 mm — Com freio');
+  assert.equal((await variants(id)).find(v=>v.id===second).stock,1);
+  await checkout([item(id,{variant_id:second})]);
+  await db.exec('RESET ROLE');
+  for(const price of [-1,1.001,'10']) {
+    await assert.rejects(db.query('UPDATE products SET color_variants=$1 WHERE id=$2',[JSON.stringify([{...options[0],price}]),id]),/invalid_variants/);
+  }
+});
+
+test('only admins release wheels; catalog and checkout respect store access',async()=>{
+  const id=await product();
+  await asUser(owner);
+  await assert.rejects(db.query('SELECT set_store_wheels_enabled($1,true)',[store]),/admin_required/);
+  await assert.rejects(db.query('UPDATE stores SET wheels_enabled=true WHERE id=$1',[store]),/admin_required/);
+  await assert.rejects(db.query("UPDATE products SET product_kind='rodinhas' WHERE id=$1",[id]),/wheels_not_enabled/);
+  await asUser(guest);
+  await db.query('SELECT set_store_wheels_enabled($1,true)',[store]);
+  await asUser(owner);
+  await db.query("UPDATE products SET product_kind='rodinhas' WHERE id=$1",[id]);
+  await asUser(null,'anon');
+  const catalog=async type=>(await db.query("SELECT catalog_page($1,_type=>$2) AS page",[store,type])).rows[0].page;
+  assert.equal((await catalog('rodinhas')).products[0].id,id);
+  for(const type of ['all','pre','pronta']) assert.ok(!(await catalog(type)).products.some(p=>p.id===id));
+  await asUser();
+  const orders=await checkout([item(id)]);
+  await asUser(guest);
+  await db.query('SELECT set_store_wheels_enabled($1,false)',[store]);
+  await asUser(null,'anon');
+  assert.equal((await catalog('rodinhas')).total,0);
+  assert.equal((await db.query('SELECT id FROM products WHERE id=$1',[id])).rows.length,0);
+  await asUser();
+  await assert.rejects(checkout([item(id)]),/product_not_found|wheels_not_enabled/);
+  await asUser(owner);
+  assert.equal((await db.query('SELECT id FROM products WHERE id=$1',[id])).rows.length,1);
+  const request=randomUUID();
+  await assert.rejects(db.query('SELECT create_manual_reservations($1,$2,1,$3)',[request,id,JSON.stringify({user_id:customer,total_price:100,installment_count:1,payment_status:'sem_sinal'})]),/wheels_not_enabled/);
+  await db.query("UPDATE orders SET payment_status='cancelado' WHERE id=$1",[orders[0]]);
+  assert.ok((await catalog('all')).total>0);
+});
+
+test('due-soon orders sort by earliest deadline before pagination, preserving variant groups', async () => {
+  const fixtures = [];
+  for (const hours of [8, 1, 4]) {
+    const { id, red } = await coloredProduct();
+    const [order] = await checkout([item(id, { variant_id: red })]);
+    await db.exec('RESET ROLE');
+    await db.query("UPDATE products SET model='Priority expiry fixture' WHERE id=$1", [id]);
+    await db.query("UPDATE orders SET reservation_expires_at=now()+($1 || ' hours')::interval WHERE id=$2", [String(hours), order]);
+    fixtures.push({ hours, order });
+    await asUser();
+  }
+  await asUser(owner);
+  const page = async n => (await db.query("SELECT seller_orders_page($1,_search=>'Priority expiry fixture',_focus=>'vencendo',_page=>$2,_page_size=>1) AS result", [store,n])).rows[0].result;
+  for (const [index, fixture] of fixtures.sort((a,b)=>a.hours-b.hours).entries()) {
+    const result = await page(index+1);
+    assert.equal(result.total,3);
+    assert.equal(result.groups[0].order.id,fixture.order);
+    assert.equal(result.groups[0].quantity,1);
+  }
+});
+
+const mutate=async(ids,patch={},remove=false)=>(await db.query('SELECT seller_mutate_orders($1,$2,$3) AS changed',[ids,JSON.stringify(patch),remove])).rows[0].changed;
+test('ordinary stock cancellation and deletion are atomic and never restored twice',async()=>{
+  const id=await product(); const ids=await checkout([item(id,{quantity:2,expected_total:200,expected_signal:40})]);
+  await asUser(owner);
+  assert.equal(await mutate(ids,{payment_status:'cancelado'}),2);
+  assert.equal(await stock(id),10);
+  await mutate(ids,{payment_status:'cancelado'});assert.equal(await stock(id),10);
+  await mutate(ids,{payment_status:'sem_sinal'});assert.equal(await stock(id),8);
+  await mutate(ids,{},true);assert.equal(await stock(id),10);
+  await assert.rejects(mutate(ids,{},true),/store_access_denied/);assert.equal(await stock(id),10);
+});
+test('whole batch rolls back on shortage, invalid payment and unauthorized orders',async()=>{
+  const id=await product();const ids=await checkout([item(id,{quantity:2,expected_total:200,expected_signal:40})]);
+  await asUser();await assert.rejects(mutate(ids,{payment_status:'cancelado'}),/store_access_denied/);
+  await asUser(owner);await mutate(ids,{payment_status:'cancelado'});
+  await db.query('UPDATE products SET stock=1 WHERE id=$1',[id]);
+  await assert.rejects(mutate(ids,{payment_status:'sem_sinal'}),/out_of_stock/);
+  assert.equal(await stock(id),1);
+  assert.deepEqual((await db.query('SELECT payment_status FROM orders WHERE id=ANY($1)',[ids])).rows.map(x=>x.payment_status),['cancelado','cancelado']);
+  await assert.rejects(mutate(ids,{down_payment:1000}),/invalid_payment_amount/);
+  assert.equal(await stock(id),1);
+});
+test('variant batch lifecycle remains independent; paid installments survive cancellation',async()=>{
+  const {id,red}=await coloredProduct(2,1);const ids=await checkout([item(id,{variant_id:red,quantity:2,expected_total:200,expected_signal:40})]);
+  await asUser(owner);
+  await db.query("UPDATE order_installments SET status='paid' WHERE order_id=$1 AND installment_number=1",[ids[0]]);
+  await mutate(ids,{payment_status:'cancelado'});assert.equal(await stock(id),3);
+  await mutate(ids,{delivery_status:'cancelado'});assert.equal(await stock(id),3);
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM order_installments WHERE order_id=ANY($1) AND status='paid'",[ids])).rows[0].n,1);
+  await mutate(ids,{},true);assert.equal(await stock(id),3);
+});
+test('fully paid orders match both financial summaries without installment evidence',async()=>{
+  const id=await product();const ids=await checkout([item(id)]);
+  await db.exec('RESET ROLE');await db.query("DELETE FROM order_installments WHERE order_id=$1",[ids[0]]);
+  await db.query("UPDATE orders SET payment_status='quitado',down_payment=0 WHERE id=$1",[ids[0]]);
+  await asUser(owner);
+  const page=(await db.query('SELECT seller_orders_page($1) AS result',[store])).rows[0].result;
+  const expected=(await db.query("SELECT sum(CASE WHEN payment_status='quitado' THEN total_price ELSE LEAST(total_price,CASE WHEN payment_status='sinal_pago' THEN down_payment ELSE 0 END+coalesce((SELECT sum(amount) FROM order_installments WHERE order_id=orders.id AND status='paid'),0)) END) AS received FROM orders WHERE store_id=$1 AND payment_status<>'cancelado' AND delivery_status<>'cancelado'",[store])).rows[0].received;
+  assert.equal(page.overview.received,Number(expected));
+  const client=(await db.query('SELECT seller_clients_page($1) AS result',[store])).rows[0].result.clients.find(c=>c.userId===customer);
+  assert.ok(client.totalPaid>=100);
+});
+test('push claims require the order relationship, derive recipient and prevent replay',async()=>{
+  const id=await product();const ids=await checkout([item(id)]);
+  const claim=async(kind,field=null)=>(await db.query('SELECT claim_order_push($1,$2,$3) AS claim',[ids[0],kind,field])).rows[0].claim;
+  await asUser(other);await assert.rejects(claim('new'),/notification_access_denied/);await assert.rejects(claim('update','payment'),/notification_access_denied/);
+  await asUser();assert.equal((await claim('new')).recipient,owner);assert.equal(await claim('new'),null);
+  await asUser(owner);assert.deepEqual(await claim('update','payment'),{recipient:customer,status:'aguardando_sinal'});assert.equal(await claim('update','payment'),null);
+  await asUser(null,'anon');await assert.rejects(claim('new'),/permission denied/);
+});
+test('store association cannot expose or overwrite another subscriber credentials',async()=>{
+  await db.exec('RESET ROLE');
+  await db.query("INSERT INTO push_subscriptions(user_id,store_id,endpoint,p256dh,auth) VALUES($1,$2,'https://web.push.apple.com/private','private-key','private-auth')",[customer,store]);
+  await asUser(owner);
+  assert.equal((await db.query("SELECT id FROM push_subscriptions WHERE endpoint='https://web.push.apple.com/private'")).rows.length,0);
+  assert.equal((await db.query("DELETE FROM push_subscriptions WHERE endpoint='https://web.push.apple.com/private' RETURNING id")).rows.length,0);
+  await assert.rejects(db.query("INSERT INTO push_subscriptions(user_id,endpoint,p256dh,auth) VALUES($1,'https://web.push.apple.com/private','changed','changed') ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id,p256dh=excluded.p256dh",[owner]),/row-level security/);
+});
+
+async function paymentFixture(signal = 0) {
+  const id = await product();
+  const [oid] = await checkout([item(id)]);
+  await asUser(owner);
+  await db.query('DELETE FROM order_installments WHERE order_id=$1', [oid]);
+  await db.query("UPDATE orders SET down_payment=$1,signal_amount=$1,payment_status=$2 WHERE id=$3", [signal, signal ? 'sinal_pago' : 'sem_sinal', oid]);
+  const receipt = (await db.query("INSERT INTO order_installments(order_id,installment_number,amount,due_date,status) VALUES($1,1,$2,current_date,'pending') RETURNING id", [oid, 100-signal])).rows[0].id;
+  return { oid, receipt };
+}
+const paymentState = async oid => (await db.query('SELECT payment_status FROM orders WHERE id=$1', [oid])).rows[0].payment_status;
+test('seller can settle, undo and delete receipts atomically while preserving the deposit', async () => {
+  for (const signal of [0, 20]) {
+    const { oid, receipt } = await paymentFixture(signal);
+    await db.query("UPDATE order_installments SET status='paid' WHERE id=$1", [receipt]);
+    assert.equal(await paymentState(oid), 'quitado');
+    await db.query("UPDATE order_installments SET status='pending' WHERE id=$1", [receipt]);
+    assert.equal(await paymentState(oid), signal ? 'sinal_pago' : 'sem_sinal');
+    await db.query("UPDATE order_installments SET status='paid' WHERE id=$1", [receipt]);
+    await db.query('DELETE FROM order_installments WHERE id=$1', [receipt]);
+    assert.equal(await paymentState(oid), signal ? 'sinal_pago' : 'sem_sinal');
+  }
+});
+test('manual settlement survives confirming an incomplete ledger until a receipt is reversed', async () => {
+  const { oid, receipt } = await paymentFixture();
+  await db.query('UPDATE order_installments SET amount=30 WHERE id=$1', [receipt]);
+  await mutate([oid], { payment_status: 'quitado' });
+  assert.equal(await paymentState(oid), 'quitado');
+  await db.query('DELETE FROM order_installments WHERE id=$1', [receipt]);
+  assert.equal(await paymentState(oid), 'sem_sinal');
+});
+test('customers cannot reverse seller receipts or change settlement', async () => {
+  const { oid, receipt } = await paymentFixture();
+  await db.query("UPDATE order_installments SET status='paid' WHERE id=$1", [receipt]);
+  await asUser();
+  assert.equal((await db.query('DELETE FROM order_installments WHERE id=$1 RETURNING id', [receipt])).rows.length, 0);
+  assert.equal((await db.query("UPDATE order_installments SET status='pending' WHERE id=$1 RETURNING id", [receipt])).rows.length, 0);
+  assert.equal(await paymentState(oid), 'quitado');
+});

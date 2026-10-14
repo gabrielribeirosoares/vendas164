@@ -1,3 +1,4 @@
+import { getCartAvailableStock } from "@/lib/productVariants";
 import { useEffect, useState, useRef } from 'react';
 import { useCartStore } from '@/lib/cart';
 import { checkoutCart, reservationErrorMessage } from '@/lib/reservations';
@@ -74,8 +75,9 @@ export function CartDrawer() {
     setReserving(true);
     setErrorMessage('');
     try {
-      await checkoutCart(cart.getRequestId(), cart.items.map(item => ({
+      const orderIds = await checkoutCart(cart.getRequestId(), cart.items.map(item => ({
         product_id: item.productId,
+        variant_id: item.variantId,
         quantity: item.quantity,
         installments: item.selectedInstallment,
         expected_total: item.totalPrice,
@@ -85,11 +87,17 @@ export function CartDrawer() {
       setIsOpen(false);
       toast.success('Reservas confirmadas! Acompanhe os pagamentos no seu painel.');
       
-      // Notify sellers
-      const storeIds = [...new Set(cart.items.map(i => i.storeId))];
-      storeIds.forEach(storeId => {
-        if (storeId) notifySellerNewOrderServer({ data: storeId }).catch(console.error);
-      });
+      // The server resolves the recipient from an authenticated, recent order.
+      const notifiedStores = new Set<string>();
+      let orderIndex = 0;
+      for(const item of cart.items) {
+        const orderId = orderIds[orderIndex];
+        orderIndex += item.quantity;
+        if(orderId && !notifiedStores.has(item.storeId)) {
+          notifiedStores.add(item.storeId);
+          notifySellerNewOrderServer({data:{orderId}}).catch(console.error);
+        }
+      }
 
       await queryClient.invalidateQueries();
       navigate({ to: '/painel' });
@@ -169,7 +177,7 @@ export function CartDrawer() {
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <h4 className="line-clamp-2 text-sm font-semibold leading-snug">{item.productSnapshot.model}</h4>
+                            <h4 className="line-clamp-2 text-sm font-semibold leading-snug">{item.productSnapshot.model}{item.variantName ? ` — ${item.variantName}` : ""}</h4>
                             <p className="mt-1 truncate text-xs text-muted-foreground">
                               {item.productSnapshot.brand} · {item.productSnapshot.scale}
                             </p>
@@ -216,7 +224,7 @@ export function CartDrawer() {
                               variant="ghost"
                               size="icon"
                               className="size-11 rounded-xl"
-                              disabled={busy || item.quantity >= Math.min(100, item.pricingProduct?.stock ?? 100)}
+                              disabled={busy || item.quantity >= Math.min(100, getCartAvailableStock(item))}
                               aria-label={`Aumentar quantidade de ${item.productSnapshot.model}`}
                               onClick={() => {
                                 cart.updateQuantity(item.id, item.quantity + 1);

@@ -27,7 +27,10 @@ test("status financeiro e envio têm campos separados e alvos maiores", async ()
 test("filtros, rastreio e paginação não comprimem as ações móveis", async () => {
   const source = await readFile(sourcePath, "utf8");
 
-  assert.match(source, /overflow-x-auto/);
+  assert.match(source, /@container min-w-0/);
+  assert.match(source, /@\[960px\]:hidden/);
+  assert.match(source, /hidden @\[960px\]:block/);
+  assert.doesNotMatch(source, /scrollbar-width:none/);
   assert.match(source, /placeholder="Código de rastreio"/);
   assert.match(source, /basis-\[180px\]/);
   assert.match(source, />Anterior<\/span>/);

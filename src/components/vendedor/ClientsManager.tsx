@@ -1,3 +1,5 @@
+import { summarizeClientOrders } from "@/lib/clientOrderSummary";
+import { summarizeReservation } from "@/lib/reservationSummary";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PaymentBadge } from "@/components/StatusBadge";
 import { Package, Copy, MessageCircle, Search, Trophy, Star, Crown, Users, Sparkles, Zap, CheckCircle2, FileSpreadsheet, ChevronLeft, ChevronRight, Loader2, RefreshCw, Wallet, CalendarClock, ChevronDown } from 'lucide-react';
@@ -320,9 +322,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
       totalSpent += price;
       totalItems += 1;
 
-      const signalPaid = (order.payment_status === "sinal_pago" || order.payment_status === "quitado") ? Number(order.down_payment || 0) : 0;
-      const paidInsts = (order.order_installments || []).filter((i: any) => i.status === "paid").reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-      const orderPaid = Math.min(price, signalPaid + paidInsts);
+      const orderPaid = summarizeReservation([order]).received;
       totalPaid += orderPaid;
 
       const isDelivered = (order as any).delivery_status === "entregue";
@@ -430,8 +430,9 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
   const currentSelectedClient = useMemo(() => {
     if (!selectedClient) return null;
     const current = allClients.find(c => c.userId === selectedClient.userId) || selectedClient;
-    return usesServerPagination && selectedClientOrders
-      ? { ...current, orders: selectedClientOrders }
+    const clientOrders = usesServerPagination ? selectedClientOrders : current.orders;
+    return clientOrders
+      ? { ...current, orders: clientOrders, ...summarizeClientOrders(clientOrders) }
       : current;
   }, [allClients, selectedClient, selectedClientOrders, usesServerPagination]);
 
@@ -457,11 +458,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
     // Filtrar pedidos elegíveis (com saldo a pagar)
     const eligibleOrders = (currentSelectedClient.orders || []).filter((o: OrderRow) => {
       if (o.payment_status === "cancelado" || (o as any).delivery_status === "cancelado") return false;
-      const price = Number(o.total_price || 0);
-      const signalPaid = (o.payment_status === "sinal_pago" || o.payment_status === "quitado") ? Number(o.down_payment || 0) : 0;
-      const paidInsts = (o.order_installments || []).filter((i: any) => i.status === "paid").reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-      const paid = Math.min(price, signalPaid + paidInsts);
-      return (price - paid) > 0.01;
+      return summarizeReservation([o]).balance > 0.01;
     });
 
     // Ordenar segundo a estratégia
@@ -498,10 +495,9 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
       if (available <= 0.001) break;
 
       const price = Number(order.total_price || 0);
-      const signalPaid = (order.payment_status === "sinal_pago" || order.payment_status === "quitado") ? Number(order.down_payment || 0) : 0;
-      const paidInsts = (order.order_installments || []).filter((i: any) => i.status === "paid").reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-      const currentPaid = Math.min(price, signalPaid + paidInsts);
-      const currentRemaining = Math.max(0, price - currentPaid);
+      const financial = summarizeReservation([order]);
+      const currentPaid = financial.received;
+      const currentRemaining = financial.balance;
 
       const toDeduct = Math.min(available, currentRemaining);
       const afterRemaining = Math.max(0, currentRemaining - toDeduct);
@@ -586,7 +582,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
     if (!client) return "";
     const name = client.profile.name || "Cliente";
     const storeName = storeData?.name || "Nossa Loja";
-    const pixKey = storeData?.pix_key ? `\n🔑 *Chave PIX da loja:* ${storeData.pix_key}` : "";
+    const pixKey = storeData?.pix_key ? `\n*Chave PIX:* ${storeData.pix_key}` : "";
 
     // Filtra apenas pedidos em aberto / não entregues para não poluir o extrato
     const activeOrders = (client.orders || []).filter(
@@ -603,9 +599,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
       const price = Number(order.total_price || 0);
       activeSpent += price;
 
-      const signalPaid = (order.payment_status === "sinal_pago" || order.payment_status === "quitado") ? Number(order.down_payment || 0) : 0;
-      const paidInsts = (order.order_installments || []).filter((i: any) => i.status === "paid").reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-      const orderPaid = Math.min(price, signalPaid + paidInsts);
+      const orderPaid = summarizeReservation([order]).received;
       activePaid += orderPaid;
 
       const isShipped = (order as any).delivery_status === "em_transito";
@@ -622,38 +616,37 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
     }
 
     const activeRemaining = Math.max(0, activeSpent - activePaid);
-    const activeProgress = activeSpent > 0 ? Math.min(100, Math.round((activePaid / activeSpent) * 100)) : 100;
 
-    let text = `Olá *${name}*! 🏎️💨\n\n`;
-    text += `Passando para enviar o resumo atualizado do seu acervo / reservas em aberto na *${storeName}*:\n\n`;
-    text += `📊 *RESUMO DAS RESERVAS ATIVAS:*\n`;
-    text += `• Miniaturas em Aberto: *${activeOrders.length} peças*\n`;
-    text += `• Valor Total em Aberto: *${brl(activeSpent)}*\n`;
-    text += `• Total Já Pago: *${brl(activePaid)}* (${activeProgress}%)\n`;
-    text += `• Saldo Restante a Pagar: *${brl(activeRemaining)}*\n\n`;
+    let text = `Olá, *${name}*!\n\n`;
+    text += `Segue o resumo das suas miniaturas na *${storeName}*:\n\n`;
+    text += `*Resumo*\n`;
+    text += `Miniaturas aguardando entrega: *${activeOrders.length} peças*\n`;
+    text += `Valor total das miniaturas: *${brl(activeSpent)}*\n`;
+    text += `Total já pago: *${brl(activePaid)}*\n`;
+    text += `Saldo a pagar: *${brl(activeRemaining)}*\n\n`;
 
-    text += `📦 *STATUS DA SUA CAIXA:*\n`;
-    if (activeArrived > 0) text += `• 🟢 *${activeArrived}* já na loja (Prontas para envio)\n`;
-    if (activePreorder > 0) text += `• ⏳ *${activePreorder}* em pré-venda (Aguardando lançamento)\n`;
-    if (activeShipped > 0) text += `• 🚚 *${activeShipped}* em trânsito a caminho\n`;
-    if (client.deliveredCount > 0) text += `• ✓ *${client.deliveredCount}* já entregues anteriormente\n`;
+    text += `*Situação das miniaturas*\n`;
+    if (activeArrived > 0) text += `Na loja: *${activeArrived}*\n`;
+    if (activePreorder > 0) text += `Em pré-venda: *${activePreorder}*\n`;
+    if (activeShipped > 0) text += `Em trânsito: *${activeShipped}*\n`;
+    if (client.deliveredCount > 0) text += `Entregues anteriormente: *${client.deliveredCount}*\n`;
 
     if (detailed && activeOrders.length > 0) {
-      text += `\n📋 *DETALHAMENTO DOS MODELOS ATIVOS:*\n`;
+      text += `\n*Miniaturas*\n`;
       activeOrders.forEach((o: OrderRow, idx: number) => {
         const brand = o.products?.brand || "";
         const model = o.products?.model || "Miniatura";
-        const statusPag = o.payment_status === "quitado" ? "✓ Quitado" : o.payment_status === "sinal_pago" ? "🟡 Sinal Pago" : "⏳ Pendente";
+        const statusPag = o.payment_status === "quitado" ? "Quitado" : o.payment_status === "sinal_pago" ? "Sinal pago" : "Pagamento pendente";
         const isShipped = (o as any).delivery_status === "em_transito";
         const releaseDate = (o.products as any)?.release_date;
         const isArrived = releaseDate ? new Date(releaseDate + "T00:00:00") <= now : true;
-        const statusLog = isShipped ? "🚚 Em Trânsito" : isArrived ? "📦 Na Loja" : "⏳ Pré-venda";
+        const statusLog = isShipped ? "Em trânsito" : isArrived ? "Na loja" : "Pré-venda";
 
         text += `${idx + 1}. *${brand} ${model}* - ${brl(Number(o.total_price))} (${statusPag} | ${statusLog})\n`;
       });
     }
 
-    text += `${pixKey}\n\nQualquer dúvida ou quando quiser solicitar o despacho das miniaturas prontas, é só nos avisar! Muito obrigado pela parceria! 🏁`;
+    text += `${pixKey}\n\nSe tiver dúvidas ou quiser solicitar o envio, entre em contato. Obrigado!`;
     return text;
   }
 
@@ -696,7 +689,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
         return (order as any).delivery_status === "entregue";
       }
       if (itemStatusFilter === "pending_payment") {
-        return order.payment_status !== "quitado" && (order as any).delivery_status !== "entregue";
+        return summarizeReservation([order]).balance > 0;
       }
       if (itemStatusFilter === "paid") {
         return order.payment_status === "quitado";
@@ -1136,8 +1129,8 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
             {/* CARDS DE RESUMO DO ACERVO GERAL */}
             {currentSelectedClient && (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <Card className="border-border/60 bg-card shadow-sm">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  <Card className="col-span-2 sm:col-span-1 border-border/60 bg-card shadow-sm">
                     <CardContent className="p-3 sm:p-4">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-medium text-muted-foreground">Total em pedidos</span>
@@ -1163,14 +1156,14 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                   </Card>
 
                   <Card className={`shadow-sm ${currentSelectedClient.remainingBalance > 0 ? "border-amber-500/30 bg-amber-500/[0.06]" : "border-emerald-500/25 bg-emerald-500/[0.06]"}`}>
-                    <CardContent className="p-3 sm:p-4">
+                    <CardContent className="p-0"><button type="button" className="w-full rounded-xl p-3 sm:p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => { setItemStatusFilter("pending_payment"); setItemSearch(""); }} aria-label="Mostrar miniaturas com saldo pendente">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-medium text-muted-foreground">Saldo a receber</span>
                         <CalendarClock className={`size-4 ${currentSelectedClient.remainingBalance > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`} aria-hidden="true" />
                       </div>
                       <span className="mt-1 block text-lg font-bold tabular-nums text-foreground">{brl(currentSelectedClient.remainingBalance)}</span>
-                      <span className="text-xs text-muted-foreground">{currentSelectedClient.remainingBalance > 0 ? "pendente nos pedidos" : "todos os pedidos quitados"}</span>
-                    </CardContent>
+                      <span className="text-xs text-muted-foreground">{currentSelectedClient.remainingBalance > 0 ? `${currentSelectedClient.pendingItems ?? ""} miniaturas com saldo · toque para ver` : "Sem saldo pendente"}</span>
+                    </button></CardContent>
                   </Card>
                 </div>
 
@@ -1190,7 +1183,8 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
             )}
 
             {/* SEÇÃO DE ANOTAÇÕES */}
-            <div className="space-y-2 rounded-xl border border-border/50 bg-background/50 p-2.5 sm:p-3">
+            <details className="space-y-2 rounded-xl border border-border/50 bg-background/50 p-2.5 sm:p-3">
+              <summary className="min-h-10 cursor-pointer text-sm font-medium leading-10">Anotações do cliente</summary>
               <div className="flex justify-between items-center">
                 <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                   Anotações do Cliente
@@ -1211,7 +1205,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                 rows={2}
                 className="text-xs"
               />
-            </div>
+            </details>
 
             {/* HISTÓRICO, FILTROS E BUSCA DE RESERVAS */}
             <div className="space-y-2.5 pt-1">
@@ -1223,49 +1217,20 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                 <span className="text-xs text-muted-foreground">{filteredClientOrders.length} {filteredClientOrders.length === 1 ? "pedido" : "pedidos"}</span>
               </div>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <Button
-                    variant={itemStatusFilter === "active" ? "default" : "outline"}
-                    size="sm"
-                    className="h-7 text-xs px-2 font-semibold"
-                    onClick={() => setItemStatusFilter("active")}
-                  >
-                    Em Aberto ({((currentSelectedClient?.orders || []).filter((o: any) => o.delivery_status !== 'entregue')).length})
-                  </Button>
-                  <Button
-                    variant={itemStatusFilter === "arrived" ? "default" : "outline"}
-                    size="sm"
-                    className="h-7 text-xs px-2 text-emerald-600"
-                    onClick={() => setItemStatusFilter("arrived")}
-                  >
-                    Na Loja ({currentSelectedClient?.arrivedCount || 0})
-                  </Button>
-                  <Button
-                    variant={itemStatusFilter === "preorder" ? "default" : "outline"}
-                    size="sm"
-                    className="h-7 text-xs px-2"
-                    onClick={() => setItemStatusFilter("preorder")}
-                  >
-                    Pré-venda ({currentSelectedClient?.preorderCount || 0})
-                  </Button>
-                  {currentSelectedClient?.deliveredCount > 0 && (
-                    <Button
-                      variant={itemStatusFilter === "delivered" ? "default" : "outline"}
-                      size="sm"
-                      className="h-7 text-xs px-2 text-blue-600 dark:text-blue-400"
-                      onClick={() => setItemStatusFilter("delivered")}
-                    >
-                      Entregues ({currentSelectedClient?.deliveredCount || 0})
-                    </Button>
-                  )}
-                  <Button
-                    variant={itemStatusFilter === "all" ? "default" : "outline"}
-                    size="sm"
-                    className="h-7 text-xs px-2"
-                    onClick={() => setItemStatusFilter("all")}
-                  >
-                    Todas ({currentSelectedClient?.orders?.length || 0})
-                  </Button>
+                <div className="w-full sm:w-64 min-w-0">
+                  <Label htmlFor="client-history-filter" className="sr-only">Filtrar pedidos do cliente</Label>
+                  <Select value={itemStatusFilter} onValueChange={setItemStatusFilter}>
+                    <SelectTrigger id="client-history-filter" className="h-10 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Em andamento</SelectItem>
+                      <SelectItem value="pending_payment">Com saldo pendente</SelectItem>
+                      <SelectItem value="paid">Quitados</SelectItem>
+                      <SelectItem value="arrived">Na loja</SelectItem>
+                      <SelectItem value="preorder">Pré-venda</SelectItem>
+                      <SelectItem value="delivered">Entregues</SelectItem>
+                      <SelectItem value="all">Todos os pedidos</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="relative w-full sm:w-56">
@@ -1289,9 +1254,9 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                   {filteredClientOrders.map((order: OrderRow) => {
                     const price = Number(order.total_price || 0);
                     const signalPaid = (order.payment_status === "sinal_pago" || order.payment_status === "quitado") ? Number(order.down_payment || 0) : 0;
-                    const paidInsts = (order.order_installments || []).filter((i: any) => i.status === "paid").reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
-                    const itemPaid = Math.min(price, signalPaid + paidInsts);
-                    const itemRemaining = Math.max(0, price - itemPaid);
+                    const itemFinancial = summarizeReservation([order]);
+                    const itemPaid = itemFinancial.received;
+                    const itemRemaining = itemFinancial.balance;
                     const releaseDate = (order.products as any)?.release_date;
                     const isArrived = releaseDate ? new Date(releaseDate + "T00:00:00") <= now : true;
 

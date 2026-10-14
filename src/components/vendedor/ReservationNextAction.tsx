@@ -3,12 +3,14 @@ import { Button } from "@/components/ui/button";
 export type ReservationDetailSection = "payment" | "delivery";
 
 export function ReservationNextAction({
-  hideDetails = false,
+  hideDetails = true,
+  releaseDate,
   paymentStatus,
   deliveryStatus,
   onOpenDetails,
 }: {
   hideDetails?: boolean;
+  releaseDate?: string | null;
   paymentStatus: string;
   deliveryStatus: string;
   onOpenDetails: (section?: ReservationDetailSection) => void;
@@ -24,7 +26,15 @@ export function ReservationNextAction({
     ) {
       action = { label: "Receber saldo", section: "payment" };
     } else if (paymentStatus === "quitado" && deliveryStatus === "pendente") {
-      action = { label: "Preparar envio", section: "delivery" };
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      action = {
+        label:
+          releaseDate && releaseDate.slice(0, 10) > today
+            ? "Ver previsão de chegada"
+            : "Preparar envio",
+        section: "delivery",
+      };
     } else if (paymentStatus === "quitado" && ["enviado", "em_transito"].includes(deliveryStatus)) {
       action = { label: "Acompanhar envio", section: "delivery" };
     }
