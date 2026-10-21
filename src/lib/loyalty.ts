@@ -71,11 +71,6 @@ export async function getLoyaltyData(
   if (error) throw error;
   return data as unknown as LoyaltyData;
 }
-export async function getLoyaltyPrograms() {
-  const { data, error } = await supabase.rpc("loyalty_data", {});
-  if (error) throw error;
-  return (data as unknown as { programs: LoyaltyProgram[] }).programs;
-}
 export async function loyaltyCommand(
   storeId: string,
   action: "configure" | "reward" | "adjust" | "redeem" | "redemption_status",

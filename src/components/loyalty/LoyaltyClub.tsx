@@ -21,7 +21,6 @@ import { getImageUploadErrorMessage } from "@/lib/imageOptimization";
 import { useSession } from "@/lib/session";
 import {
   getLoyaltyData,
-  getLoyaltyPrograms,
   loyaltyCommand,
   loyaltyError,
   redemptionLabels,
@@ -39,63 +38,6 @@ const emptyReward = {
   active: true,
   per_customer_limit: "",
 };
-
-export function CustomerLoyaltyClub() {
-  const { user } = useSession();
-  const [selected, setSelected] = useState("");
-  const programs = useQuery({
-    queryKey: ["loyalty", user?.id, "programs"],
-    queryFn: getLoyaltyPrograms,
-    enabled: !!user,
-    staleTime: 0,
-    refetchOnWindowFocus: true,
-  });
-  const storeId = programs.data?.some((p) => p.store_id === selected)
-    ? selected
-    : programs.data?.[0]?.store_id;
-  if (programs.isPending) return <p role="status">Carregando programas de fidelidade...</p>;
-  if (programs.isError)
-    return (
-      <div role="alert">
-        Não foi possível carregar os programas.{" "}
-        <Button variant="outline" onClick={() => void programs.refetch()}>
-          Tentar novamente
-        </Button>
-      </div>
-    );
-  if (!programs.data?.length)
-    return (
-      <Card>
-        <CardContent className="p-6 text-sm text-muted-foreground">
-          As lojas onde você é cliente ainda não ativaram o Clube de Coins.
-          <Button className="mt-3 block" variant="outline" onClick={() => void programs.refetch()}>
-            Verificar novamente
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  return (
-    <div className="space-y-4">
-      <div className="max-w-md space-y-2">
-        <Label htmlFor="coins-store">Loja</Label>
-        <select
-          id="coins-store"
-          value={storeId}
-          onChange={(e) => setSelected(e.target.value)}
-          className="w-full rounded-md border bg-background p-2 text-sm"
-        >
-          {programs.data.map((p) => (
-            <option key={p.store_id} value={p.store_id}>
-              {p.name}
-              {!p.enabled ? " — programa pausado" : ""}
-            </option>
-          ))}
-        </select>
-      </div>
-      {storeId && <LoyaltyClub key={storeId} storeId={storeId} />}
-    </div>
-  );
-}
 
 export function LoyaltyClub({ storeId, seller = false }: { storeId: string; seller?: boolean }) {
   const { user } = useSession();
@@ -243,7 +185,9 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
             )}
             {!program?.enabled && (
               <p className="text-sm">
-                Programa pausado. Seus pontos e histórico continuam disponíveis.
+                {program
+                  ? "Programa pausado. Seus pontos e histórico continuam disponíveis."
+                  : "Esta loja ainda não ativou o Clube de Coins."}
               </p>
             )}
           </CardContent>

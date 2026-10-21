@@ -1,8 +1,8 @@
 import { getColorVariants } from "@/lib/productVariants";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, type CSSProperties, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate, Outlet, useMatchRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Check, Copy, Package, Search, Sparkles, Store as StoreIcon, X, ShoppingCart, LayoutGrid, List, ListFilter, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { BookmarkCheck, Check, Coins, Copy, Package, Search, Sparkles, Store as StoreIcon, X, ShoppingCart, LayoutGrid, List, ListFilter, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createServerFn } from "@tanstack/react-start";
 import { AppHeader } from "@/components/AppHeader";
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
@@ -29,6 +30,8 @@ import { StoreProductCard } from "@/components/store/StoreProductCard";
 import { CatalogPagination } from "@/components/store/CatalogPagination";
 import { getProductCardImageUrl, getStoreBrandImageUrl } from "@/lib/imageUrls";
 import { getSubdomain, getStoreFullUrl, getProductUrl, withStorePreviewVersion } from "@/lib/subdomain";
+
+const LoyaltyClub = lazy(() => import("@/components/loyalty/LoyaltyClub").then(m => ({ default: m.LoyaltyClub })));
 
 type CatalogPage = {
   products: Tables<"products">[];
@@ -172,9 +175,19 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
     if (currentSub && currentSub !== slug) {
       window.location.href = getStoreFullUrl(slug);
     } else if (currentSub && currentSub === slug && window.location.pathname.startsWith("/loja/")) {
-      window.history.replaceState(null, "", "/");
+      window.history.replaceState(null, "", "/" + window.location.search + window.location.hash);
     }
   }, [slug]);
+
+  const [storeSection, setStoreSection] = useState("catalog");
+  useEffect(() => {
+    setStoreSection(window.location.hash === "#clube-de-coins" ? "coins" : "catalog");
+  }, [slug]);
+  function changeStoreSection(section: string) {
+    setStoreSection(section);
+    const hash = section === "coins" ? "#clube-de-coins" : "";
+    window.history.replaceState(null, "", window.location.pathname + window.location.search + hash);
+  }
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBrand, setSelectedBrand] = useState<string>("all");
@@ -609,6 +622,25 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
           </div>
         </div>
 
+        <Tabs value={storeSection} onValueChange={changeStoreSection} className="mt-6" style={{ "--primary": themeColor, "--primary-foreground": themeTextColor } as CSSProperties}>
+          <TabsList aria-label="Navegação da loja" className="flex h-auto w-full flex-wrap justify-start gap-1 bg-muted/30 p-1">
+            <TabsTrigger value="catalog" className="gap-2 px-4 py-2"><Package className="size-4" />Produtos</TabsTrigger>
+            <TabsTrigger value="coins" className="gap-2 px-4 py-2"><Coins className="size-4" />Clube de Coins</TabsTrigger>
+          </TabsList>
+          <TabsContent value="coins" className="mt-5">
+            {user ? (
+              <Suspense fallback={<p role="status">Carregando Clube de Coins...</p>}>
+                <LoyaltyClub key={store.id} storeId={store.id} />
+              </Suspense>
+            ) : (
+              <Card><CardContent className="space-y-3 p-5">
+                <h2 className="text-lg font-semibold">Clube de Coins da {store.name}</h2>
+                <p className="text-sm text-muted-foreground">Entre na sua conta para consultar seu saldo, ver as recompensas e solicitar resgates nesta loja.</p>
+                <Button onClick={() => navigate({ to: "/auth", search: { loja: store.id, next: `/loja/${slug}#clube-de-coins` } })}>Entrar para ver meus Coins</Button>
+              </CardContent></Card>
+            )}
+          </TabsContent>
+          <TabsContent value="catalog">
         {/* BARRA DE PESQUISA & FILTROS INTELIGENTES */}
         <div className="mt-8 space-y-4">
           <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
@@ -998,6 +1030,8 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
           onPageChange={setCurrentPage}
         />
 
+          </TabsContent>
+        </Tabs>
         {/* Seção de Avaliações dos Clientes */}
         <StoreReviewsSection storeId={store.id} storeName={store.name} primaryColor={store.primary_color} />
       </main>
