@@ -15,6 +15,7 @@ import { Countdown } from "@/components/Countdown";
 import type { PixItemDetail } from "@/components/PixPaymentDialog";
 
 // Diálogos de pagamento carregados apenas quando abertos
+const CustomerLoyaltyClub = lazy(() => import("@/components/loyalty/LoyaltyClub").then(m => ({ default: m.CustomerLoyaltyClub })));
 const PixPaymentDialog = lazy(() => import("@/components/PixPaymentDialog").then((m) => ({ default: m.PixPaymentDialog })));
 const CheckoutPaymentDialog = lazy(() => import("@/components/CheckoutPaymentDialog").then((m) => ({ default: m.CheckoutPaymentDialog })));
 import { DeliveryBadge, PaymentBadge } from "@/components/StatusBadge";
@@ -712,13 +713,14 @@ function CustomerDashboardContent() {
         )}
 
         <Tabs defaultValue="reservas" className="mt-10">
-          <TabsList className="w-full flex overflow-x-auto justify-start sm:justify-center whitespace-nowrap p-1 max-w-full bg-muted/30">
+          <TabsList className="w-full h-auto flex flex-wrap gap-1 justify-start sm:justify-center p-1 max-w-full bg-muted/30">
             <TabsTrigger value="reservas" className="text-xs sm:text-sm">Reservas e pagamentos</TabsTrigger>
             <TabsTrigger value="garagem" className="gap-1.5 text-xs sm:text-sm font-semibold">
               <Car className="size-3.5 text-primary" />
               <span>Minha Garagem ({deliveredOrders.length})</span>
             </TabsTrigger>
             <TabsTrigger value="lojas" className="text-xs sm:text-sm">Lojas seguidas</TabsTrigger>
+            <TabsTrigger value="coins" className="text-xs sm:text-sm">Clube de Coins</TabsTrigger>
             <TabsTrigger value="fila" className="text-xs sm:text-sm">Fila de espera</TabsTrigger>
           </TabsList>
 
@@ -1170,6 +1172,7 @@ function CustomerDashboardContent() {
             )}
           </TabsContent>
 
+          <TabsContent value="coins" className="mt-5"><Suspense fallback={<p role="status">Carregando Clube de Coins...</p>}><CustomerLoyaltyClub /></Suspense></TabsContent>
           <TabsContent value="lojas" className="mt-5">
             <div className="flex flex-wrap gap-2.5">
               {(feed?.links ?? []).map((l) => (

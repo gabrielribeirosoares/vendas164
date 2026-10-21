@@ -45,6 +45,7 @@ import { SellerSectionHeader } from "@/components/vendedor/SellerSectionHeader";
 import type { WaitlistRow } from "@/components/vendedor/WaitlistManager";
 
 // Abas pesadas carregadas sob demanda (code splitting)
+const LoyaltyClub = lazy(() => import("@/components/loyalty/LoyaltyClub").then(m => ({ default: m.LoyaltyClub })));
 const OrdersTab = lazy(() => import("@/components/vendedor/OrderManager").then((m) => ({ default: m.OrdersTab })));
 const ProductsTab = lazy(() => import("@/components/vendedor/ProductManager").then((m) => ({ default: m.ProductsTab })));
 const ClientsTab = lazy(() => import("@/components/vendedor/ClientsManager").then((m) => ({ default: m.ClientsTab })));
@@ -605,6 +606,7 @@ function SellerDashboard() {
             {productsError ? <SellerDataError onRetry={() => void retryProducts()} /> : <OrdersTab focusFilter={orderFocus} onClearFocus={() => setOrderFocus(undefined)} storeId={store.id} storeColor={store.primary_color} storeName={store.name} products={products ?? []} orders={[]} />}
           </TabsContent>
 
+          <TabsContent value="fidelidade" className="mt-5"><LoyaltyClub storeId={store.id} seller /></TabsContent>
           <TabsContent value="clientes" className="mt-5">
             <ClientsTab orders={[]} storeId={store?.id} />
           </TabsContent>

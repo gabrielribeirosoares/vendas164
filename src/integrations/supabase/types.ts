@@ -441,6 +441,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      loyalty_data: { Args: { _store_id?: string; _customer_id?: string; _offset?: number; _search?: string }; Returns: Json }
+      loyalty_command: { Args: { _store_id: string; _action: string; _data?: Json }; Returns: Json }
+
       apply_global_payment: {
         Args: { _store_id: string; _customer_id: string; _request_id: string; _payment_date: string; _payments: Json };
         Returns: Json;

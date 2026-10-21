@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Car, Clock, CreditCard, Package, Palette, ShieldCheck, Truck, UserRound, Zap } from "lucide-react";
+import { Coins, Car, Clock, CreditCard, Package, Palette, ShieldCheck, Truck, UserRound, Zap } from "lucide-react";
 type SellerSection = {
   group: "Operação" | "Configuração" | "Administração";
   title: string;
@@ -39,6 +39,9 @@ export const SECTIONS: Record<string, SellerSection> = {
     description: "Consulte o histórico e mantenha o relacionamento com seus colecionadores.",
     icon: UserRound,
     accent: "text-violet-500 bg-violet-500/10",
+  },
+  fidelidade: {
+    group: "Operação", title: "Clube de Coins", description: "Gerencie pontos, recompensas e resgates dos clientes.", icon: Coins, accent: "text-primary bg-primary/10",
   },
   fila_espera: {
     group: "Operação",

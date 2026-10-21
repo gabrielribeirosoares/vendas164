@@ -66,6 +66,7 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/20261014114555_preserve_manual_settlement_on_payment_confirmation.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20261014130542_store_customer_notes.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20261020145603_restrict_customer_order_deletion.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261021231215_store_loyalty_coins.sql',import.meta.url),'utf8'));
 });
 after(() => db.close());
 async function coloredProduct(redStock = 1, blueStock = 2) {
@@ -373,4 +374,22 @@ test('customer notes persist per store and are private from customers and other 
   assert.deepEqual((await db.query('SELECT note FROM store_customer_notes WHERE customer_id=$1', [customer])).rows.map(r=>r.note), ['Prefere JDM e RLC']);
   await assert.rejects(db.query('UPDATE store_customer_notes SET store_id=$1 WHERE store_id=$2', [secondStore, store]), /row-level security/);
   await assert.rejects(db.query('UPDATE store_customer_notes SET note=$1 WHERE store_id=$2', ['x'.repeat(5001), store]), /check constraint/);
+});
+
+
+test('loyalty reconciles real seller payment RPC and reversal triggers without duplicate receipt credits',async()=>{
+  await asUser(owner);
+  await db.query("SELECT loyalty_command($1,'configure',$2::jsonb)",[store,JSON.stringify({enabled:true})]);
+  const {oid,receipt}=await paymentFixture();
+  const getAccount=async()=> (await db.query('SELECT eligible_cents FROM loyalty_accounts WHERE store_id=$1 AND user_id=$2',[store,customer])).rows[0];
+  const start=Number((await getAccount()).eligible_cents);
+  await db.query("SELECT record_order_payment($1,50,current_date,'paid')",[[oid]]);
+  assert.equal(Number((await getAccount()).eligible_cents)-start,5000);
+  await mutate([oid],{payment_status:'quitado'});
+  assert.equal(Number((await getAccount()).eligible_cents)-start,10000);
+  await db.query("UPDATE order_installments SET status='paid' WHERE id=$1",[receipt]);
+  assert.equal(Number((await getAccount()).eligible_cents)-start,10000);
+  await db.query('DELETE FROM order_installments WHERE order_id=$1',[oid]);
+  assert.equal(Number((await getAccount()).eligible_cents),start);
+  await db.query("SELECT loyalty_command($1,'configure',$2::jsonb)",[store,JSON.stringify({enabled:false})]);
 });

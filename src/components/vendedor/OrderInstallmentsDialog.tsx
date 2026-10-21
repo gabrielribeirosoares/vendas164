@@ -322,6 +322,7 @@ export function OrderInstallmentsDialog({
   });
 
   function invalidateAll() {
+    void queryClient.invalidateQueries({ queryKey: ["loyalty"] });
     queryClient.invalidateQueries({ queryKey: ["product-buyers"] });
     targetIds.forEach((id) => {
       queryClient.invalidateQueries({ queryKey: ["order_installments", id] });
