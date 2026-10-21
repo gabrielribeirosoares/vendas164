@@ -65,6 +65,7 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/20261014113445_recalculate_reversed_installment_payments.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20261014114555_preserve_manual_settlement_on_payment_confirmation.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20261014130542_store_customer_notes.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261020145603_restrict_customer_order_deletion.sql',import.meta.url),'utf8'));
 });
 after(() => db.close());
 async function coloredProduct(redStock = 1, blueStock = 2) {
@@ -237,6 +238,26 @@ test('due-soon orders sort by earliest deadline before pagination, preserving va
 });
 
 const mutate=async(ids,patch={},remove=false)=>(await db.query('SELECT seller_mutate_orders($1,$2,$3) AS changed',[ids,JSON.stringify(patch),remove])).rows[0].changed;
+test('customers cannot erase reservations; seller cancellation keeps history and restores stock once',async()=>{
+  for (const colored of [false,true]) {
+    const p = colored ? await coloredProduct(1,1) : {id:await product()};
+    const ids=await checkout([item(p.id,colored?{variant_id:p.red}:{})]);
+    const remaining=await stock(p.id);
+    for (const actor of [customer,other]) {
+      await asUser(actor);
+      assert.equal((await db.query('DELETE FROM orders WHERE id=$1 RETURNING id',[ids[0]])).rows.length,0);
+    }
+    await asUser(customer);
+    assert.equal((await db.query('SELECT id FROM orders WHERE id=$1',[ids[0]])).rows.length,1);
+    assert.equal(await stock(p.id),remaining);
+    await assert.rejects(mutate(ids,{payment_status:'cancelado'}),/store_access_denied/);
+    await asUser(owner);
+    await mutate(ids,{payment_status:'cancelado'});
+    await mutate(ids,{payment_status:'cancelado'});
+    assert.equal(await stock(p.id),remaining+1);
+    assert.equal((await db.query('SELECT payment_status FROM orders WHERE id=$1',[ids[0]])).rows[0].payment_status,'cancelado');
+  }
+});
 test('ordinary stock cancellation and deletion are atomic and never restored twice',async()=>{
   const id=await product(); const ids=await checkout([item(id,{quantity:2,expected_total:200,expected_signal:40})]);
   await asUser(owner);

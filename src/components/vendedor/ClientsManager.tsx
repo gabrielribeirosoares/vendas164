@@ -582,6 +582,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
       const result = data as { amount_cents: number; settled: number; replayed: boolean };
 
       // Invalidar queries do React Query
+      await queryClient.invalidateQueries({ queryKey: ["product-buyers", storeId] });
       await queryClient.invalidateQueries({ queryKey: ["store-orders"] });
       await queryClient.invalidateQueries({ queryKey: ["seller-orders-page"] });
       await queryClient.invalidateQueries({ queryKey: ["seller-clients-page"] });
