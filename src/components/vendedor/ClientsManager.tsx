@@ -1120,7 +1120,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                       }}
                     >
                       <Zap className="size-3.5 fill-current" />
-                      Abater Pagamento Global
+                      Registrar pagamento
                     </Button>
                   )}
 
@@ -1420,10 +1420,10 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
           <DialogHeader className="shrink-0 space-y-1">
             <DialogTitle className="text-lg font-bold flex items-center gap-2">
               <Zap className="size-5 text-amber-500 fill-current" />
-              Abater Pagamento Global (Cascata)
+              Registrar pagamento
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Informe o valor enviado pelo cliente. O sistema quita as reservas automaticamente na ordem selecionada.
+              Informe o valor recebido. Ele será distribuído entre as reservas na ordem escolhida.
             </DialogDescription>
           </DialogHeader>
 
@@ -1435,7 +1435,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                 <span className="font-bold text-foreground text-sm">{currentSelectedClient?.profile?.name}</span>
               </div>
               <div className="text-right">
-                <span className="text-muted-foreground block text-[11px]">Saldo Devedor Atual</span>
+                <span className="text-muted-foreground block text-[11px]">Saldo a pagar</span>
                 <span className="font-bold text-amber-600 dark:text-amber-400 text-sm">
                   {currentSelectedClient ? brl(currentSelectedClient.remainingBalance) : "-"}
                 </span>
@@ -1486,7 +1486,14 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                       variant="outline"
                       size="sm"
                       className="h-6 text-[11px] px-2"
-                      onClick={() => setGlobalAmount(sug.toString())}
+                      onClick={() => setGlobalAmount((current) => {
+                        const amount = Number(current.trim().replace(/\./g, "").replace(",", "."));
+                        if (!Number.isFinite(amount) || amount < 0) {
+                          toast.error("Informe um valor válido antes de somar.");
+                          return current;
+                        }
+                        return ((Math.round(amount * 100) + sug * 100) / 100).toFixed(2).replace(".", ",");
+                      })}
                     >
                       +{brl(sug)}
                     </Button>
@@ -1496,17 +1503,17 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
 
               {/* Estratégia de Prioridade */}
               <div className="space-y-1.5 pt-1">
-                <Label className="text-xs font-semibold">Ordem de Baixa</Label>
+                <Label className="text-xs font-semibold">Priorizar reservas</Label>
                 <Select value={globalStrategy} onValueChange={(val: any) => setGlobalStrategy(val)}>
                   <SelectTrigger className="text-xs h-9">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="oldest_first">
-                      📅 Mais Antigas Primeiro (Padrão / FIFO)
+                      Mais antigas primeiro
                     </SelectItem>
                     <SelectItem value="ready_first">
-                      📦 Prontas na Loja Primeiro (Liberar envio)
+                      Prontas para envio primeiro
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -1519,7 +1526,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                 <div className="flex items-center justify-between border-b border-border/40 pb-2">
                   <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
                     <CheckCircle2 className="size-4" />
-                    Resultado da Baixa Automática
+                    Como o pagamento será distribuído
                   </span>
                   <span className="text-xs font-bold text-foreground">
                     {brl(cascadeSimulation.totalDeducted)}
@@ -1534,7 +1541,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                     </span>
                   </div>
                   <div className="bg-muted/30 p-2 rounded-lg text-center">
-                    <span className="text-[10px] text-muted-foreground block">Novo Saldo Devedor</span>
+                    <span className="text-[10px] text-muted-foreground block">Saldo após o pagamento</span>
                     <span className="font-bold text-foreground text-sm">
                       {brl(cascadeSimulation.newRemaining)}
                     </span>
@@ -1574,7 +1581,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
             ) : (
               globalAmount && (
                 <div className="text-center py-4 text-xs text-muted-foreground bg-muted/20 rounded-xl border border-dashed">
-                  Nenhum pedido com saldo pendente para abater.
+                  Nenhuma reserva com saldo a pagar.
                 </div>
               )
             )}
@@ -1598,7 +1605,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
               disabled={isProcessingGlobal || cascadeSimulation.items.length === 0}
             >
               <CheckCircle2 className="size-3.5" />
-              {isProcessingGlobal ? "Processando..." : `Confirmar Baixa (${brl(cascadeSimulation.totalDeducted)})`}
+              {isProcessingGlobal ? "Processando..." : `Confirmar pagamento (${brl(cascadeSimulation.totalDeducted)})`}
             </Button>
           </div>
         </DialogContent>
