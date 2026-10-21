@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { brl } from "@/lib/format";
+import { uploadImage } from "@/lib/upload";
+import { getImageUploadErrorMessage } from "@/lib/imageOptimization";
 import { useSession } from "@/lib/session";
 import {
   getLoyaltyData,
@@ -106,6 +108,7 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
   const [editing, setEditing] = useState<
     (typeof emptyReward & { id?: string; expected_stock?: number }) | null
   >(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [redeeming, setRedeeming] = useState<LoyaltyReward | null>(null);
   const [requestId, setRequestId] = useState("");
   const [adjustment, setAdjustment] = useState("");
@@ -552,7 +555,7 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
       <Dialog
         open={!!editing}
         onOpenChange={(open) => {
-          if (!busy && !open) setEditing(null);
+          if (!busy && !photoUploading && !open) setEditing(null);
         }}
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto">
@@ -567,6 +570,7 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
               className="space-y-3"
               onSubmit={(e) => {
                 e.preventDefault();
+                if (photoUploading) return;
                 mutation.mutate({
                   action: "reward",
                   payload: {
@@ -598,14 +602,56 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="reward-image">Link da foto (HTTPS, opcional)</Label>
+                <Label htmlFor="reward-image">Foto da recompensa (opcional)</Label>
+                {editing.image_url && (
+                  <div className="space-y-2">
+                    <img
+                      src={editing.image_url}
+                      alt="Foto da recompensa"
+                      className="h-40 w-full rounded-lg border bg-muted/30 object-contain"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy || photoUploading}
+                      onClick={() =>
+                        setEditing((current) => (current ? { ...current, image_url: "" } : current))
+                      }
+                    >
+                      Remover foto
+                    </Button>
+                  </div>
+                )}
                 <Input
                   id="reward-image"
-                  type="url"
-                  pattern="https://.*"
-                  value={editing.image_url}
-                  onChange={(e) => setEditing({ ...editing, image_url: e.target.value })}
+                  type="file"
+                  accept="image/*"
+                  disabled={busy || photoUploading}
+                  onChange={async (event) => {
+                    const input = event.currentTarget;
+                    const file = input.files?.[0];
+                    if (!file || !user || photoUploading) return;
+                    setPhotoUploading(true);
+                    try {
+                      const imageUrl = await uploadImage(user.id, file, "product");
+                      setEditing((current) =>
+                        current ? { ...current, image_url: imageUrl } : current,
+                      );
+                      toast.success("Foto enviada com sucesso.");
+                    } catch (error) {
+                      toast.error(getImageUploadErrorMessage(error));
+                    } finally {
+                      setPhotoUploading(false);
+                      input.value = "";
+                    }
+                  }}
                 />
+                <p className="text-xs text-muted-foreground" role="status">
+                  {photoUploading
+                    ? "Enviando foto... Aguarde para salvar a recompensa."
+                    : "Escolha uma foto do celular ou computador. Máximo de 12 MB."}
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
@@ -655,7 +701,7 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
                 />
                 Recompensa ativa
               </label>
-              <Button type="submit" disabled={busy}>
+              <Button type="submit" disabled={busy || photoUploading}>
                 Salvar recompensa
               </Button>
             </form>
