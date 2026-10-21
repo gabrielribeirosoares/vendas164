@@ -118,7 +118,6 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
   const [itemSearch, setItemSearch] = useState<string>("");
   const [itemStatusFilter, setItemStatusFilter] = useState<string>("active");
   const [whatsappSummaryOpen, setWhatsappSummaryOpen] = useState(false);
-  const [summaryClient, setSummaryClient] = useState<any>(null);
   const [includeFullList, setIncludeFullList] = useState(true);
 
   // Estados para a Baixa Global em Cascata
@@ -466,6 +465,10 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
       : current;
   }, [allClients, selectedClient, selectedClientOrders, usesServerPagination]);
 
+  useEffect(() => {
+    setWhatsappSummaryOpen(false);
+  }, [selectedClient?.userId, storeId]);
+
   const lastRecordedPaymentAt = useMemo(() => {
     const timestamps = (currentSelectedClient?.orders || []).flatMap((order: OrderRow) =>
       (order.order_installments || [])
@@ -681,8 +684,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
     return text;
   }
 
-  function handleOpenWhatsAppSummary(client: any) {
-    setSummaryClient(client);
+  function handleOpenWhatsAppSummary() {
     setWhatsappSummaryOpen(true);
   }
 
@@ -1128,7 +1130,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                     size="sm"
                     disabled={isClientHistoryLoading || isClientHistoryError}
                     className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
-                    onClick={() => handleOpenWhatsAppSummary(currentSelectedClient)}
+                    onClick={() => handleOpenWhatsAppSummary()}
                   >
                     <MessageCircle className="size-3.5" />
                     Enviar Extrato
@@ -1612,19 +1614,19 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
       </Dialog>
 
       {/* MODAL DE EXTRATO CONSOLIDADO DO WHATSAPP */}
-      <Dialog open={whatsappSummaryOpen} onOpenChange={setWhatsappSummaryOpen}>
+      <Dialog open={whatsappSummaryOpen && !!currentSelectedClient} onOpenChange={setWhatsappSummaryOpen}>
         <DialogContent className="w-[95vw] max-w-xl p-6 gap-4">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2">
               <MessageCircle className="size-5 text-emerald-600" />
-              Extrato para WhatsApp: {summaryClient?.profile?.name}
+              Extrato para WhatsApp: {currentSelectedClient?.profile?.name}
             </DialogTitle>
             <DialogDescription className="text-xs">
               Resumo completo e profissional para prestar contas e alinhar pagamentos com o cliente.
             </DialogDescription>
           </DialogHeader>
 
-          {summaryClient && (
+          {currentSelectedClient && (
             <div className="space-y-4">
               <div className="flex items-center justify-between bg-muted/40 p-2.5 rounded-lg text-xs">
                 <span className="font-semibold text-foreground">Incluir lista de todos os modelos?</span>
@@ -1638,9 +1640,17 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                 </Button>
               </div>
 
+              {(isClientHistoryLoading || isClientHistoryError) && (
+                <p role={isClientHistoryError ? "alert" : "status"} className="text-xs text-muted-foreground">
+                  {isClientHistoryError
+                    ? "Não foi possível atualizar o extrato. Feche e abra o histórico para tentar novamente."
+                    : "Atualizando os valores do extrato..."}
+                </p>
+              )}
+
               <Textarea
                 readOnly
-                value={generateWhatsAppSummary(summaryClient, includeFullList)}
+                value={generateWhatsAppSummary(currentSelectedClient, includeFullList)}
                 rows={12}
                 className="text-xs font-mono bg-muted/30 select-all"
               />
@@ -1650,8 +1660,9 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                   variant="outline"
                   size="sm"
                   className="gap-1.5 text-xs h-9"
+                  disabled={isClientHistoryLoading || isClientHistoryError}
                   onClick={() => {
-                    const msg = generateWhatsAppSummary(summaryClient, includeFullList);
+                    const msg = generateWhatsAppSummary(currentSelectedClient, includeFullList);
                     navigator.clipboard.writeText(msg);
                     toast.success("Extrato copiado para a área de transferência!");
                   }}
@@ -1663,9 +1674,10 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                 <Button
                   size="sm"
                   className="gap-1.5 text-xs h-9 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  disabled={isClientHistoryLoading || isClientHistoryError}
                   onClick={() => {
-                    const msg = generateWhatsAppSummary(summaryClient, includeFullList);
-                    const link = whatsappLink(summaryClient.profile.phone, msg);
+                    const msg = generateWhatsAppSummary(currentSelectedClient, includeFullList);
+                    const link = whatsappLink(currentSelectedClient.profile.phone, msg);
                     window.open(link, "_blank");
                   }}
                 >
