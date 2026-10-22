@@ -115,6 +115,15 @@ before(async () => {
       "utf8",
     ),
   );
+  await db.exec(
+    await readFile(
+      new URL(
+        "../supabase/migrations/20261022163012_loyalty_redemption_visibility.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
   await asUser(customer);
   assert.equal(await balance(), 1);
   assert.equal((await snapshot()).accounts[0].remainder_cents, 2500);
@@ -469,4 +478,37 @@ test("each store keeps its own rule and clients cannot edit another store", asyn
   assert.equal(p.spend_cents, 5000);
   assert.equal(p.coins_per_step, 1);
   assert.equal(await balance(), 2);
+});
+
+test("redemption counts survive pagination, ignore rejected requests and isolate customers and stores", async () => {
+  await reset();
+  await activate();
+  await order(150, "quitado");
+  const rid = await reward(1, 5, { per_customer_limit: 2 });
+  const first = await redeem(rid);
+  await redeem(rid);
+  let view = (await db.query("SELECT loyalty_data($1,$2,100) AS result", [store, other])).rows[0]
+    .result;
+  assert.equal(view.redemptions.length, 0);
+  assert.equal(view.rewards[0].redeemed_count, 2);
+  assert.equal(view.pending_redemptions, 2);
+  await assert.rejects(() => redeem(rid), /loyalty_reward_limit/);
+  await asUser(other);
+  view = await snapshot();
+  assert.equal(view.rewards[0].redeemed_count, 0);
+  assert.equal(view.pending_redemptions, 0);
+  assert.equal((await snapshot(foreignStore)).pending_redemptions, 0);
+  await asUser(owner);
+  assert.equal((await snapshot()).pending_redemptions, 2);
+  await command("redemption_status", { id: first.id, status: "rejected" });
+  await asUser(customer);
+  assert.equal((await snapshot()).rewards[0].redeemed_count, 1);
+  await redeem(rid);
+  await asUser(owner);
+  view = await snapshot();
+  const pending = view.redemptions.find((r) => r.status === "pending");
+  await command("redemption_status", { id: pending.id, status: "approved" });
+  assert.equal((await snapshot()).pending_redemptions, 1);
+  await asUser(customer);
+  assert.equal((await snapshot()).rewards[0].redeemed_count, 2);
 });

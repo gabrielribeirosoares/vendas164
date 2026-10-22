@@ -28,6 +28,7 @@ export type LoyaltyReward = {
   stock: number;
   active: boolean;
   per_customer_limit: number | null;
+  redeemed_count?: number;
 };
 export type RedemptionStatus = "pending" | "approved" | "shipped" | "delivered" | "rejected";
 export type LoyaltyRedemption = {
@@ -50,6 +51,7 @@ export type LoyaltyEntry = {
 };
 export type LoyaltyData = {
   configurable_rules?: boolean;
+  pending_redemptions?: number;
   program: LoyaltyProgram | null;
   accounts: LoyaltyAccount[];
   rewards: LoyaltyReward[];

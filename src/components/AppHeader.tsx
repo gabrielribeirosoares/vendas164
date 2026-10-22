@@ -1,3 +1,4 @@
+import { LoyaltyPendingBadge } from "@/components/loyalty/LoyaltyPendingBadge";
 import { getSellerNavigation } from "@/lib/sellerNavigation";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
@@ -240,6 +241,7 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                                     <Button asChild variant="ghost" className={mobileItemClass(activeSellerTab === section.id)} onClick={() => setMobileMenuOpen(false)}>
                                       <Link to="/vendedor" search={{ tab: section.id }} aria-current={activeSellerTab === section.id ? "page" : undefined}>
                                         <Icon className="size-4 text-muted-foreground" />{section.title}
+                                        {section.id === "fidelidade" && myStore?.id && <LoyaltyPendingBadge storeId={myStore.id} />}
                                       </Link>
                                     </Button>
                                   </div>;

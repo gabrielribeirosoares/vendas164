@@ -14,6 +14,12 @@ export type Database = {
   }
   public: {
     Tables: {
+      loyalty_redemptions: {
+        Row: { id: string; store_id: string; user_id: string; reward_id: string; status: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       loyalty_programs: {
         Row: { store_id: string; enabled: boolean; started_at: string; spend_cents: number; coins_per_step: number; rule_id: string }
         Insert: never

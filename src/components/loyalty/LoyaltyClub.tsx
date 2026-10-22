@@ -136,8 +136,15 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
   const nextSpend = Number(account?.next_spend_cents || ruleSpend);
   const nextCoins = Number(account?.next_coins || ruleCoins);
   const coinLabel = (count: number) => `${count} ${count === 1 ? "Coin" : "Coins"}`;
+  const limitReached = (reward: LoyaltyReward) =>
+    reward.per_customer_limit != null &&
+    Number(reward.redeemed_count ?? 0) >= reward.per_customer_limit;
   const rewardPriority = (reward: LoyaltyReward) =>
-    !reward.active || reward.stock <= 0 ? 2 : balance >= reward.coins ? 0 : 1;
+    !reward.active || reward.stock <= 0 || limitReached(reward)
+      ? 2
+      : balance >= reward.coins
+        ? 0
+        : 1;
   const displayedRewards = seller
     ? rewards
     : [...rewards].sort((a, b) => rewardPriority(a) - rewardPriority(b) || a.coins - b.coins);
@@ -323,7 +330,17 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
         <TabsList className="flex h-auto flex-wrap justify-start gap-1 bg-muted/30">
           {seller && <TabsTrigger value="clients">Clientes</TabsTrigger>}
           <TabsTrigger value="rewards">Recompensas</TabsTrigger>
-          <TabsTrigger value="redemptions">{seller ? "Resgates" : "Meus resgates"}</TabsTrigger>
+          <TabsTrigger value="redemptions">
+            {seller ? "Resgates" : "Meus resgates"}
+            {seller && Number(data.data.pending_redemptions) > 0 && (
+              <span
+                className="ml-2 rounded-full bg-primary/10 px-2 text-xs text-primary"
+                aria-label={`${data.data.pending_redemptions} aguardando aprovação`}
+              >
+                {data.data.pending_redemptions}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="history">Histórico</TabsTrigger>
           <TabsTrigger value="rules">Como funciona</TabsTrigger>
         </TabsList>
@@ -460,6 +477,7 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
                         !program?.enabled ||
                         !r.active ||
                         r.stock <= 0 ||
+                        limitReached(r) ||
                         balance < r.coins
                       }
                       onClick={() => {
@@ -467,13 +485,15 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
                         setRequestId(crypto.randomUUID());
                       }}
                     >
-                      {!program?.enabled
-                        ? "Programa pausado"
-                        : !r.active || r.stock <= 0
-                          ? "Indisponível"
-                          : balance < r.coins
-                            ? `Faltam ${coinLabel(r.coins - balance)}`
-                            : "Resgatar"}
+                      {limitReached(r)
+                        ? "Limite atingido"
+                        : !program?.enabled
+                          ? "Programa pausado"
+                          : !r.active || r.stock <= 0
+                            ? "Indisponível"
+                            : balance < r.coins
+                              ? `Faltam ${coinLabel(r.coins - balance)}`
+                              : "Resgatar"}
                     </Button>
                   )}
                 </CardContent>
