@@ -63,6 +63,33 @@ export const redemptionLabels: Record<RedemptionStatus, string> = {
   delivered: "Entregue",
   rejected: "Recusado — Coins devolvidos",
 };
+export async function getStoreLoyaltySummary(storeId: string, userId: string) {
+  const [program, account] = await Promise.all([
+    supabase.from("loyalty_programs").select("enabled").eq("store_id", storeId).maybeSingle(),
+    supabase
+      .from("loyalty_accounts")
+      .select("earned_coins,adjustment,spent")
+      .eq("store_id", storeId)
+      .eq("user_id", userId)
+      .maybeSingle(),
+  ]);
+  if (program.error) throw program.error;
+  if (account.error) throw account.error;
+  return {
+    hasProgram: !!program.data,
+    enabled: program.data?.enabled ?? false,
+    hasAccount: !!account.data,
+    balance: account.data
+      ? Math.max(
+          0,
+          Number(account.data.earned_coins) +
+            Number(account.data.adjustment) -
+            Number(account.data.spent),
+        )
+      : 0,
+  };
+}
+
 export async function getLoyaltyData(
   storeId: string,
   customerId?: string,

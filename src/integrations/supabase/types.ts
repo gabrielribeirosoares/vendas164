@@ -14,6 +14,19 @@ export type Database = {
   }
   public: {
     Tables: {
+      loyalty_programs: {
+        Row: { store_id: string; enabled: boolean; started_at: string; spend_cents: number; coins_per_step: number; rule_id: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      loyalty_accounts: {
+        Row: { store_id: string; user_id: string; eligible_cents: number; earned_coins: number; adjustment: number; spent: number }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+
       store_customer_notes: {
         Row: { store_id: string; customer_id: string; note: string; updated_at: string }
         Insert: { store_id: string; customer_id: string; note?: string; updated_at?: string }

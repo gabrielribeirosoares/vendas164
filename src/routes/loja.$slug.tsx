@@ -1,5 +1,5 @@
 import { getColorVariants } from "@/lib/productVariants";
-import { lazy, Suspense, type CSSProperties, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, type CSSProperties, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate, Outlet, useMatchRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookmarkCheck, Check, Coins, Copy, Package, Search, Sparkles, Store as StoreIcon, X, ShoppingCart, LayoutGrid, List, ListFilter, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
@@ -27,6 +27,7 @@ import { saveCustomerToCache } from "@/lib/customerCache";
 import { getReadableTextColor, getStoreBanner, getProductBadge } from "@/lib/storeCustomizations";
 import { StoreReviewsSection } from "@/components/StoreReviewsSection";
 import { StoreProductCard } from "@/components/store/StoreProductCard";
+import { StoreLoyaltyBanner } from "@/components/store/StoreLoyaltyBanner";
 import { CatalogPagination } from "@/components/store/CatalogPagination";
 import { getProductCardImageUrl, getStoreBrandImageUrl } from "@/lib/imageUrls";
 import { getSubdomain, getStoreFullUrl, getProductUrl, withStorePreviewVersion } from "@/lib/subdomain";
@@ -179,6 +180,7 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
     }
   }, [slug]);
 
+  const coinsTriggerRef = useRef<HTMLButtonElement>(null);
   const [storeSection, setStoreSection] = useState("catalog");
   useEffect(() => {
     setStoreSection(window.location.hash === "#clube-de-coins" ? "coins" : "catalog");
@@ -623,9 +625,13 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
         </div>
 
         <Tabs value={storeSection} onValueChange={changeStoreSection} className="mt-6" style={{ "--primary": themeColor, "--primary-foreground": themeTextColor } as CSSProperties}>
-          <TabsList aria-label="Navegação da loja" className="flex h-auto w-full flex-wrap justify-start gap-1 bg-muted/30 p-1">
-            <TabsTrigger value="catalog" className="gap-2 px-4 py-2"><Package className="size-4" />Produtos</TabsTrigger>
-            <TabsTrigger value="coins" className="gap-2 px-4 py-2"><Coins className="size-4" />Clube de Coins</TabsTrigger>
+          {storeSection === "catalog" && <StoreLoyaltyBanner storeId={store.id} userId={user?.id} onOpen={() => {
+            changeStoreSection("coins");
+            requestAnimationFrame(() => coinsTriggerRef.current?.focus({ preventScroll: true }));
+          }} />}
+          <TabsList aria-label="Navegação da loja" className="grid h-auto w-full grid-cols-2 gap-1 bg-muted/30 p-1">
+            <TabsTrigger value="catalog" className="min-h-11 gap-2 px-3 py-3 text-sm"><Package className="size-4" />Produtos</TabsTrigger>
+            <TabsTrigger ref={coinsTriggerRef} value="coins" className="min-h-11 gap-2 px-3 py-3 text-sm font-semibold"><Coins className="size-4 text-primary" />Clube de Coins</TabsTrigger>
           </TabsList>
           <TabsContent value="coins" className="mt-5">
             {user ? (
