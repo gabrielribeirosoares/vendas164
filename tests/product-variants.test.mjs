@@ -67,6 +67,7 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/20261014130542_store_customer_notes.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20261020145603_restrict_customer_order_deletion.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20261021231215_store_loyalty_coins.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261022132404_configurable_loyalty_earning_rules.sql',import.meta.url),'utf8'));
 });
 after(() => db.close());
 async function coloredProduct(redStock = 1, blueStock = 2) {

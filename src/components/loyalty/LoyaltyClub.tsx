@@ -42,6 +42,11 @@ const emptyReward = {
 export function LoyaltyClub({ storeId, seller = false }: { storeId: string; seller?: boolean }) {
   const { user } = useSession();
   const queryClient = useQueryClient();
+  const [ruleDraft, setRuleDraft] = useState<{
+    coins: string;
+    spend: string;
+    ruleId: string | null;
+  } | null>(null);
   const [customer, setCustomer] = useState("");
   const [activeTab, setActiveTab] = useState(seller ? "clients" : "rewards");
   const [search, setSearch] = useState("");
@@ -82,7 +87,15 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
       action: Parameters<typeof loyaltyCommand>[1];
       payload: Parameters<typeof loyaltyCommand>[2];
     }) => loyaltyCommand(storeId, action, payload),
-    onSuccess: async () => {
+    onSuccess: async (_result, variables) => {
+      if (
+        variables.action === "configure" &&
+        variables.payload &&
+        typeof variables.payload === "object" &&
+        !Array.isArray(variables.payload) &&
+        "spend_cents" in variables.payload
+      )
+        setRuleDraft(null);
       setEditing(null);
       setRedeeming(null);
       setAdjustOpen(false);
@@ -114,9 +127,32 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
     );
   const { program, accounts, rewards, redemptions, ledger } = data.data;
   const account = accounts[0];
+  const canConfigureRules = data.data.configurable_rules === true;
   const balance = Number(account?.balance || 0);
   const remainder = Number(account?.remainder_cents || 0);
   const deficit = Number(account?.deficit || 0);
+  const ruleSpend = Number(program?.spend_cents || 5000);
+  const ruleCoins = Number(program?.coins_per_step || 1);
+  const nextSpend = Number(account?.next_spend_cents || ruleSpend);
+  const nextCoins = Number(account?.next_coins || ruleCoins);
+  const coinLabel = (count: number) => `${count} ${count === 1 ? "Coin" : "Coins"}`;
+  function editRule(field: "coins" | "spend", value: string) {
+    setRuleDraft((current) => ({
+      coins: String(ruleCoins),
+      spend: (ruleSpend / 100).toFixed(2),
+      ruleId: program?.rule_id ?? null,
+      ...current,
+      [field]: value,
+    }));
+  }
+  const pageItemCount =
+    activeTab === "clients"
+      ? accounts.length
+      : activeTab === "redemptions"
+        ? redemptions.length
+        : activeTab === "history"
+          ? ledger.length
+          : 0;
   const nameFor = (id: string) =>
     accounts.find((a) => a.user_id === id)?.customer_name ||
     redemptions.find((r) => r.user_id === id)?.customer_name ||
@@ -128,9 +164,11 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
           <h2 className="flex items-center gap-2 text-xl font-semibold">
             <Coins className="size-5 text-primary" /> Clube de Coins
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Cada R$ 50 em compras pagas gera 1 Coin. Os pontos pertencem a esta loja.
-          </p>
+          {!seller && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {coinLabel(ruleCoins)} a cada {brl(ruleSpend / 100)} pagos.
+            </p>
+          )}
         </div>
         <Button
           size="sm"
@@ -148,12 +186,71 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
             <p className="text-sm">
               {program?.enabled ? "Programa ativo" : "Programa desativado ou pausado"}
             </p>
-            <p className="text-xs text-muted-foreground">
-              A regra é fixa: 1 Coin a cada R$ 50 pagos, somando sinais e parcelas. Na primeira
-              ativação, valores já recebidos ficam fora do cálculo. Novos pagamentos passam a
-              pontuar. Ao pausar, novos pagamentos deixam de pontuar; o saldo e os estornos são
-              preservados.
-            </p>
+            {canConfigureRules && (
+              <form
+                className="space-y-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  mutation.mutate({
+                    action: "configure",
+                    payload: {
+                      spend_cents: Math.round(Number(ruleDraft?.spend ?? ruleSpend / 100) * 100),
+                      coins_per_step: Number(ruleDraft?.coins ?? ruleCoins),
+                      expected_rule_id: ruleDraft ? ruleDraft.ruleId : (program?.rule_id ?? null),
+                    },
+                  });
+                }}
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="earning-coins">Coins ganhos</Label>
+                    <Input
+                      id="earning-coins"
+                      type="number"
+                      min={1}
+                      max={1000000}
+                      step={1}
+                      required
+                      disabled={busy}
+                      value={ruleDraft?.coins ?? ruleCoins}
+                      onChange={(event) => editRule("coins", event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="earning-spend">A cada valor pago (R$)</Label>
+                    <Input
+                      id="earning-spend"
+                      type="number"
+                      min={0.01}
+                      max={1000000}
+                      step="0.01"
+                      required
+                      disabled={busy}
+                      value={ruleDraft?.spend ?? (ruleSpend / 100).toFixed(2)}
+                      onChange={(event) => editRule("spend", event.target.value)}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Alterações preservam os Coins e o progresso já acumulado.
+                </p>
+                <div className="flex gap-2">
+                  <Button type="submit" disabled={busy || !ruleDraft}>
+                    Salvar pontuação
+                  </Button>
+                  {ruleDraft && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => setRuleDraft(null)}
+                    >
+                      Cancelar
+                    </Button>
+                  )}
+                </div>
+              </form>
+            )}
             <Button
               disabled={busy}
               variant={program?.enabled ? "outline" : "default"}
@@ -174,13 +271,12 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
               {balance} <span className="text-base">Coins</span>
             </p>
             <p className="text-sm">
-              {brl(remainder / 100)} acumulados para o próximo Coin. Faltam{" "}
-              {brl((5000 - remainder) / 100)} em pagamentos elegíveis.
+              Faltam {brl((nextSpend - remainder) / 100)} para ganhar {coinLabel(nextCoins)}
+              {account?.previous_rule ? " pela regra anterior" : ""}.
             </p>
             {deficit > 0 && (
               <p className="text-sm text-muted-foreground">
-                Há {deficit} Coins a compensar após estornos. Novos créditos compensam esse ajuste
-                antes de liberar outros resgates.
+                {deficit} Coins a compensar por estornos.
               </p>
             )}
             {!program?.enabled && (
@@ -258,9 +354,7 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
               </Button>
             )}
             {!accounts.length && (
-              <p className="py-4 text-sm text-muted-foreground">
-                Nenhum cliente encontrado. Clientes da loja aparecem após a ativação.
-              </p>
+              <p className="py-4 text-sm text-muted-foreground">Nenhum cliente encontrado.</p>
             )}
             {accounts.map((a) => (
               <Card key={a.user_id}>
@@ -281,7 +375,7 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
                       setPage(0);
                     }}
                   >
-                    Ver histórico e resgates
+                    Ver histórico
                   </Button>
                 </CardContent>
               </Card>
@@ -289,10 +383,6 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
           </TabsContent>
         )}
         <TabsContent value="rewards" className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            O frete da recompensa é por conta do cliente. Resgates dependem de disponibilidade e
-            aprovação da loja.
-          </p>
           {!rewards.length && (
             <p className="py-6 text-sm text-muted-foreground">
               Nenhuma recompensa cadastrada no momento.
@@ -315,9 +405,11 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
                     </div>
                   )}
                   <h3 className="font-semibold break-words">{r.name}</h3>
-                  <p className="text-sm whitespace-pre-wrap break-words text-muted-foreground">
-                    {r.description}
-                  </p>
+                  {r.description && (
+                    <p className="text-sm whitespace-pre-wrap break-words text-muted-foreground">
+                      {r.description}
+                    </p>
+                  )}
                   <p className="font-semibold">{r.coins} Coins</p>
                   <p className="text-xs text-muted-foreground">
                     {r.stock > 0 ? `${r.stock} disponíveis` : "Sem estoque"}
@@ -366,9 +458,6 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
           </div>
         </TabsContent>
         <TabsContent value="redemptions" className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Até 100 resgates por página{customer ? " do cliente selecionado" : ""}.
-          </p>
           {!redemptions.length && (
             <p className="py-4 text-sm text-muted-foreground">Nenhum resgate nesta página.</p>
           )}
@@ -423,9 +512,6 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
           ))}
         </TabsContent>
         <TabsContent value="history" className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Até 100 movimentações por página{customer ? " do cliente selecionado" : ""}.
-          </p>
           {!ledger.length && (
             <p className="py-4 text-sm text-muted-foreground">Nenhuma movimentação nesta página.</p>
           )}
@@ -455,47 +541,40 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
         </TabsContent>
         <TabsContent value="rules" className="space-y-3 text-sm leading-relaxed">
           <p>
-            A cada R$ 50 em compras elegíveis efetivamente pagas, você ganha 1 Coin. Valores menores
-            ficam acumulados para o próximo Coin. Sinais e parcelas contam após confirmação, até o
-            valor total da compra.
+            {coinLabel(ruleCoins)} a cada {brl(ruleSpend / 100)} pagos. Sinais e parcelas
+            confirmados contam a partir da ativação. O restante fica acumulado.
           </p>
           <p>
-            Contam os valores recebidos enquanto o programa estiver ativo, a partir da primeira
-            ativação pela loja. Pagamentos anteriores não geram Coins automaticamente. Cancelamentos
-            e estornos ajustam os pontos correspondentes.
+            Mudanças de pontuação preservam os Coins ganhos. O progresso já iniciado completa um
+            ciclo pela regra anterior. Cancelamentos e estornos ajustam os pontos correspondentes.
           </p>
+          <p>Os Coins valem apenas nesta loja e não podem ser convertidos em dinheiro.</p>
           <p>
-            Os Coins valem apenas nesta loja, não são dinheiro, não podem ser sacados e não têm
-            conversão em dinheiro.
+            Resgates dependem de estoque e aprovação da loja. O frete fica por conta do cliente. Se
+            o resgate for recusado, os Coins são devolvidos.
           </p>
-          <p>
-            O lojista define as recompensas, quantos Coins cada uma exige, o estoque e os limites
-            por cliente. Ao confirmar um resgate, os Coins são debitados e uma unidade fica
-            reservada. Se a loja recusar, os Coins são devolvidos.
-          </p>
-          <p>O frete fica por conta do cliente. Acompanhe a aprovação e o envio na aba Resgates.</p>
         </TabsContent>
       </Tabs>
-      <div className="flex items-center justify-between gap-3">
-        <Button
-          variant="outline"
-          disabled={page === 0 || data.isFetching}
-          onClick={() => setPage((p) => p - 1)}
-        >
-          Página anterior
-        </Button>
-        <span className="text-xs">Página {page + 1}</span>
-        <Button
-          variant="outline"
-          disabled={
-            data.isFetching ||
-            (accounts.length < 100 && ledger.length < 100 && redemptions.length < 100)
-          }
-          onClick={() => setPage((p) => p + 1)}
-        >
-          Próxima página
-        </Button>
-      </div>
+      {(page > 0 || pageItemCount === 100) &&
+        ["clients", "redemptions", "history"].includes(activeTab) && (
+          <div className="flex items-center justify-between gap-3">
+            <Button
+              variant="outline"
+              disabled={page === 0 || data.isFetching}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              Página anterior
+            </Button>
+            <span className="text-xs">Página {page + 1}</span>
+            <Button
+              variant="outline"
+              disabled={data.isFetching || pageItemCount < 100}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Próxima página
+            </Button>
+          </div>
+        )}
       <Dialog
         open={!!editing}
         onOpenChange={(open) => {
@@ -505,9 +584,7 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing?.id ? "Editar recompensa" : "Nova recompensa"}</DialogTitle>
-            <DialogDescription>
-              Defina os Coins necessários e o estoque disponível para resgate.
-            </DialogDescription>
+            <DialogDescription className="sr-only">Cadastro de recompensa.</DialogDescription>
           </DialogHeader>
           {editing && (
             <form
@@ -697,9 +774,7 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Ajustar Coins</DialogTitle>
-            <DialogDescription>
-              Cliente: {account?.customer_name || "Cliente"}. Toda alteração fica no histórico.
-            </DialogDescription>
+            <DialogDescription>Cliente: {account?.customer_name || "Cliente"}.</DialogDescription>
           </DialogHeader>
           <form
             className="space-y-3"

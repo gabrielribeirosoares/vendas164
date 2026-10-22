@@ -101,6 +101,23 @@ before(async () => {
     store,
   ]);
   await db.exec(await readFile(migration, "utf8"));
+  await asUser(owner);
+  await command("configure", { enabled: true });
+  await order(75, "quitado");
+  assert.equal(await balance(), 1);
+  await db.exec("RESET ROLE");
+  await db.exec(
+    await readFile(
+      new URL(
+        "../supabase/migrations/20261022132404_configurable_loyalty_earning_rules.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  await asUser(customer);
+  assert.equal(await balance(), 1);
+  assert.equal((await snapshot()).accounts[0].remainder_cents, 2500);
 });
 after(() => db.close());
 test("activation excludes old receipts and enrolls customers, new partial receipts accumulate across orders", async () => {
@@ -291,24 +308,165 @@ test("RLS isolates customers and stores, client writes and anonymous RPC calls a
   await assert.rejects(db.query("SELECT loyalty_data($1)", [store]), /permission denied/);
 });
 
-test('cent values accumulate exactly and customer balance stays visible on later history pages', async () => {
-  await reset(); await activate(); await order(49.99, 'quitado');
-  assert.equal(await balance(), 0); await order(0.01, 'quitado');
+test("cent values accumulate exactly and customer balance stays visible on later history pages", async () => {
+  await reset();
+  await activate();
+  await order(49.99, "quitado");
+  assert.equal(await balance(), 0);
+  await order(0.01, "quitado");
   assert.equal(await balance(), 1);
-  const later = (await db.query('SELECT loyalty_data($1,NULL,100) AS result', [store])).rows[0].result;
-  assert.equal(later.accounts[0].balance, 1); assert.equal(later.ledger.length, 0);
+  const later = (await db.query("SELECT loyalty_data($1,NULL,100) AS result", [store])).rows[0]
+    .result;
+  assert.equal(later.accounts[0].balance, 1);
+  assert.equal(later.ledger.length, 0);
 });
-test('reward edits reject stale stock and redemption preserves the agreed reward and cost', async () => {
-  await reset(); await activate(); await order(250, 'quitado');
-  const rid=await reward(2,3); const d=await redeem(rid,2);
+test("reward edits reject stale stock and redemption preserves the agreed reward and cost", async () => {
+  await reset();
+  await activate();
+  await order(250, "quitado");
+  const rid = await reward(2, 3);
+  const d = await redeem(rid, 2);
   await asUser(owner);
-  await assert.rejects(command('reward',{id:rid,name:'Alterada',coins:4,stock:3,expected_stock:3}), /loyalty_stock_changed/);
-  await command('reward',{id:rid,name:'Alterada',coins:4,stock:2,expected_stock:2});
-  assert.equal((await snapshot()).redemptions[0].coins,2);
-  assert.equal((await snapshot()).redemptions[0].reward_name,'Mini GT');
-  await command('redemption_status',{id:d.id,status:'approved'});
-  await command('redemption_status',{id:d.id,status:'shipped'});
-  await assert.rejects(command('redemption_status',{id:d.id,status:'rejected'}),/loyalty_invalid_status/);
-  await command('redemption_status',{id:d.id,status:'delivered'});
-  assert.equal(await balance(),3);
+  await assert.rejects(
+    command("reward", { id: rid, name: "Alterada", coins: 4, stock: 3, expected_stock: 3 }),
+    /loyalty_stock_changed/,
+  );
+  await command("reward", { id: rid, name: "Alterada", coins: 4, stock: 2, expected_stock: 2 });
+  assert.equal((await snapshot()).redemptions[0].coins, 2);
+  assert.equal((await snapshot()).redemptions[0].reward_name, "Mini GT");
+  await command("redemption_status", { id: d.id, status: "approved" });
+  await command("redemption_status", { id: d.id, status: "shipped" });
+  await assert.rejects(
+    command("redemption_status", { id: d.id, status: "rejected" }),
+    /loyalty_invalid_status/,
+  );
+  await command("redemption_status", { id: d.id, status: "delivered" });
+  assert.equal(await balance(), 3);
+});
+
+test("store can set reward quantity and paid threshold; fractional amounts accumulate exactly", async () => {
+  await reset();
+  await asUser(owner);
+  await command("configure", { enabled: true, spend_cents: 10000, coins_per_step: 3 });
+  assert.equal((await snapshot()).configurable_rules, true);
+  await order(99.99, "quitado");
+  assert.equal(await balance(), 0);
+  assert.equal((await snapshot()).accounts[0].remainder_cents, 9999);
+  await order(0.01, "quitado");
+  assert.equal(await balance(), 3);
+  await order(200, "quitado");
+  assert.equal(await balance(), 9);
+  await asUser(owner);
+  const rid = await reward(8, 1);
+  await redeem(rid, 8);
+  assert.equal(await balance(), 1);
+});
+test("rule changes preserve earned coins and finish prior progress before starting the new rule", async () => {
+  await reset();
+  await activate();
+  await order(75, "quitado");
+  assert.equal(await balance(), 1);
+  await asUser(owner);
+  await command("configure", { spend_cents: 10000, coins_per_step: 3 });
+  assert.equal(await balance(), 1);
+  let a = (await snapshot()).accounts[0];
+  assert.equal(a.previous_rule, true);
+  assert.equal(a.next_spend_cents, 5000);
+  assert.equal(a.remainder_cents, 2500);
+  await order(30, "quitado");
+  assert.equal(await balance(), 2);
+  a = (await snapshot()).accounts[0];
+  assert.equal(a.previous_rule, false);
+  assert.equal(a.remainder_cents, 500);
+  assert.equal(a.next_coins, 3);
+  await order(95, "quitado");
+  assert.equal(await balance(), 5);
+});
+test("refunds across changed rules reverse original allocations and leave unrelated credits intact", async () => {
+  await reset();
+  await activate();
+  const old = await order(75, "quitado");
+  await asUser(owner);
+  await command("configure", { spend_cents: 10000, coins_per_step: 3 });
+  const newer = await order(125, "quitado");
+  assert.equal(await balance(), 5);
+  await asUser(owner);
+  await db.query("UPDATE orders SET payment_status='cancelado' WHERE id=$1", [newer]);
+  assert.equal(await balance(), 1);
+  assert.equal((await snapshot()).accounts[0].remainder_cents, 2500);
+  await order(25, "quitado");
+  assert.equal(await balance(), 2);
+  await asUser(owner);
+  await db.query("UPDATE orders SET payment_status='cancelado' WHERE id=$1", [old]);
+  assert.equal(await balance(), 0);
+  await db.exec("RESET ROLE");
+  const totals = (
+    await db.query(
+      `SELECT a.earned_coins, (SELECT coalesce(sum((ra.eligible_cents/r.spend_cents)*r.coins_per_step),0)::bigint FROM private.loyalty_rule_accounts ra JOIN private.loyalty_earning_rules r ON r.id=ra.rule_id WHERE ra.user_id=a.user_id AND ra.store_id=a.store_id) AS expected FROM loyalty_accounts a WHERE store_id=$1 AND user_id=$2`,
+      [store, customer],
+    )
+  ).rows[0];
+  assert.equal(totals.earned_coins, totals.expected);
+});
+test("rule edits require owner, positive integral values, and a fresh rule version", async () => {
+  await reset();
+  await activate();
+  const previous = (await snapshot()).program.rule_id;
+  for (const payload of [
+    { spend_cents: 0 },
+    { spend_cents: -1 },
+    { spend_cents: 1.5 },
+    { coins_per_step: 0 },
+    { coins_per_step: 1.5 },
+    { spend_cents: null },
+    { coins_per_step: null },
+    { spend_cents: 100000001 },
+    { coins_per_step: 1000001 },
+  ])
+    await assert.rejects(command("configure", payload), /loyalty_invalid_rule/);
+  await command("configure", { spend_cents: 2500, coins_per_step: 2, expected_rule_id: previous });
+  await assert.rejects(
+    command("configure", { spend_cents: 10000, coins_per_step: 1, expected_rule_id: previous }),
+    /loyalty_rule_changed/,
+  );
+  await asUser(customer);
+  await assert.rejects(command("configure", { coins_per_step: 999 }), /loyalty_forbidden/);
+  await assert.rejects(
+    db.query("SELECT private.loyalty_progress($1,$2)", [store, other]),
+    /loyalty_forbidden/,
+  );
+  await assert.rejects(
+    db.query("SELECT * FROM private.loyalty_earning_rules"),
+    /permission denied/,
+  );
+});
+test("pause and resume keep configured rate; same configuration does not mint points", async () => {
+  await reset();
+  await asUser(owner);
+  await command("configure", { enabled: true, spend_cents: 2000, coins_per_step: 5 });
+  const id = await order(40, "quitado");
+  assert.equal(await balance(), 10);
+  await asUser(owner);
+  const before = (await snapshot()).program.rule_id;
+  await command("configure", { enabled: false });
+  await command("configure", { enabled: true });
+  await command("configure", { spend_cents: 2000, coins_per_step: 5 });
+  assert.equal((await snapshot()).program.rule_id, before);
+  assert.equal(await balance(), 10);
+  await asUser(owner);
+  await db.query("UPDATE orders SET payment_status='cancelado' WHERE id=$1", [id]);
+  assert.equal(await balance(), 0);
+});
+test("each store keeps its own rule and clients cannot edit another store", async () => {
+  await reset();
+  await activate();
+  await order(100, "quitado");
+  await asUser(other);
+  await command("configure", { enabled: true, spend_cents: 1000, coins_per_step: 4 }, foreignStore);
+  await assert.rejects(command("configure", { spend_cents: 1 }, store), /loyalty_forbidden/);
+  await asUser(owner);
+  const p = (await snapshot()).program;
+  assert.equal(p.spend_cents, 5000);
+  assert.equal(p.coins_per_step, 1);
+  assert.equal(await balance(), 2);
 });

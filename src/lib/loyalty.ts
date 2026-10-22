@@ -4,6 +4,9 @@ export type LoyaltyProgram = {
   store_id: string;
   enabled: boolean;
   started_at: string;
+  spend_cents: number;
+  coins_per_step: number;
+  rule_id: string;
   name?: string;
 };
 export type LoyaltyAccount = {
@@ -11,6 +14,9 @@ export type LoyaltyAccount = {
   balance: number;
   deficit: number;
   remainder_cents: number;
+  next_spend_cents: number;
+  next_coins: number;
+  previous_rule: boolean;
   customer_name: string | null;
 };
 export type LoyaltyReward = {
@@ -43,6 +49,7 @@ export type LoyaltyEntry = {
   created_at: string;
 };
 export type LoyaltyData = {
+  configurable_rules?: boolean;
   program: LoyaltyProgram | null;
   accounts: LoyaltyAccount[];
   rewards: LoyaltyReward[];
@@ -88,6 +95,8 @@ export function loyaltyError(error: unknown) {
   const message =
     error && typeof error === "object" && "message" in error ? String(error.message) : "";
   const messages: Record<string, string> = {
+    loyalty_rule_changed: "A regra foi alterada em outra tela. Atualize os dados antes de salvar.",
+    loyalty_invalid_rule: "Informe Coins inteiros e um valor pago maior que zero.",
     loyalty_stock_changed:
       "O estoque mudou após um resgate. Feche a edição e abra novamente para atualizar.",
     loyalty_reward_capacity:

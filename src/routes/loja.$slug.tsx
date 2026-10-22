@@ -635,7 +635,6 @@ export function StoreView({ slug: slugProp }: { slug?: string } = {}) {
             ) : (
               <Card><CardContent className="space-y-3 p-5">
                 <h2 className="text-lg font-semibold">Clube de Coins da {store.name}</h2>
-                <p className="text-sm text-muted-foreground">Entre na sua conta para consultar seu saldo, ver as recompensas e solicitar resgates nesta loja.</p>
                 <Button onClick={() => navigate({ to: "/auth", search: { loja: store.id, next: `/loja/${slug}#clube-de-coins` } })}>Entrar para ver meus Coins</Button>
               </CardContent></Card>
             )}
