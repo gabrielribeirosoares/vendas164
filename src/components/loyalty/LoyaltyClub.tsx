@@ -136,6 +136,11 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
   const nextSpend = Number(account?.next_spend_cents || ruleSpend);
   const nextCoins = Number(account?.next_coins || ruleCoins);
   const coinLabel = (count: number) => `${count} ${count === 1 ? "Coin" : "Coins"}`;
+  const rewardPriority = (reward: LoyaltyReward) =>
+    !reward.active || reward.stock <= 0 ? 2 : balance >= reward.coins ? 0 : 1;
+  const displayedRewards = seller
+    ? rewards
+    : [...rewards].sort((a, b) => rewardPriority(a) - rewardPriority(b) || a.coins - b.coins);
   function editRule(field: "coins" | "spend", value: string) {
     setRuleDraft((current) => ({
       coins: String(ruleCoins),
@@ -270,10 +275,13 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
             <p className="text-3xl font-semibold tabular-nums">
               {balance} <span className="text-base">Coins</span>
             </p>
-            <p className="text-sm">
-              Faltam {brl((nextSpend - remainder) / 100)} para ganhar {coinLabel(nextCoins)}
-              {account?.previous_rule ? " pela regra anterior" : ""}.
-            </p>
+            {program?.enabled && (
+              <p className="text-sm">
+                Faltam {brl((nextSpend - remainder) / 100)} em pagamentos para ganhar{" "}
+                {coinLabel(nextCoins)}
+                {account?.previous_rule ? " pela regra anterior" : ""}.
+              </p>
+            )}
             {deficit > 0 && (
               <p className="text-sm text-muted-foreground">
                 {deficit} Coins a compensar por estornos.
@@ -315,7 +323,7 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
         <TabsList className="flex h-auto flex-wrap justify-start gap-1 bg-muted/30">
           {seller && <TabsTrigger value="clients">Clientes</TabsTrigger>}
           <TabsTrigger value="rewards">Recompensas</TabsTrigger>
-          <TabsTrigger value="redemptions">Resgates</TabsTrigger>
+          <TabsTrigger value="redemptions">{seller ? "Resgates" : "Meus resgates"}</TabsTrigger>
           <TabsTrigger value="history">Histórico</TabsTrigger>
           <TabsTrigger value="rules">Como funciona</TabsTrigger>
         </TabsList>
@@ -362,8 +370,12 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
                   <div>
                     <p className="font-medium">{a.customer_name || "Cliente"}</p>
                     <p className="text-sm text-muted-foreground">
-                      {a.balance} Coins disponíveis · {brl(Number(a.remainder_cents) / 100)}{" "}
-                      acumulados{Number(a.deficit) > 0 ? ` · ${a.deficit} Coins a compensar` : ""}
+                      {coinLabel(Number(a.balance))}{" "}
+                      {Number(a.balance) === 1 ? "disponível" : "disponíveis"}
+                      {Number(a.remainder_cents) > 0
+                        ? ` · ${brl(Number(a.remainder_cents) / 100)} acumulados para o próximo ganho`
+                        : ""}
+                      {Number(a.deficit) > 0 ? ` · ${a.deficit} Coins a compensar` : ""}
                     </p>
                   </div>
                   <Button
@@ -389,8 +401,11 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
             </p>
           )}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {rewards.map((r) => (
-              <Card key={r.id} className="overflow-hidden">
+            {displayedRewards.map((r) => (
+              <Card
+                key={r.id}
+                className={`overflow-hidden ${!seller && program?.enabled && rewardPriority(r) === 0 ? "border-primary/40" : ""}`}
+              >
                 <CardContent className="space-y-3 p-4">
                   {r.image_url ? (
                     <img
@@ -410,7 +425,14 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
                       {r.description}
                     </p>
                   )}
-                  <p className="font-semibold">{r.coins} Coins</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold">{coinLabel(r.coins)}</p>
+                    {!seller && program?.enabled && rewardPriority(r) === 0 && (
+                      <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                        Saldo suficiente
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {r.stock > 0 ? `${r.stock} disponíveis` : "Sem estoque"}
                     {!r.active ? " · Desativada" : ""}
@@ -445,11 +467,13 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
                         setRequestId(crypto.randomUUID());
                       }}
                     >
-                      {r.stock <= 0
-                        ? "Indisponível"
-                        : balance < r.coins
-                          ? `Faltam ${r.coins - balance} Coins`
-                          : "Resgatar"}
+                      {!program?.enabled
+                        ? "Programa pausado"
+                        : !r.active || r.stock <= 0
+                          ? "Indisponível"
+                          : balance < r.coins
+                            ? `Faltam ${coinLabel(r.coins - balance)}`
+                            : "Resgatar"}
                     </Button>
                   )}
                 </CardContent>
