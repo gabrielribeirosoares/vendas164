@@ -65,15 +65,17 @@ export const redemptionLabels: Record<RedemptionStatus, string> = {
   delivered: "Entregue",
   rejected: "Recusado — Coins devolvidos",
 };
-export async function getStoreLoyaltySummary(storeId: string, userId: string) {
+export async function getStoreLoyaltySummary(storeId: string, userId?: string) {
   const [program, account] = await Promise.all([
     supabase.from("loyalty_programs").select("enabled").eq("store_id", storeId).maybeSingle(),
-    supabase
-      .from("loyalty_accounts")
-      .select("earned_coins,adjustment,spent")
-      .eq("store_id", storeId)
-      .eq("user_id", userId)
-      .maybeSingle(),
+    userId
+      ? supabase
+          .from("loyalty_accounts")
+          .select("earned_coins,adjustment,spent")
+          .eq("store_id", storeId)
+          .eq("user_id", userId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
   if (program.error) throw program.error;
   if (account.error) throw account.error;

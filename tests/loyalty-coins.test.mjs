@@ -124,6 +124,15 @@ before(async () => {
       "utf8",
     ),
   );
+  await db.exec(
+    await readFile(
+      new URL(
+        "../supabase/migrations/20261028174038_public_loyalty_program_availability.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
   await asUser(customer);
   assert.equal(await balance(), 1);
   assert.equal((await snapshot()).accounts[0].remainder_cents, 2500);
@@ -511,4 +520,18 @@ test("redemption counts survive pagination, ignore rejected requests and isolate
   assert.equal((await snapshot()).pending_redemptions, 1);
   await asUser(customer);
   assert.equal((await snapshot()).rewards[0].redeemed_count, 2);
+});
+
+test("guests see only active program availability and cannot read private loyalty data", async () => {
+  await reset();
+  await activate();
+  await db.exec("RESET ROLE; SET ROLE anon");
+  assert.equal((await db.query("SELECT store_id,enabled FROM loyalty_programs")).rows.length, 1);
+  await assert.rejects(() => db.query("SELECT * FROM loyalty_programs"), /permission denied/);
+  await assert.rejects(() => db.query("SELECT * FROM loyalty_accounts"), /permission denied/);
+  await assert.rejects(() => db.query("SELECT * FROM loyalty_redemptions"), /permission denied/);
+  await asUser(owner);
+  await command("configure", { enabled: false });
+  await db.exec("RESET ROLE; SET ROLE anon");
+  assert.equal((await db.query("SELECT store_id,enabled FROM loyalty_programs")).rows.length, 0);
 });

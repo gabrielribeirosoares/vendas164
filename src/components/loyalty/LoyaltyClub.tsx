@@ -1,3 +1,4 @@
+import { usePendingLoyalty } from "@/components/loyalty/LoyaltyPendingBadge";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Coins, Gift, Loader2, RefreshCw } from "lucide-react";
@@ -42,6 +43,7 @@ const emptyReward = {
 export function LoyaltyClub({ storeId, seller = false }: { storeId: string; seller?: boolean }) {
   const { user } = useSession();
   const queryClient = useQueryClient();
+  const pendingCount = usePendingLoyalty(storeId, seller);
   const [ruleDraft, setRuleDraft] = useState<{
     coins: string;
     spend: string;
@@ -171,6 +173,19 @@ export function LoyaltyClub({ storeId, seller = false }: { storeId: string; sell
     "Cliente";
   return (
     <div className="space-y-5 min-w-0">
+      {seller && pendingCount.isError && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 text-sm">
+          <p>Não foi possível consultar os resgates pendentes.</p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pendingCount.isFetching}
+            onClick={() => void pendingCount.refetch()}
+          >
+            Tentar novamente
+          </Button>
+        </div>
+      )}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-xl font-semibold">

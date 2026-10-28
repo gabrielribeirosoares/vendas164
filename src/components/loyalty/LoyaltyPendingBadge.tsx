@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/lib/session";
 
-export function LoyaltyPendingBadge({ storeId }: { storeId: string }) {
+export function usePendingLoyalty(storeId: string, enabled = true) {
   const { user } = useSession();
-  const { data: count, isError } = useQuery({
+  return useQuery({
     queryKey: ["loyalty", user?.id, storeId, "pending-count"],
     queryFn: async () => {
       const { count, error } = await supabase
@@ -15,12 +15,26 @@ export function LoyaltyPendingBadge({ storeId }: { storeId: string }) {
       if (error) throw error;
       return count ?? 0;
     },
-    enabled: !!user && !!storeId,
+    enabled: enabled && !!user && !!storeId,
     staleTime: 30000,
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
   });
-  if (isError || !count) return null;
+}
+
+export function LoyaltyPendingBadge({ storeId }: { storeId: string }) {
+  const { data: count, isError } = usePendingLoyalty(storeId);
+  if (isError)
+    return (
+      <span
+        className="ml-auto text-xs text-destructive"
+        role="status"
+        title="Não foi possível consultar os resgates. Abra o Clube para tentar novamente."
+      >
+        Falha nos resgates
+      </span>
+    );
+  if (!count) return null;
   return (
     <span
       className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary"

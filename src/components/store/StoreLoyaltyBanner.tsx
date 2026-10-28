@@ -13,12 +13,13 @@ export function StoreLoyaltyBanner({
 }) {
   const summary = useQuery({
     queryKey: ["loyalty", userId, storeId, "summary"],
-    queryFn: () => getStoreLoyaltySummary(storeId, userId!),
-    enabled: !!userId,
+    queryFn: () => getStoreLoyaltySummary(storeId, userId),
+    enabled: !!storeId,
     staleTime: 30_000,
     refetchOnWindowFocus: true,
     refetchOnMount: "always",
   });
+  if (!userId && (!summary.isSuccess || !summary.data.enabled)) return null;
   if (summary.isSuccess && !summary.data.enabled && !summary.data.hasAccount) return null;
 
   return (
