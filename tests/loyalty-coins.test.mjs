@@ -535,3 +535,65 @@ test("guests see only active program availability and cannot read private loyalt
   await db.exec("RESET ROLE; SET ROLE anon");
   assert.equal((await db.query("SELECT store_id,enabled FROM loyalty_programs")).rows.length, 0);
 });
+
+test("customer cannot mint Coins through direct writes, privileged commands or forged redemption status", async () => {
+  await reset();
+  await activate();
+  await order(100, "quitado");
+  const rid = await reward(1, 3);
+  const redemption = await redeem(rid);
+  const original = await snapshot();
+  const tables = [
+    ["public.loyalty_accounts", "store_id"],
+    ["public.loyalty_ledger", "store_id"],
+    ["public.loyalty_programs", "store_id"],
+    ["public.loyalty_rewards", "store_id"],
+    ["public.loyalty_redemptions", "store_id"],
+    ["private.loyalty_earning_rules", "store_id"],
+    ["private.loyalty_rule_accounts", "store_id"],
+    ["private.loyalty_order_credit", "store_id"],
+    ["private.loyalty_order_rule_credit", "rule_id"],
+  ];
+  for (const [table, column] of tables) {
+    for (const sql of [
+      `INSERT INTO ${table} (${column}) VALUES ($1)`,
+      `UPDATE ${table} SET ${column}=$1`,
+      `DELETE FROM ${table} WHERE ${column}=$1`,
+    ]) {
+      await assert.rejects(db.query(sql, [store]), /permission denied/, sql);
+    }
+  }
+  for (const [action, payload] of [
+    ["adjust", { user_id: customer, coins: 999999, reason: "forged", request_id: randomUUID() }],
+    ["configure", { enabled: true, spend_cents: 1, coins_per_step: 999999 }],
+    ["reward", { id: rid, name: "forged", coins: 0, stock: 999999 }],
+    ["redemption_status", { id: redemption.id, status: "rejected" }],
+  ]) {
+    await assert.rejects(command(action, payload), /loyalty_forbidden/, action);
+    await assert.rejects(
+      db.query("SELECT private.loyalty_command($1,$2,$3::jsonb)", [
+        store,
+        action,
+        JSON.stringify(payload),
+      ]),
+      /loyalty_forbidden/,
+      `private ${action}`,
+    );
+  }
+  await assert.rejects(
+    db.query("SELECT private.loyalty_apply_rule_credit($1,$2,$3,$4,$5)", [
+      store,
+      customer,
+      randomUUID(),
+      randomUUID(),
+      999999,
+    ]),
+    /permission denied/,
+  );
+  await assert.rejects(redeem(rid, -100), /loyalty_reward_changed/);
+  const final = await snapshot();
+  assert.equal(final.accounts[0].balance, original.accounts[0].balance);
+  assert.equal(final.ledger.length, original.ledger.length);
+  assert.equal(final.redemptions.length, original.redemptions.length);
+  assert.equal(final.rewards[0].stock, original.rewards[0].stock);
+});
