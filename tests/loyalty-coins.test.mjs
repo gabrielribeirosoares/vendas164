@@ -597,3 +597,22 @@ test("customer cannot mint Coins through direct writes, privileged commands or f
   assert.equal(final.redemptions.length, original.redemptions.length);
   assert.equal(final.rewards[0].stock, original.rewards[0].stock);
 });
+
+test("two queued redemption requests cannot spend the same balance twice", async () => {
+  await reset();
+  await activate();
+  await order(50, "quitado");
+  const first = await reward(1, 2);
+  const second = await reward(1, 2);
+  await asUser(customer);
+  // PGlite serializes queries: this checks back-to-back requests, not multi-session lock contention.
+  const results = await Promise.allSettled([first, second].map(reward_id =>
+    command("redeem", { reward_id, expected_coins: 1, request_id: randomUUID() })));
+  assert.equal(results.filter(r => r.status === "fulfilled").length, 1);
+  const rejected = results.find(r => r.status === "rejected");
+  assert.match(rejected.reason.message, /loyalty_insufficient_balance/);
+  const view = await snapshot();
+  assert.equal(view.accounts[0].balance, 0);
+  assert.equal(view.redemptions.length, 1);
+  assert.equal(view.rewards.reduce((sum, r) => sum + r.stock, 0), 3);
+});

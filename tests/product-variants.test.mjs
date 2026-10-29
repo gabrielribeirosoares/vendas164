@@ -394,3 +394,19 @@ test('loyalty reconciles real seller payment RPC and reversal triggers without d
   assert.equal(Number((await getAccount()).eligible_cents),start);
   await db.query("SELECT loyalty_command($1,'configure',$2::jsonb)",[store,JSON.stringify({enabled:false})]);
 });
+
+test('customer cannot forge paid orders or installments to earn loyalty Coins',async()=>{
+  await asUser(owner);
+  await db.query("SELECT loyalty_command($1,'configure',$2::jsonb)",[store,JSON.stringify({enabled:true})]);
+  const {oid,receipt}=await paymentFixture();
+  await asUser(customer);
+  const state=async()=> (await db.query('SELECT eligible_cents,earned_coins,spent FROM loyalty_accounts WHERE store_id=$1 AND user_id=$2',[store,customer])).rows[0];
+  const start=await state();
+  assert.equal((await db.query("UPDATE orders SET payment_status='quitado',down_payment=100 WHERE id=$1 RETURNING id",[oid])).rows.length,0);
+  assert.equal((await db.query("UPDATE order_installments SET status='paid',paid_at=now() WHERE id=$1 RETURNING id",[receipt])).rows.length,0);
+  await assert.rejects(db.query("INSERT INTO order_installments(order_id,installment_number,amount,due_date,status) VALUES($1,9,100,current_date,'paid')",[oid]),/row-level security/);
+  await assert.rejects(db.query("SELECT record_order_payment($1,100,current_date,'paid')",[[oid]]),/access_denied|owner|permission|unauthorized|forbidden/);
+  await assert.rejects(mutate([oid],{payment_status:'quitado'}),/store_access_denied/);
+  assert.equal(await paymentState(oid),'sem_sinal');
+  assert.deepEqual(await state(),start);
+});
