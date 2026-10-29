@@ -322,6 +322,8 @@ export function OrderInstallmentsDialog({
   });
 
   function invalidateAll() {
+    void queryClient.invalidateQueries({ queryKey: ["loyalty"] });
+    queryClient.invalidateQueries({ queryKey: ["product-buyers"] });
     targetIds.forEach((id) => {
       queryClient.invalidateQueries({ queryKey: ["order_installments", id] });
       queryClient.invalidateQueries({ queryKey: ["order_meta", id] });
@@ -371,7 +373,7 @@ export function OrderInstallmentsDialog({
               <CardContent className="p-4 space-y-3">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center sm:text-left">
                   <div className="p-2 rounded-lg bg-background/60 border border-border/40">
-                    <span className="text-[11px] text-muted-foreground block">Valor Total</span>
+                    <span className="text-[11px] text-muted-foreground block">Valor total</span>
                     <span className="text-sm font-bold text-foreground">{brl(totalPrice)}</span>
                   </div>
 
@@ -395,12 +397,12 @@ export function OrderInstallmentsDialog({
                   )}
 
                   <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 block">Total Já Pago</span>
+                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 block">Valor pago</span>
                     <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{brl(totalPaid)}</span>
                   </div>
 
                   <div className={`p-2 rounded-lg border ${isFullyPaid ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400"}`}>
-                    <span className="text-[11px] block">{isFullyPaid ? "Status" : "Saldo Restante"}</span>
+                    <span className="text-[11px] block">{isFullyPaid ? "Status" : "Saldo a pagar"}</span>
                     <span className="text-sm font-bold">{isFullyPaid ? "100% Quitado" : brl(remainingBalance)}</span>
                   </div>
                 </div>
@@ -527,7 +529,7 @@ export function OrderInstallmentsDialog({
                   {isFullyPaid ? (
                     <div className="bg-emerald-500/10 border border-emerald-500/20 p-3.5 rounded-lg flex items-center gap-2.5 text-xs text-emerald-700 dark:text-emerald-300 font-medium">
                       <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
-                      <span>Este pedido está 100% quitado (Saldo restante: R$ 0,00). Não há mais valores a receber.</span>
+                      <span>Este pedido está 100% quitado (Saldo a pagar: R$ 0,00). Não há mais valores a receber.</span>
                     </div>
                   ) : (
                     <div className="bg-muted/40 p-3.5 rounded-lg border border-border/60 space-y-3">

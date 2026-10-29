@@ -24,23 +24,23 @@ export function SellerOverview({ totals, brandData }: SellerOverviewProps) {
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
         <StatCard
           icon={<TrendingUp className="size-4 text-primary" />}
-          label="Total projetado"
+          label="Valor total"
           value={brl(totals.projected)}
           subtext={`${totals.activeCount} reservas ativas`}
         />
         <StatCard
           icon={<Wallet className="size-4 text-emerald-500" />}
-          label="Valores recebidos"
+          label="Valor pago"
           value={brl(totals.received)}
           accent="text-emerald-500"
           subtext={`${totals.paidInFull} pedidos quitados`}
         />
         <StatCard
           icon={<Clock className="size-4 text-amber-500" />}
-          label="Saldo a receber"
+          label="Saldo a pagar"
           value={brl(totals.pending)}
           accent="text-amber-500"
-          subtext="Restante a pagar"
+          subtext="Pendente nos pedidos"
         />
         <StatCard
           icon={<DollarSign className="size-4 text-blue-500" />}

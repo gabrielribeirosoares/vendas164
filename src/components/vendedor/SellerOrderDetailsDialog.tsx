@@ -208,10 +208,10 @@ export function SellerOrderDetailsDialog({
               </section>
               <section aria-label="Resumo financeiro" className="grid grid-cols-2 gap-2">
                 {[
-                  ["Total da reserva", summary.total],
-                  ["Recebido", summary.received],
+                  ["Valor total", summary.total],
+                  ["Valor pago", summary.received],
                   ["A pagar agora", summary.dueNow],
-                  ["Saldo restante", summary.balance],
+                  ["Saldo a pagar", summary.balance],
                 ].map(([label, value]) => (
                   <div
                     key={label}

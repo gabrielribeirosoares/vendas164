@@ -14,6 +14,31 @@ export type Database = {
   }
   public: {
     Tables: {
+      loyalty_redemptions: {
+        Row: { id: string; store_id: string; user_id: string; reward_id: string; status: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      loyalty_programs: {
+        Row: { store_id: string; enabled: boolean; started_at: string; spend_cents: number; coins_per_step: number; rule_id: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      loyalty_accounts: {
+        Row: { store_id: string; user_id: string; eligible_cents: number; earned_coins: number; adjustment: number; spent: number }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+
+      store_customer_notes: {
+        Row: { store_id: string; customer_id: string; note: string; updated_at: string }
+        Insert: { store_id: string; customer_id: string; note?: string; updated_at?: string }
+        Update: { store_id?: string; customer_id?: string; note?: string; updated_at?: string }
+        Relationships: []
+      }
       customer_store_link: {
         Row: {
           created_at: string
@@ -435,6 +460,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      loyalty_data: { Args: { _store_id?: string; _customer_id?: string; _offset?: number; _search?: string }; Returns: Json }
+      loyalty_command: { Args: { _store_id: string; _action: string; _data?: Json }; Returns: Json }
+
       apply_global_payment: {
         Args: { _store_id: string; _customer_id: string; _request_id: string; _payment_date: string; _payments: Json };
         Returns: Json;

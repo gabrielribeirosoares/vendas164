@@ -1,3 +1,4 @@
+import { LoyaltyPendingBadge } from "@/components/loyalty/LoyaltyPendingBadge";
 import { getSellerNavigation } from "@/lib/sellerNavigation";
 import { createFileRoute } from '@tanstack/react-router';
 import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
@@ -45,6 +46,7 @@ import { SellerSectionHeader } from "@/components/vendedor/SellerSectionHeader";
 import type { WaitlistRow } from "@/components/vendedor/WaitlistManager";
 
 // Abas pesadas carregadas sob demanda (code splitting)
+const LoyaltyClub = lazy(() => import("@/components/loyalty/LoyaltyClub").then(m => ({ default: m.LoyaltyClub })));
 const OrdersTab = lazy(() => import("@/components/vendedor/OrderManager").then((m) => ({ default: m.OrdersTab })));
 const ProductsTab = lazy(() => import("@/components/vendedor/ProductManager").then((m) => ({ default: m.ProductsTab })));
 const ClientsTab = lazy(() => import("@/components/vendedor/ClientsManager").then((m) => ({ default: m.ClientsTab })));
@@ -581,6 +583,7 @@ function SellerDashboard() {
                 {(index === 0 || section.group !== sections[index - 1].group) && <span className="block px-3 pb-2 pt-4 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{section.group}</span>}
                 <TabsTrigger value={section.id} className="h-auto min-h-11 w-full justify-start gap-2.5 whitespace-normal rounded-lg px-3 py-3 text-left text-sm leading-snug text-muted-foreground data-[state=active]:text-foreground">
                   <Icon className="size-4 shrink-0" /><span className="min-w-0 break-words">{section.title}</span>
+                  {section.id === "fidelidade" && <LoyaltyPendingBadge storeId={store.id} />}
                 </TabsTrigger>
               </div>;
             })}
@@ -605,6 +608,7 @@ function SellerDashboard() {
             {productsError ? <SellerDataError onRetry={() => void retryProducts()} /> : <OrdersTab focusFilter={orderFocus} onClearFocus={() => setOrderFocus(undefined)} storeId={store.id} storeColor={store.primary_color} storeName={store.name} products={products ?? []} orders={[]} />}
           </TabsContent>
 
+          <TabsContent value="fidelidade" className="mt-5"><LoyaltyClub storeId={store.id} seller /></TabsContent>
           <TabsContent value="clientes" className="mt-5">
             <ClientsTab orders={[]} storeId={store?.id} />
           </TabsContent>

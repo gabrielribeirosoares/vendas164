@@ -281,7 +281,7 @@ function AuthPageContent() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth?loja=${search.loja || ""}&next=${search.next || ""}`,
+        redirectTo: `${window.location.origin}/auth?loja=${encodeURIComponent(search.loja || "")}&next=${encodeURIComponent(search.next || "")}`,
       },
     });
     // O redirecionamento é automático pelo Supabase, não desativamos o loading

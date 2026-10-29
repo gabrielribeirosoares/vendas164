@@ -118,7 +118,6 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
   const [itemSearch, setItemSearch] = useState<string>("");
   const [itemStatusFilter, setItemStatusFilter] = useState<string>("active");
   const [whatsappSummaryOpen, setWhatsappSummaryOpen] = useState(false);
-  const [summaryClient, setSummaryClient] = useState<any>(null);
   const [includeFullList, setIncludeFullList] = useState(true);
 
   // Estados para a Baixa Global em Cascata
@@ -129,14 +128,34 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
   const [isProcessingGlobal, setIsProcessingGlobal] = useState(false);
   const [globalPaymentRequestId, setGlobalPaymentRequestId] = useState(() => crypto.randomUUID());
 
-  const [clientNotes, setClientNotes] = useState<Record<string, string>>(() => {
+  const [editingNote, setEditingNote] = useState("");
+  const [noteDirty, setNoteDirty] = useState(false);
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [legacyNotes] = useState<Record<string, string>>(() => {
     try {
-      return JSON.parse(localStorage.getItem("store_client_notes") || localStorage.getItem("crm_client_notes") || "{}");
-    } catch {
-      return {};
-    }
+      const value = JSON.parse(localStorage.getItem("store_client_notes") || localStorage.getItem("crm_client_notes") || "{}");
+      return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    } catch { return {}; }
   });
-  const [editingNote, setEditingNote] = useState<string>("");
+  const { data: clientNotes = {}, isLoading: notesLoading, isError: notesError, refetch: refetchNotes } = useQuery({
+    queryKey: ["store-customer-notes", storeId],
+    enabled: !!storeId,
+    queryFn: async (): Promise<Record<string, string>> => {
+      const notes: Record<string, string> = {};
+      for (let offset = 0; ; offset += 500) {
+        const { data, error } = await supabase.from("store_customer_notes")
+          .select("customer_id,note").eq("store_id", storeId!)
+          .order("customer_id").range(offset, offset + 499);
+        if (error) throw error;
+        for (const row of data || []) notes[row.customer_id] = row.note;
+        if ((data || []).length < 500) return notes;
+      }
+    },
+  });
+  useEffect(() => { setNoteDirty(false); }, [selectedClient?.userId, storeId]);
+  useEffect(() => {
+    if (!noteDirty) setEditingNote(clientNotes[selectedClient?.userId] || "");
+  }, [clientNotes, selectedClient?.userId, noteDirty]);
 
   const [waTemplate, setWaTemplate] = useState(() => {
     return localStorage.getItem("wa_template") || "Olá {{nome}}, tudo bem? Temos novidades em miniaturas colecionáveis na loja!";
@@ -249,12 +268,22 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
     toast.success("Mensagem padrão salva!");
   }
 
-  function handleSaveNote(userId: string) {
-    if (!userId) return;
-    const updated = { ...clientNotes, [userId]: editingNote };
-    setClientNotes(updated);
-    localStorage.setItem("store_client_notes", JSON.stringify(updated));
-    toast.success("Anotação do cliente salva!");
+  async function handleSaveNote(userId: string) {
+    if (!storeId || !userId || isSavingNote || notesLoading || notesError) return;
+    const note = editingNote;
+    setIsSavingNote(true);
+    try {
+      const { error } = await supabase.from("store_customer_notes").upsert({
+        store_id: storeId, customer_id: userId, note, updated_at: new Date().toISOString(),
+      }, { onConflict: "store_id,customer_id" });
+      if (error) throw error;
+      queryClient.setQueryData<Record<string, string>>(["store-customer-notes", storeId], current => ({ ...current, [userId]: note }));
+      await queryClient.invalidateQueries({ queryKey: ["store-customer-notes", storeId] });
+      setNoteDirty(false);
+      toast.success("Anotação salva na loja.");
+    } catch {
+      toast.error("Não foi possível salvar a anotação. Seu texto foi mantido para tentar novamente.");
+    } finally { setIsSavingNote(false); }
   }
 
   const profilesMap = new Map((profilesData || []).map((p) => [p.id, p]));
@@ -436,6 +465,10 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
       : current;
   }, [allClients, selectedClient, selectedClientOrders, usesServerPagination]);
 
+  useEffect(() => {
+    setWhatsappSummaryOpen(false);
+  }, [selectedClient?.userId, storeId]);
+
   const lastRecordedPaymentAt = useMemo(() => {
     const timestamps = (currentSelectedClient?.orders || []).flatMap((order: OrderRow) =>
       (order.order_installments || [])
@@ -552,6 +585,8 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
       const result = data as { amount_cents: number; settled: number; replayed: boolean };
 
       // Invalidar queries do React Query
+    void queryClient.invalidateQueries({ queryKey: ["loyalty"] });
+      await queryClient.invalidateQueries({ queryKey: ["product-buyers", storeId] });
       await queryClient.invalidateQueries({ queryKey: ["store-orders"] });
       await queryClient.invalidateQueries({ queryKey: ["seller-orders-page"] });
       await queryClient.invalidateQueries({ queryKey: ["seller-clients-page"] });
@@ -622,7 +657,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
     text += `*Resumo*\n`;
     text += `Miniaturas aguardando entrega: *${activeOrders.length} peças*\n`;
     text += `Valor total das miniaturas: *${brl(activeSpent)}*\n`;
-    text += `Total já pago: *${brl(activePaid)}*\n`;
+    text += `Valor pago: *${brl(activePaid)}*\n`;
     text += `Saldo a pagar: *${brl(activeRemaining)}*\n\n`;
 
     text += `*Situação das miniaturas*\n`;
@@ -650,8 +685,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
     return text;
   }
 
-  function handleOpenWhatsAppSummary(client: any) {
-    setSummaryClient(client);
+  function handleOpenWhatsAppSummary() {
     setWhatsappSummaryOpen(true);
   }
 
@@ -1089,7 +1123,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                       }}
                     >
                       <Zap className="size-3.5 fill-current" />
-                      Abater Pagamento Global
+                      Registrar pagamento
                     </Button>
                   )}
 
@@ -1097,7 +1131,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                     size="sm"
                     disabled={isClientHistoryLoading || isClientHistoryError}
                     className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
-                    onClick={() => handleOpenWhatsAppSummary(currentSelectedClient)}
+                    onClick={() => handleOpenWhatsAppSummary()}
                   >
                     <MessageCircle className="size-3.5" />
                     Enviar Extrato
@@ -1133,7 +1167,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                   <Card className="col-span-2 sm:col-span-1 border-border/60 bg-card shadow-sm">
                     <CardContent className="p-3 sm:p-4">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-medium text-muted-foreground">Total em pedidos</span>
+                        <span className="text-xs font-medium text-muted-foreground">Valor total</span>
                         <Package className="size-4 text-muted-foreground" aria-hidden="true" />
                       </div>
                       <span className="mt-1 block text-lg font-bold tabular-nums text-foreground">{brl(currentSelectedClient.totalSpent)}</span>
@@ -1144,7 +1178,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                   <Card className="border-emerald-500/25 bg-emerald-500/[0.06] shadow-sm">
                     <CardContent className="p-3 sm:p-4">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-medium text-muted-foreground">Total recebido</span>
+                        <span className="text-xs font-medium text-muted-foreground">Valor pago</span>
                         <Wallet className="size-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                       </div>
                       <span className="mt-1 block text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-400">{brl(currentSelectedClient.totalPaid)}</span>
@@ -1158,7 +1192,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                   <Card className={`shadow-sm ${currentSelectedClient.remainingBalance > 0 ? "border-amber-500/30 bg-amber-500/[0.06]" : "border-emerald-500/25 bg-emerald-500/[0.06]"}`}>
                     <CardContent className="p-0"><button type="button" className="w-full rounded-xl p-3 sm:p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => { setItemStatusFilter("pending_payment"); setItemSearch(""); }} aria-label="Mostrar miniaturas com saldo pendente">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-medium text-muted-foreground">Saldo a receber</span>
+                        <span className="text-xs font-medium text-muted-foreground">Saldo a pagar</span>
                         <CalendarClock className={`size-4 ${currentSelectedClient.remainingBalance > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`} aria-hidden="true" />
                       </div>
                       <span className="mt-1 block text-lg font-bold tabular-nums text-foreground">{brl(currentSelectedClient.remainingBalance)}</span>
@@ -1186,26 +1220,37 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
             <details className="space-y-2 rounded-xl border border-border/50 bg-background/50 p-2.5 sm:p-3">
               <summary className="min-h-10 cursor-pointer text-sm font-medium leading-10">Anotações do cliente</summary>
               <div className="flex justify-between items-center">
-                <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  Anotações do Cliente
+                <Label htmlFor="client-note" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  Anotações do cliente
                 </Label>
                 <Button
                   size="sm"
                   variant="secondary"
                   className="text-xs h-6 px-2"
-                  onClick={() => currentSelectedClient && handleSaveNote(currentSelectedClient.userId)}
+                  disabled={!storeId || notesLoading || notesError || isSavingNote}
+                  onClick={() => currentSelectedClient && void handleSaveNote(currentSelectedClient.userId)}
                 >
-                  Salvar
+                  {isSavingNote ? "Salvando..." : "Salvar"}
                 </Button>
               </div>
               <Textarea
+                id="client-note"
                 placeholder="Ex: Colecionador focado em JDM e RLC..."
                 value={editingNote}
-                onChange={(e) => setEditingNote(e.target.value)}
+                onChange={(e) => { setNoteDirty(true); setEditingNote(e.target.value); }}
+                maxLength={5000}
+                disabled={!storeId || notesLoading || notesError || isSavingNote}
                 rows={2}
                 className="text-xs"
               />
             </details>
+
+            {notesError && <p className="text-xs text-destructive">Não foi possível carregar as anotações. <Button variant="link" size="sm" onClick={() => void refetchNotes()}>Tentar novamente</Button></p>}
+            {!notesError && !notesLoading && currentSelectedClient && typeof legacyNotes[currentSelectedClient.userId] === "string" && legacyNotes[currentSelectedClient.userId] && !clientNotes[currentSelectedClient.userId] && (
+              <Button variant="link" size="sm" disabled={isSavingNote || noteDirty} onClick={() => { setNoteDirty(true); setEditingNote(legacyNotes[currentSelectedClient.userId].slice(0, 5000)); }}>
+                Recuperar anotação deste navegador
+              </Button>
+            )}
 
             {/* HISTÓRICO, FILTROS E BUSCA DE RESERVAS */}
             <div className="space-y-2.5 pt-1">
@@ -1223,7 +1268,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                     <SelectTrigger id="client-history-filter" className="h-10 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="active">Em andamento</SelectItem>
-                      <SelectItem value="pending_payment">Com saldo pendente</SelectItem>
+                      <SelectItem value="pending_payment">Com saldo a pagar</SelectItem>
                       <SelectItem value="paid">Quitados</SelectItem>
                       <SelectItem value="arrived">Na loja</SelectItem>
                       <SelectItem value="preorder">Pré-venda</SelectItem>
@@ -1378,10 +1423,10 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
           <DialogHeader className="shrink-0 space-y-1">
             <DialogTitle className="text-lg font-bold flex items-center gap-2">
               <Zap className="size-5 text-amber-500 fill-current" />
-              Abater Pagamento Global (Cascata)
+              Registrar pagamento
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Informe o valor enviado pelo cliente. O sistema quita as reservas automaticamente na ordem selecionada.
+              Informe o valor recebido. Ele será distribuído entre as reservas na ordem escolhida.
             </DialogDescription>
           </DialogHeader>
 
@@ -1393,7 +1438,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                 <span className="font-bold text-foreground text-sm">{currentSelectedClient?.profile?.name}</span>
               </div>
               <div className="text-right">
-                <span className="text-muted-foreground block text-[11px]">Saldo Devedor Atual</span>
+                <span className="text-muted-foreground block text-[11px]">Saldo a pagar</span>
                 <span className="font-bold text-amber-600 dark:text-amber-400 text-sm">
                   {currentSelectedClient ? brl(currentSelectedClient.remainingBalance) : "-"}
                 </span>
@@ -1444,7 +1489,14 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                       variant="outline"
                       size="sm"
                       className="h-6 text-[11px] px-2"
-                      onClick={() => setGlobalAmount(sug.toString())}
+                      onClick={() => setGlobalAmount((current) => {
+                        const amount = Number(current.trim().replace(/\./g, "").replace(",", "."));
+                        if (!Number.isFinite(amount) || amount < 0) {
+                          toast.error("Informe um valor válido antes de somar.");
+                          return current;
+                        }
+                        return ((Math.round(amount * 100) + sug * 100) / 100).toFixed(2).replace(".", ",");
+                      })}
                     >
                       +{brl(sug)}
                     </Button>
@@ -1454,17 +1506,17 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
 
               {/* Estratégia de Prioridade */}
               <div className="space-y-1.5 pt-1">
-                <Label className="text-xs font-semibold">Ordem de Baixa</Label>
+                <Label className="text-xs font-semibold">Priorizar reservas</Label>
                 <Select value={globalStrategy} onValueChange={(val: any) => setGlobalStrategy(val)}>
                   <SelectTrigger className="text-xs h-9">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="oldest_first">
-                      📅 Mais Antigas Primeiro (Padrão / FIFO)
+                      Mais antigas primeiro
                     </SelectItem>
                     <SelectItem value="ready_first">
-                      📦 Prontas na Loja Primeiro (Liberar envio)
+                      Prontas para envio primeiro
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -1477,7 +1529,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                 <div className="flex items-center justify-between border-b border-border/40 pb-2">
                   <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
                     <CheckCircle2 className="size-4" />
-                    Resultado da Baixa Automática
+                    Como o pagamento será distribuído
                   </span>
                   <span className="text-xs font-bold text-foreground">
                     {brl(cascadeSimulation.totalDeducted)}
@@ -1492,7 +1544,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                     </span>
                   </div>
                   <div className="bg-muted/30 p-2 rounded-lg text-center">
-                    <span className="text-[10px] text-muted-foreground block">Novo Saldo Devedor</span>
+                    <span className="text-[10px] text-muted-foreground block">Saldo após o pagamento</span>
                     <span className="font-bold text-foreground text-sm">
                       {brl(cascadeSimulation.newRemaining)}
                     </span>
@@ -1532,7 +1584,7 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
             ) : (
               globalAmount && (
                 <div className="text-center py-4 text-xs text-muted-foreground bg-muted/20 rounded-xl border border-dashed">
-                  Nenhum pedido com saldo pendente para abater.
+                  Nenhuma reserva com saldo a pagar.
                 </div>
               )
             )}
@@ -1556,26 +1608,26 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
               disabled={isProcessingGlobal || cascadeSimulation.items.length === 0}
             >
               <CheckCircle2 className="size-3.5" />
-              {isProcessingGlobal ? "Processando..." : `Confirmar Baixa (${brl(cascadeSimulation.totalDeducted)})`}
+              {isProcessingGlobal ? "Processando..." : `Confirmar pagamento (${brl(cascadeSimulation.totalDeducted)})`}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
       {/* MODAL DE EXTRATO CONSOLIDADO DO WHATSAPP */}
-      <Dialog open={whatsappSummaryOpen} onOpenChange={setWhatsappSummaryOpen}>
+      <Dialog open={whatsappSummaryOpen && !!currentSelectedClient} onOpenChange={setWhatsappSummaryOpen}>
         <DialogContent className="w-[95vw] max-w-xl p-6 gap-4">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2">
               <MessageCircle className="size-5 text-emerald-600" />
-              Extrato para WhatsApp: {summaryClient?.profile?.name}
+              Extrato para WhatsApp: {currentSelectedClient?.profile?.name}
             </DialogTitle>
             <DialogDescription className="text-xs">
               Resumo completo e profissional para prestar contas e alinhar pagamentos com o cliente.
             </DialogDescription>
           </DialogHeader>
 
-          {summaryClient && (
+          {currentSelectedClient && (
             <div className="space-y-4">
               <div className="flex items-center justify-between bg-muted/40 p-2.5 rounded-lg text-xs">
                 <span className="font-semibold text-foreground">Incluir lista de todos os modelos?</span>
@@ -1589,9 +1641,17 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                 </Button>
               </div>
 
+              {(isClientHistoryLoading || isClientHistoryError) && (
+                <p role={isClientHistoryError ? "alert" : "status"} className="text-xs text-muted-foreground">
+                  {isClientHistoryError
+                    ? "Não foi possível atualizar o extrato. Feche e abra o histórico para tentar novamente."
+                    : "Atualizando os valores do extrato..."}
+                </p>
+              )}
+
               <Textarea
                 readOnly
-                value={generateWhatsAppSummary(summaryClient, includeFullList)}
+                value={generateWhatsAppSummary(currentSelectedClient, includeFullList)}
                 rows={12}
                 className="text-xs font-mono bg-muted/30 select-all"
               />
@@ -1601,8 +1661,9 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                   variant="outline"
                   size="sm"
                   className="gap-1.5 text-xs h-9"
+                  disabled={isClientHistoryLoading || isClientHistoryError}
                   onClick={() => {
-                    const msg = generateWhatsAppSummary(summaryClient, includeFullList);
+                    const msg = generateWhatsAppSummary(currentSelectedClient, includeFullList);
                     navigator.clipboard.writeText(msg);
                     toast.success("Extrato copiado para a área de transferência!");
                   }}
@@ -1614,9 +1675,10 @@ export function ClientsTab({ orders, storeId }: { orders: OrderRow[]; storeId?: 
                 <Button
                   size="sm"
                   className="gap-1.5 text-xs h-9 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  disabled={isClientHistoryLoading || isClientHistoryError}
                   onClick={() => {
-                    const msg = generateWhatsAppSummary(summaryClient, includeFullList);
-                    const link = whatsappLink(summaryClient.profile.phone, msg);
+                    const msg = generateWhatsAppSummary(currentSelectedClient, includeFullList);
+                    const link = whatsappLink(currentSelectedClient.profile.phone, msg);
                     window.open(link, "_blank");
                   }}
                 >

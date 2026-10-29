@@ -64,6 +64,10 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/20261013135108_atomic_seller_operations_and_financial_totals.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20261014113445_recalculate_reversed_installment_payments.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20261014114555_preserve_manual_settlement_on_payment_confirmation.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261014130542_store_customer_notes.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261020145603_restrict_customer_order_deletion.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261021231215_store_loyalty_coins.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261022132404_configurable_loyalty_earning_rules.sql',import.meta.url),'utf8'));
 });
 after(() => db.close());
 async function coloredProduct(redStock = 1, blueStock = 2) {
@@ -236,6 +240,26 @@ test('due-soon orders sort by earliest deadline before pagination, preserving va
 });
 
 const mutate=async(ids,patch={},remove=false)=>(await db.query('SELECT seller_mutate_orders($1,$2,$3) AS changed',[ids,JSON.stringify(patch),remove])).rows[0].changed;
+test('customers cannot erase reservations; seller cancellation keeps history and restores stock once',async()=>{
+  for (const colored of [false,true]) {
+    const p = colored ? await coloredProduct(1,1) : {id:await product()};
+    const ids=await checkout([item(p.id,colored?{variant_id:p.red}:{})]);
+    const remaining=await stock(p.id);
+    for (const actor of [customer,other]) {
+      await asUser(actor);
+      assert.equal((await db.query('DELETE FROM orders WHERE id=$1 RETURNING id',[ids[0]])).rows.length,0);
+    }
+    await asUser(customer);
+    assert.equal((await db.query('SELECT id FROM orders WHERE id=$1',[ids[0]])).rows.length,1);
+    assert.equal(await stock(p.id),remaining);
+    await assert.rejects(mutate(ids,{payment_status:'cancelado'}),/store_access_denied/);
+    await asUser(owner);
+    await mutate(ids,{payment_status:'cancelado'});
+    await mutate(ids,{payment_status:'cancelado'});
+    assert.equal(await stock(p.id),remaining+1);
+    assert.equal((await db.query('SELECT payment_status FROM orders WHERE id=$1',[ids[0]])).rows[0].payment_status,'cancelado');
+  }
+});
 test('ordinary stock cancellation and deletion are atomic and never restored twice',async()=>{
   const id=await product(); const ids=await checkout([item(id,{quantity:2,expected_total:200,expected_signal:40})]);
   await asUser(owner);
@@ -331,4 +355,58 @@ test('customers cannot reverse seller receipts or change settlement', async () =
   assert.equal((await db.query('DELETE FROM order_installments WHERE id=$1 RETURNING id', [receipt])).rows.length, 0);
   assert.equal((await db.query("UPDATE order_installments SET status='pending' WHERE id=$1 RETURNING id", [receipt])).rows.length, 0);
   assert.equal(await paymentState(oid), 'quitado');
+});
+
+test('customer notes persist per store and are private from customers and other sellers', async () => {
+  const secondStore = randomUUID();
+  await db.exec('RESET ROLE');
+  await db.query('INSERT INTO stores(id,owner_id,name,slug) VALUES($1,$2,$3,$4)', [secondStore, other, 'Outra loja', secondStore]);
+  await asUser(owner);
+  await db.query('INSERT INTO store_customer_notes(store_id,customer_id,note) VALUES($1,$2,$3)', [store, customer, 'Prefere JDM']);
+  await db.query('UPDATE store_customer_notes SET note=$1 WHERE store_id=$2 AND customer_id=$3', ['Prefere JDM e RLC', store, customer]);
+  await asUser(other);
+  assert.equal((await db.query('SELECT * FROM store_customer_notes WHERE store_id=$1', [store])).rows.length, 0);
+  assert.equal((await db.query('UPDATE store_customer_notes SET note=$1 WHERE store_id=$2 RETURNING note', ['Outra', store])).rows.length, 0);
+  await assert.rejects(db.query('INSERT INTO store_customer_notes(store_id,customer_id,note) VALUES($1,$2,$3)', [store, other, 'Indevida']), /row-level security/);
+  await db.query('INSERT INTO store_customer_notes(store_id,customer_id,note) VALUES($1,$2,$3)', [secondStore, customer, 'Outra preferência']);
+  await asUser(customer);
+  assert.equal((await db.query('SELECT * FROM store_customer_notes')).rows.length, 0);
+  await asUser(owner);
+  assert.deepEqual((await db.query('SELECT note FROM store_customer_notes WHERE customer_id=$1', [customer])).rows.map(r=>r.note), ['Prefere JDM e RLC']);
+  await assert.rejects(db.query('UPDATE store_customer_notes SET store_id=$1 WHERE store_id=$2', [secondStore, store]), /row-level security/);
+  await assert.rejects(db.query('UPDATE store_customer_notes SET note=$1 WHERE store_id=$2', ['x'.repeat(5001), store]), /check constraint/);
+});
+
+
+test('loyalty reconciles real seller payment RPC and reversal triggers without duplicate receipt credits',async()=>{
+  await asUser(owner);
+  await db.query("SELECT loyalty_command($1,'configure',$2::jsonb)",[store,JSON.stringify({enabled:true})]);
+  const {oid,receipt}=await paymentFixture();
+  const getAccount=async()=> (await db.query('SELECT eligible_cents FROM loyalty_accounts WHERE store_id=$1 AND user_id=$2',[store,customer])).rows[0];
+  const start=Number((await getAccount()).eligible_cents);
+  await db.query("SELECT record_order_payment($1,50,current_date,'paid')",[[oid]]);
+  assert.equal(Number((await getAccount()).eligible_cents)-start,5000);
+  await mutate([oid],{payment_status:'quitado'});
+  assert.equal(Number((await getAccount()).eligible_cents)-start,10000);
+  await db.query("UPDATE order_installments SET status='paid' WHERE id=$1",[receipt]);
+  assert.equal(Number((await getAccount()).eligible_cents)-start,10000);
+  await db.query('DELETE FROM order_installments WHERE order_id=$1',[oid]);
+  assert.equal(Number((await getAccount()).eligible_cents),start);
+  await db.query("SELECT loyalty_command($1,'configure',$2::jsonb)",[store,JSON.stringify({enabled:false})]);
+});
+
+test('customer cannot forge paid orders or installments to earn loyalty Coins',async()=>{
+  await asUser(owner);
+  await db.query("SELECT loyalty_command($1,'configure',$2::jsonb)",[store,JSON.stringify({enabled:true})]);
+  const {oid,receipt}=await paymentFixture();
+  await asUser(customer);
+  const state=async()=> (await db.query('SELECT eligible_cents,earned_coins,spent FROM loyalty_accounts WHERE store_id=$1 AND user_id=$2',[store,customer])).rows[0];
+  const start=await state();
+  assert.equal((await db.query("UPDATE orders SET payment_status='quitado',down_payment=100 WHERE id=$1 RETURNING id",[oid])).rows.length,0);
+  assert.equal((await db.query("UPDATE order_installments SET status='paid',paid_at=now() WHERE id=$1 RETURNING id",[receipt])).rows.length,0);
+  await assert.rejects(db.query("INSERT INTO order_installments(order_id,installment_number,amount,due_date,status) VALUES($1,9,100,current_date,'paid')",[oid]),/row-level security/);
+  await assert.rejects(db.query("SELECT record_order_payment($1,100,current_date,'paid')",[[oid]]),/access_denied|owner|permission|unauthorized|forbidden/);
+  await assert.rejects(mutate([oid],{payment_status:'quitado'}),/store_access_denied/);
+  assert.equal(await paymentState(oid),'sem_sinal');
+  assert.deepEqual(await state(),start);
 });
