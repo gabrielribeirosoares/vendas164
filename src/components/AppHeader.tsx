@@ -55,14 +55,15 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
 
   const { data: myStore } = useQuery({
     queryKey: ["my-store-header", user?.id],
-    enabled: !!user && propStore === undefined,
+    enabled: !!user,
     retry: 2,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("stores")
         .select("id, name, logo_url, favicon_url, primary_color, wheels_enabled")
         .eq("owner_id", user!.id)
         .maybeSingle();
+      if (error) throw error;
       return data;
     },
   });
@@ -228,11 +229,11 @@ export function AppHeader({ store: propStore }: AppHeaderProps = {}) {
                                 <Car className="size-5 text-primary" /> Minhas Reservas
                               </Link>
                             </Button>
-                            {currentStore ? (
+                            {myStore ? (
                               <div className="py-2 border-y border-border/50 my-2">
                                 <div className="mb-2 px-2">
                                   <h4 className="text-xs font-semibold text-muted-foreground uppercase">Operação</h4>
-                                  <p className="mt-0.5 truncate text-xs text-foreground">{currentStore.name}</p>
+                                  <p className="mt-0.5 truncate text-xs text-foreground">{myStore.name}</p>
                                 </div>
                                 {getSellerNavigation(!!myStore?.wheels_enabled, isPlatformAdmin).map((section, index, sections) => {
                                   const Icon = section.icon;
