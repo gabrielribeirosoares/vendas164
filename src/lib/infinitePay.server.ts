@@ -36,6 +36,7 @@ type PaymentAttempt = {
   status: string;
   provider: string;
   provider_payment_id: string | null;
+  response_payload: { handle?: unknown } | null;
 };
 
 export async function verifyAndConfirmInfinitePay(orderNsu: string, transactionNsu: string, slug: string) {
@@ -49,7 +50,7 @@ export async function verifyAndConfirmInfinitePay(orderNsu: string, transactionN
   const admin = infinitePayAdmin();
   const { data: rawAttempt, error: attemptError } = await admin
     .from("gateway_payment_attempts" as never)
-    .select("id, store_id, amount, status, provider, provider_payment_id")
+    .select("id, store_id, amount, status, provider, provider_payment_id, response_payload")
     .eq("id", orderNsu)
     .maybeSingle();
   if (attemptError || !rawAttempt) throw new Error("Tentativa de pagamento não encontrada.");
@@ -69,7 +70,8 @@ export async function verifyAndConfirmInfinitePay(orderNsu: string, transactionN
     signal: AbortSignal.timeout(12000),
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({
-      handle: connection.handle,
+      // A cobrança deve ser verificada na conta (tag) em que o link foi criado.
+      handle: typeof attempt.response_payload?.handle === "string" ? attempt.response_payload.handle : connection.handle,
       order_nsu: attempt.id,
       transaction_nsu: transactionNsu,
       slug,

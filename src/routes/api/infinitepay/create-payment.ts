@@ -53,37 +53,59 @@ export const Route = createFileRoute("/api/infinitepay/create-payment")({
           const origin = appBaseUrl();
           const now = new Date();
           const requestKey = paymentAttemptKey(storeId, user.id, orderIds, amountCents, "infinitepay");
-          const { data: attemptIdFromRpc, error: reserveError } = await admin.rpc(
-            "create_gateway_payment_attempt" as never,
-            {
-              p_attempt_id: randomUUID(),
-              p_store_id: storeId,
-              p_user_id: user.id,
-              p_order_ids: orderIds,
-              p_request_key: requestKey,
-              p_amount: amount,
-              p_payment_method: "infinitepay",
-              p_provider: "infinitepay",
-              p_max_installments: 1,
-              p_description: description,
-              p_expires_at: new Date(now.getTime() + 3650 * 24 * 60 * 60_000).toISOString(),
-            } as never,
-          );
-          if (reserveError) {
-            if (reserveError.message.includes("gateway_order_payment_in_progress")) {
+          const reserveAttempt = async () => {
+            const { data: attemptIdFromRpc, error: reserveError } = await admin.rpc(
+              "create_gateway_payment_attempt" as never,
+              {
+                p_attempt_id: randomUUID(),
+                p_store_id: storeId,
+                p_user_id: user.id,
+                p_order_ids: orderIds,
+                p_request_key: requestKey,
+                p_amount: amount,
+                p_payment_method: "infinitepay",
+                p_provider: "infinitepay",
+                p_max_installments: 1,
+                p_description: description,
+                p_expires_at: new Date(now.getTime() + 3650 * 24 * 60 * 60_000).toISOString(),
+              } as never,
+            );
+            if (reserveError) return { reserveError };
+            const { data: attempt, error: loadAttemptError } = await admin
+              .from("gateway_payment_attempts" as never)
+              .select("id, response_payload, status")
+              .eq("id", String(attemptIdFromRpc))
+              .single();
+            if (loadAttemptError || !attempt) throw loadAttemptError || new Error("Não foi possível recuperar a tentativa.");
+            return { attempt: attempt as unknown as Attempt };
+          };
+
+          let reserved = await reserveAttempt();
+          // Um link salvo foi gerado para a InfiniteTag vigente naquele momento. Se o lojista
+          // trocou a tag depois, o link antigo enviaria o dinheiro para a conta errada:
+          // expiramos a tentativa antiga e geramos uma nova cobrança com a tag atual.
+          const savedHandle = reserved.attempt?.response_payload?.handle;
+          if (reserved.attempt?.response_payload?.checkoutUrl && savedHandle !== connection.handle) {
+            const { error: expireError } = await admin.from("gateway_payment_attempts" as never)
+              .update({ status: "expired", updated_at: new Date().toISOString() } as never)
+              .eq("id", reserved.attempt.id).in("status", ["created", "pending"]);
+            if (expireError) throw expireError;
+            reserved = await reserveAttempt();
+          }
+          if (reserved.reserveError) {
+            if (reserved.reserveError.message.includes("gateway_order_payment_in_progress")) {
               return fail("Já existe uma cobrança em andamento para este pedido. Conclua ou aguarde a confirmação antes de iniciar outra.", 409);
             }
-            throw reserveError;
+            throw reserved.reserveError;
           }
-          const { data: attempt, error: loadAttemptError } = await admin
-            .from("gateway_payment_attempts" as never)
-            .select("id, response_payload, status")
-            .eq("id", String(attemptIdFromRpc))
-            .single();
-          if (loadAttemptError || !attempt) throw loadAttemptError || new Error("Não foi possível recuperar a tentativa.");
-          const paymentAttempt = attempt as unknown as Attempt;
+          const paymentAttempt = reserved.attempt!;
           attemptId = paymentAttempt.id;
-          if (paymentAttempt.response_payload?.checkoutUrl) return Response.json(paymentAttempt.response_payload);
+          if (paymentAttempt.response_payload?.checkoutUrl) {
+            if (paymentAttempt.response_payload.handle !== connection.handle) {
+              return fail("A InfiniteTag da loja foi alterada. Tente novamente em instantes.", 409);
+            }
+            return Response.json(paymentAttempt.response_payload);
+          }
           if (paymentAttempt.status === "pending") return fail("A cobrança está sendo processada. Aguarde a confirmação antes de tentar novamente.", 409);
 
           const { data: claim, error: claimError } = await admin.from("gateway_payment_attempts" as never)
@@ -95,7 +117,7 @@ export const Route = createFileRoute("/api/infinitepay/create-payment")({
             const latest = await admin.from("gateway_payment_attempts" as never)
               .select("response_payload").eq("id", paymentAttempt.id).maybeSingle();
             const latestPayload = (latest.data as unknown as { response_payload?: Record<string, unknown> } | null)?.response_payload;
-            if (latestPayload?.checkoutUrl) return Response.json(latestPayload);
+            if (latestPayload?.checkoutUrl && latestPayload.handle === connection.handle) return Response.json(latestPayload);
             return fail("A cobrança está sendo preparada. Aguarde antes de tentar novamente.", 409);
           }
 
@@ -145,7 +167,7 @@ export const Route = createFileRoute("/api/infinitepay/create-payment")({
             console.error("InfinitePay retornou domínio de checkout não permitido:", parsedUrl.hostname);
             return fail("A InfinitePay retornou um link inválido. Tente novamente.", 502);
           }
-          const responsePayload = { checkoutUrl, orderIds };
+          const responsePayload = { checkoutUrl, orderIds, handle: connection.handle };
           const { error: saveError } = await admin.from("gateway_payment_attempts" as never).update({
             status: "pending", provider_resource_id: paymentAttempt.id, response_payload: responsePayload,
             updated_at: new Date().toISOString(),
